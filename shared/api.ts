@@ -104,7 +104,11 @@ export interface ConceptResult {
   adsetName: string;
   ads: number;
   firstSpend: string;
-  /** Totals over the test window (first N days from first spend). */
+  /** First day any single ad in the concept had spent the minimum; null if none has. */
+  qualifiedOn: string | null;
+  /** Last day of the judging window: day N, or qualifiedOn if later. */
+  windowEnd: string;
+  /** Concept totals from first spend to windowEnd. */
   window: Totals;
   allTime: Totals;
   status: HitStatus;

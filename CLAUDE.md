@@ -34,6 +34,7 @@ Before pushing: `npm run typecheck && npm test && npm run build` must all pass.
 - **New ad-name patterns** go in `shared/naming.ts` with a test case in `shared/naming.test.ts` using the real name. See `docs/NAMING.md`.
 - Pod colors come from the validated palette in `src/index.css` (`--pod-*`). Always show the pod name next to its color. Status colors (good/warn/bad) are reserved and always paired with an icon.
 - Charts: one y-axis per chart (no dual axes), hover tooltips, thin marks. See `docs/DESIGN.md`.
+- **D1 writes are the scarce resource** (free plan: 100k rows written/day). Syncs read what is stored and write only changed rows; keep it that way, and test that an unchanged re-sync writes 0 rows.
 - Meta sync lives in `worker/meta/` (Graph API v26.0). Test against fake Graph responses with `worker/testing/db.ts` (sql.js D1); this sandbox can't reach graph.facebook.com.
 - Connection and sync routes require Cloudflare Access (`worker/access.ts`). Don't weaken that.
 - Read-only Meta access (`ads_read`) until the ad-management phase. Any write action needs a preview, explicit approval, defaults to paused, and an audit log entry.

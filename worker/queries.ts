@@ -1,5 +1,5 @@
 import type { Assignment, ConceptResult, PostSummary } from "../shared/api.ts";
-import { DEFAULT_TARGETS, hitStatus, type HitStatus, type Targets, type Totals } from "../shared/metrics.ts";
+import { DEFAULT_TARGETS, hitStatus, judgingWindowEnd, type HitStatus, type Targets, type Totals } from "../shared/metrics.ts";
 
 type Row = Record<string, unknown>;
 
@@ -57,24 +57,24 @@ const POST_BASE_SQL = `
 /** Every concept with its test-window totals and hit status. */
 export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
   const [targets, latest] = await Promise.all([getTargets(db), getLatestDate(db)]);
-  const [win, all] = await Promise.all([
+  const [bounds, all] = await Promise.all([
+    // First spend, and the first day any single ad's running spend reached the minimum.
     db
       .prepare(
-        `WITH first AS (
-           SELECT a.concept_id, MIN(d.date) AS first_date
+        `WITH daily AS (
+           SELECT a.concept_id, d.date, d.spend_cents,
+             SUM(d.spend_cents) OVER (PARTITION BY d.ad_id ORDER BY d.date) AS running
            FROM ad_daily d JOIN ads a ON a.id = d.ad_id
-           WHERE a.concept_id IS NOT NULL AND d.spend_cents > 0
-           GROUP BY a.concept_id)
-         SELECT c.id, c.pod_id, c.label, c.adset_name, f.first_date,
-           (SELECT COUNT(*) FROM ads x WHERE x.concept_id = c.id) AS ads, ${TOTALS_SQL}
-         FROM concepts c
-         JOIN first f ON f.concept_id = c.id
-         JOIN ads a ON a.concept_id = c.id
-         JOIN ad_daily d ON d.ad_id = a.id
-           AND d.date >= f.first_date AND d.date < date(f.first_date, '+' || ?1 || ' days')
-         GROUP BY c.id`,
+           WHERE a.concept_id IS NOT NULL)
+         SELECT c.id, c.pod_id, c.label, c.adset_name,
+           (SELECT COUNT(*) FROM ads x WHERE x.concept_id = c.id) AS ads,
+           MIN(CASE WHEN daily.spend_cents > 0 THEN daily.date END) AS first_date,
+           MIN(CASE WHEN daily.running >= ?1 THEN daily.date END) AS qualified_on
+         FROM concepts c JOIN daily ON daily.concept_id = c.id
+         GROUP BY c.id
+         HAVING first_date IS NOT NULL`,
       )
-      .bind(targets.testWindowDays)
+      .bind(targets.minTestSpend * 100)
       .all<Row>(),
     db
       .prepare(
@@ -84,9 +84,32 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
       .all<Row>(),
   ]);
   const allTime = new Map(all.results.map((r) => [String(r.concept_id), toTotals(r)]));
-  return win.results.map((r) => {
+  const ends = bounds.results.map((r) => {
     const firstSpend = String(r.first_date);
-    const window = toTotals(r);
+    const qualifiedOn = r.qualified_on == null ? null : String(r.qualified_on);
+    return { r, firstSpend, qualifiedOn, windowEnd: judgingWindowEnd(firstSpend, qualifiedOn, targets) };
+  });
+
+  // Concept totals over each judging window, in one query.
+  const windows = new Map<string, Totals>();
+  for (let i = 0; i < ends.length; i += 50) {
+    const chunk = ends.slice(i, i + 50);
+    const values = chunk.map((_, j) => `(?${j * 3 + 1}, ?${j * 3 + 2}, ?${j * 3 + 3})`).join(", ");
+    const { results } = await db
+      .prepare(
+        `WITH w(concept_id, first_date, end_date) AS (VALUES ${values})
+         SELECT w.concept_id, ${TOTALS_SQL}
+         FROM w JOIN ads a ON a.concept_id = w.concept_id
+         JOIN ad_daily d ON d.ad_id = a.id AND d.date BETWEEN w.first_date AND w.end_date
+         GROUP BY w.concept_id`,
+      )
+      .bind(...chunk.flatMap((e) => [String(e.r.id), e.firstSpend, e.windowEnd]))
+      .all<Row>();
+    for (const row of results) windows.set(String(row.concept_id), toTotals(row));
+  }
+
+  return ends.map(({ r, firstSpend, qualifiedOn, windowEnd }) => {
+    const window = windows.get(String(r.id)) ?? toTotals(undefined);
     return {
       conceptId: String(r.id),
       podId: String(r.pod_id),
@@ -94,9 +117,11 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
       adsetName: String(r.adset_name),
       ads: Number(r.ads),
       firstSpend,
+      qualifiedOn,
+      windowEnd,
       window,
       allTime: allTime.get(String(r.id)) ?? window,
-      status: hitStatus(window, latest ? daysBetween(firstSpend, latest) + 1 : 0, targets),
+      status: hitStatus(window, { qualified: qualifiedOn != null, complete: latest != null && latest >= windowEnd }, targets),
     };
   });
 }

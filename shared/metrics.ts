@@ -76,19 +76,30 @@ export function roasBand(value: number | null, target: number): Band {
 export type HitStatus = "hit" | "miss" | "testing" | "ineligible";
 
 /**
- * Classifies one concept's initial test.
- * @param windowTotals totals over the first `testWindowDays` days from first spend
- * @param daysObserved days of data available since first spend (inclusive)
+ * Classifies one concept's test. A concept qualifies once any single ad in it has spent
+ * `minTestSpend`; it's judged on the concept's totals from first spend to the later of
+ * day `testWindowDays` and the day that ad crossed `minTestSpend` (see `judgingWindowEnd`).
+ * @param windowTotals the concept's totals over that judging window
+ * @param state.qualified some ad has reached `minTestSpend`
+ * @param state.complete the judging window has fully passed
  */
-export function hitStatus(windowTotals: Totals, daysObserved: number, t: Targets): HitStatus {
-  if (daysObserved < t.testWindowDays) return "testing";
-  if (windowTotals.spendCents < t.minTestSpend * 100) return "ineligible";
+export function hitStatus(windowTotals: Totals, state: { qualified: boolean; complete: boolean }, t: Targets): HitStatus {
+  if (!state.complete) return "testing";
+  if (!state.qualified) return "ineligible";
   const c = cpa(windowTotals);
   const r = roas(windowTotals);
   const cpaOk = c != null && c <= t.targetCpa;
   const roasOk = r != null && r >= t.targetRoas;
   const hit = t.hitRule === "both" ? cpaOk && roasOk : cpaOk || roasOk;
   return hit ? "hit" : "miss";
+}
+
+/** Last day of the judging window: day N from first spend, or the qualifying day if later. */
+export function judgingWindowEnd(firstSpend: string, qualifiedOn: string | null, t: Targets): string {
+  const d = new Date(`${firstSpend}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + t.testWindowDays - 1);
+  const dayN = d.toISOString().slice(0, 10);
+  return qualifiedOn && qualifiedOn > dayN ? qualifiedOn : dayN;
 }
 
 /** Hits / (hits + misses). Testing and ineligible concepts are excluded. */

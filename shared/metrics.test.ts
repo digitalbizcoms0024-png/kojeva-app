@@ -7,6 +7,7 @@ import {
   ctr,
   hitRate,
   hitStatus,
+  judgingWindowEnd,
   roas,
   roasBand,
   type Totals,
@@ -49,24 +50,35 @@ describe("bands", () => {
 
 describe("hitStatus", () => {
   const T = DEFAULT_TARGETS;
+  const done = { qualified: true, complete: true };
 
-  it("is still testing before the window has elapsed", () => {
-    expect(hitStatus(t(500, 50, 2000), 2, T)).toBe("testing");
+  it("is still testing until the judging window has passed", () => {
+    expect(hitStatus(t(500, 50, 2000), { qualified: true, complete: false }, T)).toBe("testing");
+    expect(hitStatus(t(20, 1, 30), { qualified: false, complete: false }, T)).toBe("testing");
   });
 
-  it("ignores concepts under the minimum test spend", () => {
-    expect(hitStatus(t(40, 4, 200), 3, T)).toBe("ineligible");
+  it("doesn't count concepts where no ad reached $100", () => {
+    expect(hitStatus(t(240, 24, 600), { qualified: false, complete: true }, T)).toBe("ineligible");
   });
 
   it("needs both CPA ≤ $14 and ROAS ≥ 1.7 by default", () => {
-    expect(hitStatus(t(140, 10, 240), 3, T)).toBe("hit");
-    expect(hitStatus(t(140, 10, 200), 3, T)).toBe("miss"); // ROAS 1.43
-    expect(hitStatus(t(150, 10, 300), 3, T)).toBe("miss"); // CPA $15
-    expect(hitStatus(t(150, 0, 0), 5, T)).toBe("miss"); // no purchases
+    expect(hitStatus(t(140, 10, 240), done, T)).toBe("hit");
+    expect(hitStatus(t(140, 10, 200), done, T)).toBe("miss"); // ROAS 1.43
+    expect(hitStatus(t(150, 10, 300), done, T)).toBe("miss"); // CPA $15
+    expect(hitStatus(t(150, 0, 0), done, T)).toBe("miss"); // no purchases
   });
 
   it("supports an either-target rule", () => {
-    expect(hitStatus(t(140, 10, 200), 3, { ...T, hitRule: "either" })).toBe("hit");
+    expect(hitStatus(t(140, 10, 200), done, { ...T, hitRule: "either" })).toBe("hit");
+  });
+});
+
+describe("judgingWindowEnd", () => {
+  const T = DEFAULT_TARGETS;
+  it("is day 3, or the day an ad crossed $100 if later", () => {
+    expect(judgingWindowEnd("2026-10-01", null, T)).toBe("2026-10-03");
+    expect(judgingWindowEnd("2026-10-01", "2026-10-02", T)).toBe("2026-10-03");
+    expect(judgingWindowEnd("2026-10-01", "2026-10-06", T)).toBe("2026-10-06");
   });
 });
 

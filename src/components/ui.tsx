@@ -65,7 +65,7 @@ const HIT_STYLE: Record<HitStatus, { cls: string; label: string }> = {
   hit: { cls: "bg-good-soft text-good", label: "✓ Hit" },
   miss: { cls: "bg-surface-2 text-ink-2", label: "✕ Miss" },
   testing: { cls: "bg-accent-soft text-accent", label: "◷ Testing" },
-  ineligible: { cls: "bg-surface-2 text-ink-3", label: "Under min spend" },
+  ineligible: { cls: "bg-surface-2 text-ink-3", label: "No ad at $100" },
 };
 
 export function HitBadge({ status }: { status: HitStatus | null }) {

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import app from "../index.ts";
 import type { Env } from "../env.ts";
 import { testDb } from "../testing/db.ts";
-import { runSync, wipeSampleData } from "./sync.ts";
+import { runSync, thumbnailNeedsRefresh, wipeSampleData } from "./sync.ts";
 import type { GraphAd, GraphInsight } from "./transform.ts";
 
 const ACT = "act_2930078677198801";
@@ -196,6 +196,37 @@ describe("runSync", () => {
     expect(body.items[0]).toMatchObject({ postId: POST_HXM, name: "HxM-1-ANIMSONG-Husband at Walmart | Post ID", copies: 2, assignment: { podId: "harris" } });
   });
 
+  it("writes nothing when a re-sync finds nothing changed", async () => {
+    const first = await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, metaApi());
+    expect(first.written).toBeGreaterThan(0);
+    const changes = async () => (await env.DB.prepare("SELECT total_changes() AS n").first<{ n: number }>())!.n;
+    const before = await changes();
+    const second = await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, metaApi());
+    expect(second.written).toBe(0);
+    // Only the sync_runs row (insert + finish update) is written.
+    expect((await changes()) - before).toBe(2);
+  });
+
+  it("judges a slow concept up to the day one ad crossed $100", async () => {
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, metaApi());
+    // Dhia's concept (one ad): $50 on Oct 9, then $20/day, crossing $100 on Oct 12 (day 4).
+    const ad = "120250321829620075";
+    await env.DB.batch(
+      ["2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13"].map((d) =>
+        env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES (?1, ?2, 2000, 2, 5000)").bind(ad, d),
+      ),
+    );
+    const res = await app.fetch(new Request("https://hub.test/api/concepts?range=all&pod=dhia"), env, {} as ExecutionContext);
+    const [concept] = ((await res.json()) as { rows: Record<string, unknown>[] }).rows;
+    expect(concept).toMatchObject({
+      firstSpend: "2026-10-09",
+      qualifiedOn: "2026-10-12",
+      windowEnd: "2026-10-12",
+      window: { spendCents: 11000, purchases: 8, revenueCents: 19000 },
+      status: "hit", // $13.75 CPA, 1.73 ROAS
+    });
+  });
+
   it("shrinks the page size when Meta says a page is too much data", async () => {
     const base = metaHandler();
     const limits: number[] = [];
@@ -218,6 +249,16 @@ describe("runSync", () => {
     expect(result).toMatchObject({ ok: false, reconnect: true });
     const [run] = await q<{ status: string; message: string }>("SELECT status, message FROM sync_runs ORDER BY id DESC LIMIT 1");
     expect(run).toEqual({ status: "error", message: "Error validating access token: Session has expired" });
+  });
+});
+
+describe("thumbnailNeedsRefresh", () => {
+  const now = Date.parse("2026-10-16T00:00:00Z");
+  const at = (iso: string) => `https://scontent.xx.fbcdn.net/v/t45/a.jpg?stp=x&oe=${(Date.parse(iso) / 1000).toString(16).toUpperCase()}`;
+  it("keeps a stored URL until three days before it expires", () => {
+    expect(thumbnailNeedsRefresh(at("2026-10-25T00:00:00Z"), now)).toBe(false);
+    expect(thumbnailNeedsRefresh(at("2026-10-18T00:00:00Z"), now)).toBe(true);
+    expect(thumbnailNeedsRefresh(null, now)).toBe(true);
   });
 });
 

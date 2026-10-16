@@ -64,8 +64,8 @@ function ConceptsTable({ range, targets, pods }: { range: string; targets: Targe
               <tr>
                 <th className="px-3 py-2 font-medium">Pod</th>
                 <th className="px-3 py-2 font-medium">Concept</th>
-                <th className="px-3 py-2 font-medium">Started</th>
-                <th className="px-3 py-2 text-right font-medium">{targets.testWindowDays}-day spend</th>
+                <th className="px-3 py-2 font-medium">Judged on</th>
+                <th className="px-3 py-2 text-right font-medium">Spend</th>
                 <th className="px-3 py-2 text-right font-medium">CPA</th>
                 <th className="px-3 py-2 text-right font-medium">ROAS</th>
                 <th className="px-3 py-2 font-medium">Result</th>
@@ -83,7 +83,9 @@ function ConceptsTable({ range, targets, pods }: { range: string; targets: Targe
                       {k.adsetName} · {k.ads} {k.ads === 1 ? "ad" : "ads"} · {money(k.allTime.spendCents, { compact: true })} all-time
                     </div>
                   </td>
-                  <td className="num px-3 py-2 text-ink-2">{shortDate(k.firstSpend)}</td>
+                  <td className="num px-3 py-2 whitespace-nowrap text-ink-2">
+                    {shortDate(k.firstSpend)} – {shortDate(k.windowEnd)}
+                  </td>
                   <td className="num px-3 py-2 text-right text-ink">{money(k.window.spendCents)}</td>
                   <td className="px-3 py-2 text-right">
                     <CpaValue value={cpa(k.window)} target={targets.targetCpa} />
@@ -137,8 +139,10 @@ export function PodsTab({ data, error, targets, range }: Props & { range: string
       )}
       <ConceptsTable range={range} targets={targets} pods={data.rows} />
       <p className="text-xs text-ink-3">
-        A concept is one testing ad set (combined ones like "Batch 3 & 5" are split by ad name). Hit = a new concept reaches CPA ≤ ${targets.targetCpa} {targets.hitRule === "both" ? "and" : "or"} ROAS ≥ {targets.targetRoas} over its first{" "}
-        {targets.testWindowDays} days, with at least ${targets.minTestSpend} spend. Concepts count toward the period in which they first spent.
+        A concept is one testing ad set (combined ones like "Batch 3 & 5" are split by ad name). It qualifies once one of its ads has spent $
+        {targets.minTestSpend}, and is judged on all its ads from first spend to day {targets.testWindowDays} or the day it qualified, whichever is
+        later. Hit = CPA ≤ ${targets.targetCpa} {targets.hitRule === "both" ? "and" : "or"} ROAS ≥ {targets.targetRoas} over that window. Concepts
+        count toward the period in which they first spent.
       </p>
     </div>
   );

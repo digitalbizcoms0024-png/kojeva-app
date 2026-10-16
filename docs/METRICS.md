@@ -23,11 +23,13 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - Older ad sets that combined concepts are split by ad name (`shared/concepts.ts`): "Batch 3 & 5" →
   Batch 3 ("batch 3a", "batch 3b") and Batch 5 ("batch5"); "Depuffing + Jawline" → by which word the
   ad's hook mentions. A "+" is only split when the ad names clearly name the parts.
-- Its **test window** is the first `testWindowDays` (3) days from the concept's first day with spend,
-  summing every ad in that ad set (or part).
+- A concept **qualifies** once any single ad in it has spent `minTestSpend` ($100) in total.
+- It's **judged** on all its ads combined, from its first day of spend to day `testWindowDays` (3) or
+  the day it qualified, whichever is later. A slow CBO concept that qualifies on day 6 is judged on
+  days 1–6.
 - Status:
-  - **testing**: fewer than 3 days of data so far
-  - **ineligible**: window spend < `minTestSpend` ($100); excluded from hit rate
+  - **testing**: the judging window hasn't passed yet
+  - **No ad at $100** (`ineligible`): window passed and no ad has reached $100; not counted
   - **hit**: window CPA ≤ $14 **and** window ROAS ≥ 1.7 (`hitRule: "either"` allows either one)
   - **miss**: otherwise (including zero purchases)
 - **Hit rate** = hits ÷ (hits + misses).

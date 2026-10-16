@@ -255,8 +255,8 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
   const rows: [string, string][] = [
     ["Target CPA", `$${t.targetCpa}`],
     ["Target ROAS", String(t.targetRoas)],
-    ["Testing window", `${t.testWindowDays} days from first spend`],
-    ["Minimum test spend", `$${t.minTestSpend}`],
+    ["Qualifies when", `one ad has spent $${t.minTestSpend}`],
+    ["Judged on", `first spend to day ${t.testWindowDays}, or to the day it qualified if later`],
     ["Hit rule", t.hitRule === "both" ? "CPA and ROAS both on target" : "CPA or ROAS on target"],
   ];
   return (

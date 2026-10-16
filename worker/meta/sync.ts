@@ -54,13 +54,46 @@ export async function wipeSampleData(db: D1Database) {
   return true;
 }
 
-/** Upserts every ad (all statuses) and its post, then re-attributes pods and tags. */
+// Writes are the scarce resource (D1 free plan: 100k rows written/day), so every step below
+// reads what's stored and writes only rows that changed.
+
+type AdRow = {
+  id: string;
+  post_id: string;
+  name: string;
+  campaign_id: string | null;
+  campaign_name: string | null;
+  adset_id: string | null;
+  adset_name: string | null;
+  status: string;
+  created_time: string | null;
+  creative_id: string | null;
+};
+type PostRow = { id: string; media_type: string; thumbnail_url: string | null; created_time: string | null };
+
+const AD_COLS = ["post_id", "name", "campaign_id", "campaign_name", "adset_id", "adset_name", "status", "created_time", "creative_id"] as const;
+
+const same = <T extends object>(a: T, b: T, keys: readonly (keyof T)[]) => keys.every((k) => (a[k] ?? null) === (b[k] ?? null));
+
+/** Meta CDN URLs carry their expiry as hex seconds in `oe`. Keep a stored thumbnail until it's close. */
+export function thumbnailNeedsRefresh(stored: string | null, now = Date.now()): boolean {
+  if (!stored) return true;
+  const oe = /[?&]oe=([0-9a-f]+)/i.exec(stored)?.[1];
+  return oe ? parseInt(oe, 16) * 1000 < now + 3 * 86_400_000 : false;
+}
+
+/** Upserts every ad (all statuses) and its post, then re-attributes pods, tags and concepts. */
 export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
   const now = new Date().toISOString();
-  const posts = new Map<string, { mediaType: string; thumb: string | null; created: string | null }>();
-  const adStmts: D1PreparedStatement[] = [];
-  let count = 0;
+  const [{ results: storedAds }, { results: storedPosts }] = await Promise.all([
+    db.prepare(`SELECT id, ${AD_COLS.join(", ")} FROM ads`).all<AdRow>(),
+    db.prepare("SELECT id, media_type, thumbnail_url, created_time FROM posts").all<PostRow>(),
+  ]);
+  const oldAds = new Map(storedAds.map((a) => [a.id, a]));
+  const oldPosts = new Map(storedPosts.map((p) => [p.id, p]));
 
+  const posts = new Map<string, PostRow>();
+  const ads: AdRow[] = [];
   for await (const page of gc.pages<GraphAd>(`${env.META_AD_ACCOUNT_ID}/ads`, {
     fields: AD_FIELDS,
     limit: "200",
@@ -71,58 +104,103 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
       const created = isoTime(ad.created_time);
       const prev = posts.get(postId);
       posts.set(postId, {
-        mediaType: mediaTypeFor(ad),
-        thumb: prev?.thumb ?? thumbnailFor(ad),
-        created: prev?.created && created ? (prev.created < created ? prev.created : created) : (prev?.created ?? created),
+        id: postId,
+        media_type: mediaTypeFor(ad),
+        thumbnail_url: prev?.thumbnail_url ?? thumbnailFor(ad),
+        created_time: prev?.created_time && created ? (prev.created_time < created ? prev.created_time : created) : (prev?.created_time ?? created),
       });
-      adStmts.push(
-        db
-          .prepare(
-            `INSERT INTO ads (id, post_id, name, campaign_id, campaign_name, adset_id, adset_name, status, created_time, creative_id, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-             ON CONFLICT(id) DO UPDATE SET post_id = excluded.post_id, name = excluded.name,
-               campaign_id = excluded.campaign_id, campaign_name = excluded.campaign_name,
-               adset_id = excluded.adset_id, adset_name = excluded.adset_name, status = excluded.status,
-               created_time = excluded.created_time, creative_id = excluded.creative_id, updated_at = excluded.updated_at`,
-          )
-          .bind(
-            ad.id, postId, ad.name, ad.campaign?.id ?? null, ad.campaign?.name ?? null, ad.adset?.id ?? null,
-            ad.adset?.name ?? null, ad.effective_status ?? ad.status ?? "UNKNOWN", created, ad.creative?.id ?? null, now,
-          ),
-      );
-      count++;
+      ads.push({
+        id: ad.id,
+        post_id: postId,
+        name: ad.name,
+        campaign_id: ad.campaign?.id ?? null,
+        campaign_name: ad.campaign?.name ?? null,
+        adset_id: ad.adset?.id ?? null,
+        adset_name: ad.adset?.name ?? null,
+        status: ad.effective_status ?? ad.status ?? "UNKNOWN",
+        created_time: created,
+        creative_id: ad.creative?.id ?? null,
+      });
     }
   }
 
-  const postStmts = [...posts].map(([id, p]) =>
-    db
-      .prepare(
-        `INSERT INTO posts (id, media_type, thumbnail_url, created_time) VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT(id) DO UPDATE SET media_type = excluded.media_type,
-           thumbnail_url = COALESCE(excluded.thumbnail_url, posts.thumbnail_url),
-           created_time = COALESCE(MIN(posts.created_time, excluded.created_time), posts.created_time, excluded.created_time)`,
-      )
-      .bind(id, p.mediaType, p.thumb, p.created),
-  );
+  const postStmts: D1PreparedStatement[] = [];
+  for (const p of posts.values()) {
+    const old = oldPosts.get(p.id);
+    const created = old?.created_time && p.created_time ? (old.created_time < p.created_time ? old.created_time : p.created_time) : (old?.created_time ?? p.created_time);
+    const thumb = old && !thumbnailNeedsRefresh(old.thumbnail_url) ? old.thumbnail_url : (p.thumbnail_url ?? old?.thumbnail_url ?? null);
+    const next = { ...p, thumbnail_url: thumb, created_time: created };
+    if (old && same(old, next, ["media_type", "thumbnail_url", "created_time"])) continue;
+    postStmts.push(
+      db
+        .prepare(
+          `INSERT INTO posts (id, media_type, thumbnail_url, created_time) VALUES (?1, ?2, ?3, ?4)
+           ON CONFLICT(id) DO UPDATE SET media_type = excluded.media_type, thumbnail_url = excluded.thumbnail_url,
+             created_time = excluded.created_time`,
+        )
+        .bind(next.id, next.media_type, next.thumbnail_url, next.created_time),
+    );
+  }
+
+  const adStmts: D1PreparedStatement[] = [];
+  for (const a of ads) {
+    const old = oldAds.get(a.id);
+    if (old && same(old, a, AD_COLS)) continue;
+    adStmts.push(
+      db
+        .prepare(
+          `INSERT INTO ads (id, post_id, name, campaign_id, campaign_name, adset_id, adset_name, status, created_time, creative_id, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+           ON CONFLICT(id) DO UPDATE SET post_id = excluded.post_id, name = excluded.name,
+             campaign_id = excluded.campaign_id, campaign_name = excluded.campaign_name,
+             adset_id = excluded.adset_id, adset_name = excluded.adset_name, status = excluded.status,
+             created_time = excluded.created_time, creative_id = excluded.creative_id, updated_at = excluded.updated_at`,
+        )
+        .bind(a.id, a.post_id, a.name, a.campaign_id, a.campaign_name, a.adset_id, a.adset_name, a.status, a.created_time, a.creative_id, now),
+    );
+  }
+
   // Posts before ads (foreign key), then ads.
   await runBatched(db, postStmts);
   await runBatched(db, adStmts);
+  const changed = postStmts.length + adStmts.length;
   await attribute(db);
   await removeOrphanPosts(db);
-  return { ads: count, posts: posts.size };
+  return { ads: ads.length, posts: posts.size, written: changed };
 }
 
-/** Recomputes pod and tags for every post, never touching manual values. */
+type AssignmentRow = {
+  post_id: string;
+  pod_id: string | null;
+  pod_source: string | null;
+  angle: string | null;
+  format: string | null;
+  hook: string | null;
+  landing_page: string | null;
+  tags_source: string | null;
+};
+const ASSIGN_COLS = ["pod_id", "pod_source", "angle", "format", "hook", "landing_page", "tags_source"] as const;
+
+async function setSetting(db: D1Database, key: string, value: unknown) {
+  const json = JSON.stringify(value);
+  const old = await db.prepare("SELECT value FROM settings WHERE key = ?1").bind(key).first<{ value: string }>();
+  if (old?.value === json) return;
+  await db.prepare("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(key, json).run();
+}
+
+/** Recomputes pod, tags and concepts for every post, never touching manual values. */
 export async function attribute(db: D1Database) {
-  const [{ results: ads }, prefix, attr] = await Promise.all([
-    db.prepare("SELECT id, post_id, name, adset_id, adset_name, created_time FROM ads").all<{
+  const [{ results: ads }, { results: stored }, prefix, attr] = await Promise.all([
+    db.prepare("SELECT id, post_id, name, adset_id, adset_name, created_time, concept_id FROM ads").all<{
       id: string;
       post_id: string;
       name: string;
       adset_id: string | null;
       adset_name: string | null;
       created_time: string | null;
+      concept_id: string | null;
     }>(),
+    db.prepare(`SELECT post_id, ${ASSIGN_COLS.join(", ")} FROM assignments`).all<AssignmentRow>(),
     db.prepare("SELECT value FROM settings WHERE key = 'legacy_prefix_map'").first<{ value: string }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),
   ]);
@@ -133,11 +211,10 @@ export async function attribute(db: D1Database) {
       ads.map((a) => ({ name: a.name, adsetName: a.adset_name, createdTime: a.created_time })),
     );
     // Shown in Settings so the team can check the detected date.
-    await db
-      .prepare("INSERT INTO settings (key, value) VALUES ('pods_start_detected', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-      .bind(JSON.stringify(settings.podsStartDate))
-      .run();
+    await setSetting(db, "pods_start_detected", settings.podsStartDate);
   }
+  const oldAssign = new Map(stored.map((a) => [a.post_id, a]));
+
   const byPost = new Map<string, typeof ads>();
   for (const a of ads) byPost.set(a.post_id, [...(byPost.get(a.post_id) ?? []), a]);
 
@@ -151,47 +228,81 @@ export async function attribute(db: D1Database) {
     );
     const origin = [...list].sort((a, b) => (a.created_time ?? "").localeCompare(b.created_time ?? ""))[0]!;
     const tags = parseAdName(origin.name);
+    const old = oldAssign.get(postId);
+    const keepPod = old?.pod_source === "manual";
+    const keepTags = old?.tags_source === "manual";
+    const next: AssignmentRow = {
+      post_id: postId,
+      pod_id: keepPod ? old!.pod_id : pod ? podByCode(pod.podCode)!.id : null,
+      pod_source: keepPod ? "manual" : (pod?.source ?? null),
+      angle: keepTags ? old!.angle : tags.angle,
+      format: keepTags ? old!.format : tags.format,
+      hook: keepTags ? old!.hook : tags.hook,
+      landing_page: keepTags ? old!.landing_page : tags.landingPage,
+      tags_source: keepTags ? "manual" : "name",
+    };
+    if (old && same(old, next, ASSIGN_COLS)) continue;
     stmts.push(
       db
         .prepare(
           `INSERT INTO assignments (post_id, pod_id, pod_source, angle, format, hook, landing_page, tags_source, updated_at, updated_by)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'name', ?8, 'sync')
-           ON CONFLICT(post_id) DO UPDATE SET
-             pod_id       = CASE WHEN assignments.pod_source  = 'manual' THEN assignments.pod_id       ELSE excluded.pod_id END,
-             pod_source   = CASE WHEN assignments.pod_source  = 'manual' THEN 'manual'                 ELSE excluded.pod_source END,
-             angle        = CASE WHEN assignments.tags_source = 'manual' THEN assignments.angle        ELSE excluded.angle END,
-             format       = CASE WHEN assignments.tags_source = 'manual' THEN assignments.format       ELSE excluded.format END,
-             hook         = CASE WHEN assignments.tags_source = 'manual' THEN assignments.hook         ELSE excluded.hook END,
-             landing_page = CASE WHEN assignments.tags_source = 'manual' THEN assignments.landing_page ELSE excluded.landing_page END,
-             tags_source  = CASE WHEN assignments.tags_source = 'manual' THEN 'manual'                 ELSE excluded.tags_source END,
-             updated_at   = excluded.updated_at, updated_by = excluded.updated_by`,
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'sync')
+           ON CONFLICT(post_id) DO UPDATE SET pod_id = excluded.pod_id, pod_source = excluded.pod_source,
+             angle = excluded.angle, format = excluded.format, hook = excluded.hook, landing_page = excluded.landing_page,
+             tags_source = excluded.tags_source, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
         )
-        .bind(
-          postId, pod ? podByCode(pod.podCode)!.id : null, pod?.source ?? null,
-          tags.angle, tags.format, tags.hook, tags.landingPage, now,
-        ),
+        .bind(postId, next.pod_id, next.pod_source, next.angle, next.format, next.hook, next.landing_page, next.tags_source, now),
     );
   }
   await runBatched(db, stmts);
-  await saveConcepts(db, ads.map((a) => ({ id: a.id, name: a.name, adsetId: a.adset_id, adsetName: a.adset_name })), settings);
+  await saveConcepts(db, ads, settings);
 }
 
-/** Rebuilds the concepts table and each ad's concept_id. */
-async function saveConcepts(db: D1Database, ads: Parameters<typeof buildConcepts>[0], settings: AttributionSettings) {
-  const concepts = buildConcepts(ads, settings);
-  const stmts: D1PreparedStatement[] = [db.prepare("UPDATE ads SET concept_id = NULL"), db.prepare("DELETE FROM concepts")];
+/** Brings the concepts table and each ad's concept_id in line with buildConcepts. */
+async function saveConcepts(
+  db: D1Database,
+  ads: { id: string; name: string; adset_id: string | null; adset_name: string | null; concept_id: string | null }[],
+  settings: AttributionSettings,
+) {
+  const concepts = buildConcepts(ads.map((a) => ({ id: a.id, name: a.name, adsetId: a.adset_id, adsetName: a.adset_name })), settings);
+  const { results: stored } = await db
+    .prepare("SELECT id, adset_id, adset_name, label, pod_id FROM concepts")
+    .all<{ id: string; adset_id: string; adset_name: string; label: string; pod_id: string }>();
+  const oldConcepts = new Map(stored.map((c) => [c.id, c]));
+
+  const stmts: D1PreparedStatement[] = [];
+  const wanted = new Map<string, string | null>(ads.map((a) => [a.id, null]));
   for (const c of concepts) {
+    for (const id of c.adIds) wanted.set(id, c.id);
+    const next = { id: c.id, adset_id: c.adsetId, adset_name: c.adsetName, label: c.label, pod_id: podByCode(c.podCode)!.id };
+    const old = oldConcepts.get(c.id);
+    oldConcepts.delete(c.id);
+    if (old && same(old, next, ["adset_id", "adset_name", "label", "pod_id"])) continue;
     stmts.push(
       db
-        .prepare("INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES (?1, ?2, ?3, ?4, ?5)")
-        .bind(c.id, c.adsetId, c.adsetName, c.label, podByCode(c.podCode)!.id),
+        .prepare(
+          `INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES (?1, ?2, ?3, ?4, ?5)
+           ON CONFLICT(id) DO UPDATE SET adset_id = excluded.adset_id, adset_name = excluded.adset_name,
+             label = excluded.label, pod_id = excluded.pod_id`,
+        )
+        .bind(next.id, next.adset_id, next.adset_name, next.label, next.pod_id),
     );
-    for (let i = 0; i < c.adIds.length; i += 50) {
-      const ids = c.adIds.slice(i, i + 50);
+  }
+  for (const id of oldConcepts.keys()) stmts.push(db.prepare("DELETE FROM concepts WHERE id = ?1").bind(id));
+
+  // Group ads whose concept changed by their new concept, so each UPDATE covers many ads.
+  const moves = new Map<string | null, string[]>();
+  for (const a of ads) {
+    const target = wanted.get(a.id) ?? null;
+    if ((a.concept_id ?? null) !== target) moves.set(target, [...(moves.get(target) ?? []), a.id]);
+  }
+  for (const [target, ids] of moves) {
+    for (let i = 0; i < ids.length; i += 50) {
+      const chunk = ids.slice(i, i + 50);
       stmts.push(
         db
-          .prepare(`UPDATE ads SET concept_id = ?1 WHERE id IN (${ids.map((_, j) => `?${j + 2}`).join(", ")})`)
-          .bind(c.id, ...ids),
+          .prepare(`UPDATE ads SET concept_id = ?1 WHERE id IN (${chunk.map((_, j) => `?${j + 2}`).join(", ")})`)
+          .bind(target, ...chunk),
       );
     }
   }
@@ -211,7 +322,10 @@ async function removeOrphanPosts(db: D1Database) {
   ]);
 }
 
-/** Replaces daily metrics for [since, until] (inclusive, account timezone). */
+type DailyDbRow = { ad_id: string; date: string; spend_cents: number; impressions: number; link_clicks: number; purchases: number; revenue_cents: number };
+const DAILY_COLS = ["spend_cents", "impressions", "link_clicks", "purchases", "revenue_cents"] as const;
+
+/** Brings daily metrics for [since, until] (inclusive, account timezone) in line with Meta. */
 export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, since: string, until: string) {
   const rows: GraphInsight[] = [];
   for await (const page of gc.pages<GraphInsight>(`${env.META_AD_ACCOUNT_ID}/insights`, {
@@ -223,17 +337,16 @@ export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, si
   }))
     rows.push(...page);
 
-  // Ads that are deleted in Meta still have history; give them a placeholder post.
-  const placeholders = new Map<string, GraphInsight>();
-  for (const r of rows) placeholders.set(r.ad_id, r);
-  const stmts: D1PreparedStatement[] = [];
-  for (const r of placeholders.values()) {
+  // Ads deleted in Meta still have history; give them a placeholder post.
+  const { results: known } = await db.prepare("SELECT id FROM ads").all<{ id: string }>();
+  const knownIds = new Set(known.map((k) => k.id));
+  const missing = new Map<string, GraphInsight>();
+  for (const r of rows) if (!knownIds.has(r.ad_id)) missing.set(r.ad_id, r);
+  const placeholderStmts: D1PreparedStatement[] = [];
+  for (const r of missing.values()) {
     const postId = `ad:${r.ad_id}`;
-    stmts.push(
-      db.prepare(
-        `INSERT INTO posts (id, media_type) SELECT ?1, 'video'
-         WHERE NOT EXISTS (SELECT 1 FROM ads WHERE id = ?2) ON CONFLICT(id) DO NOTHING`,
-      ).bind(postId, r.ad_id),
+    placeholderStmts.push(
+      db.prepare("INSERT INTO posts (id, media_type) VALUES (?1, 'video') ON CONFLICT(id) DO NOTHING").bind(postId),
       db
         .prepare(
           `INSERT INTO ads (id, post_id, name, campaign_id, campaign_name, adset_id, adset_name, status)
@@ -242,12 +355,31 @@ export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, si
         .bind(r.ad_id, postId, r.ad_name ?? r.ad_id, r.campaign_id ?? null, r.campaign_name ?? null, r.adset_id ?? null, r.adset_name ?? null),
     );
   }
-  await runBatched(db, stmts);
+  await runBatched(db, placeholderStmts);
 
+  const { results: storedDaily } = await db
+    .prepare(`SELECT ad_id, date, ${DAILY_COLS.join(", ")} FROM ad_daily WHERE date BETWEEN ?1 AND ?2`)
+    .bind(since, until)
+    .all<DailyDbRow>();
+  const old = new Map(storedDaily.map((d) => [`${d.ad_id}|${d.date}`, d]));
+
+  const stmts: D1PreparedStatement[] = [];
   const daily = rows.map(insightToDaily);
-  await runBatched(db, [
-    db.prepare("DELETE FROM ad_daily WHERE date BETWEEN ?1 AND ?2").bind(since, until),
-    ...daily.map((d) =>
+  for (const d of daily) {
+    const key = `${d.adId}|${d.date}`;
+    const prev = old.get(key);
+    old.delete(key);
+    const next: DailyDbRow = {
+      ad_id: d.adId,
+      date: d.date,
+      spend_cents: d.spendCents,
+      impressions: d.impressions,
+      link_clicks: d.linkClicks,
+      purchases: d.purchases,
+      revenue_cents: d.revenueCents,
+    };
+    if (prev && same(prev, next, DAILY_COLS)) continue;
+    stmts.push(
       db
         .prepare(
           `INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, link_clicks, purchases, revenue_cents)
@@ -255,11 +387,15 @@ export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, si
            ON CONFLICT(ad_id, date) DO UPDATE SET spend_cents = excluded.spend_cents, impressions = excluded.impressions,
              link_clicks = excluded.link_clicks, purchases = excluded.purchases, revenue_cents = excluded.revenue_cents`,
         )
-        .bind(d.adId, d.date, d.spendCents, d.impressions, d.linkClicks, d.purchases, d.revenueCents),
-    ),
-  ]);
-  if (placeholders.size) await attribute(db);
-  return { rows: daily.length };
+        .bind(next.ad_id, next.date, next.spend_cents, next.impressions, next.link_clicks, next.purchases, next.revenue_cents),
+    );
+  }
+  // Rows Meta no longer reports for this window (e.g. revised to zero).
+  for (const gone of old.values())
+    stmts.push(db.prepare("DELETE FROM ad_daily WHERE ad_id = ?1 AND date = ?2").bind(gone.ad_id, gone.date));
+  await runBatched(db, stmts);
+  if (missing.size) await attribute(db);
+  return { rows: daily.length, written: stmts.length + placeholderStmts.length };
 }
 
 export function utcDay(offset = 0, from = new Date()): string {
@@ -273,6 +409,8 @@ export interface SyncResult {
   ads?: number;
   posts?: number;
   rows?: number;
+  /** Row writes this sync made (D1 free plan allows 100k/day). */
+  written?: number;
   error?: string;
   reconnect?: boolean;
 }
@@ -299,10 +437,18 @@ export async function runSync(
     const token = await getToken(env, db);
     if (!token) throw new Error("Meta isn't connected.");
     const gc = clientFor(env, token, fetcher);
-    const result: SyncResult = { ok: true };
-    if (opts.ads) Object.assign(result, await syncAds(env, db, gc));
-    Object.assign(result, await syncInsights(env, db, gc, opts.since, opts.until));
-    await finish("ok", `${opts.since} → ${opts.until} · ${result.rows} rows${opts.ads ? ` · ${result.ads} ads` : ""}`);
+    const result: SyncResult = { ok: true, written: 0 };
+    if (opts.ads) {
+      const a = await syncAds(env, db, gc);
+      Object.assign(result, { ads: a.ads, posts: a.posts, written: a.written });
+    }
+    const i = await syncInsights(env, db, gc, opts.since, opts.until);
+    result.rows = i.rows;
+    result.written = (result.written ?? 0) + i.written;
+    await finish(
+      "ok",
+      `${opts.since} → ${opts.until} · ${result.rows} rows${opts.ads ? ` · ${result.ads} ads` : ""} · ${result.written} changed`,
+    );
     return result;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
