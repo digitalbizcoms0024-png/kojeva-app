@@ -26,13 +26,15 @@ Each phase is one branch + PR. A phase is done when its acceptance criteria pass
 **Done when:** totals for a date range match Ads Manager (same timezone, 7-day click / 1-day view
 attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ posts stay fast.
 
-## Phase 2: Attribution
-- Review attribution conflicts (copies whose ad sets name different strategists).
-- Needs Tagging: inline + bulk edit of pod / editor / angle / format / hook / landing page.
-- Optional one-time import of a creative tracker (creative ID → strategist).
-- Editable targets and pod roster in Settings.
+## Phase 2: Attribution ✅
+- Needs Tagging: inline + bulk edit of pod / editor / angle / format / hook / landing page. Hand-set
+  values are `manual` and survive syncs; "use auto" / "Back to automatic" hands them back.
+- Settings: editable targets (CPA, ROAS, judging days, qualifying spend, hit rule), agency codes and
+  pods start date (saving re-credits every post from stored data, no Meta call), editor roster.
+- All edits require Cloudflare Access and record who made them (`updated_by`).
+- Later, if needed: attribution conflict review, creative-tracker import.
 
-**Done when:** ≥ 90% of last-30-day spend is attributed to a pod.
+**Done when:** ≥ 90% of last-30-day spend is credited to a pod or the agency.
 
 ## Phase 3: Creative intelligence
 - Atria tags + transcripts via a nightly scheduled Claude task that posts to `/api/ingest/atria`.

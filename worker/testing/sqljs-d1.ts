@@ -4,7 +4,13 @@ import type { Database } from "sql.js";
 
 type Params = unknown[];
 
+/** Cloudflare D1 refuses statements with more than 100 bound values; so do we, so tests catch it. */
+export const D1_MAX_PARAMS = 100;
+
 function rows<T>(db: Database, sql: string, params: Params): T[] {
+  if (params.length > D1_MAX_PARAMS) throw new Error(`D1_ERROR: too many bound values (${params.length} > ${D1_MAX_PARAMS})`);
+  const highest = Math.max(0, ...[...sql.matchAll(/\?(\d+)/g)].map((m) => Number(m[1])));
+  if (highest > D1_MAX_PARAMS) throw new Error(`D1_ERROR: variable number must be between ?1 and ?${D1_MAX_PARAMS}`);
   const s = db.prepare(sql);
   try {
     s.bind(params as never);

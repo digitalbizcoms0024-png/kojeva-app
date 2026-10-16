@@ -22,6 +22,24 @@ export interface ConnectionStatus {
   maxWindowDays: number;
 }
 
+export interface Editor {
+  id: string;
+  name: string;
+  podId: string | null;
+}
+
+/** Fields a person can set on a post. `null` clears a value; omitted fields are left alone. */
+export interface AssignmentPatch {
+  podId?: string | null;
+  editorId?: string | null;
+  angle?: string | null;
+  format?: string | null;
+  hook?: string | null;
+  landingPage?: string | null;
+  /** Hand the pod (or tags) back to automatic attribution. */
+  reset?: ("pod" | "tags")[];
+}
+
 export interface MetaResponse {
   dataMode: "sample" | "live";
   /** Days until the Meta login expires; null when not connected or it never expires. */
@@ -32,6 +50,9 @@ export interface MetaResponse {
   targets: Targets;
   pods: { id: string; code: string; name: string; color: string; kind: "pod" | "agency" }[];
   attribution: { agencyPrefixes: string[]; podsStartDate: string | null; detected: boolean };
+  editors: Editor[];
+  /** Whether the signed-in viewer can make changes (Cloudflare Access is on). */
+  canEdit: boolean;
 }
 
 export interface Assignment {
@@ -43,11 +64,14 @@ export interface Assignment {
   format: string | null;
   hook: string | null;
   landingPage: string | null;
+  tagsSource: string | null;
 }
 
 export interface PostSummary {
   postId: string;
   name: string;
+  /** Ad set of the post's first ad (where it was tested). */
+  adsetName: string | null;
   mediaType: string;
   thumbnailUrl: string | null;
   launched: string | null;

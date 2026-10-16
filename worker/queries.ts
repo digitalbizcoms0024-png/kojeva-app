@@ -48,8 +48,9 @@ const POST_BASE_SQL = `
     (SELECT MAX(x.status = 'ACTIVE') FROM ads x WHERE x.post_id = p.id) AS active,
     (SELECT MIN(x.created_time) FROM ads x WHERE x.post_id = p.id) AS launched,
     (SELECT x.concept_id FROM ads x WHERE x.post_id = p.id ORDER BY x.created_time, x.id LIMIT 1) AS concept_id,
+    (SELECT x.adset_name FROM ads x WHERE x.post_id = p.id ORDER BY x.created_time, x.id LIMIT 1) AS adset_name,
     s.pod_id, s.pod_source, s.editor_id, e.name AS editor_name,
-    s.angle, s.format, s.hook, s.landing_page
+    s.angle, s.format, s.hook, s.landing_page, s.tags_source
   FROM posts p
   LEFT JOIN assignments s ON s.post_id = p.id
   LEFT JOIN editors e ON e.id = s.editor_id`;
@@ -90,10 +91,11 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
     return { r, firstSpend, qualifiedOn, windowEnd: judgingWindowEnd(firstSpend, qualifiedOn, targets) };
   });
 
-  // Concept totals over each judging window, in one query.
+  // Concept totals over each judging window. D1 allows at most 100 bound values per
+  // statement, so 3 values per concept → 33 concepts per query.
   const windows = new Map<string, Totals>();
-  for (let i = 0; i < ends.length; i += 50) {
-    const chunk = ends.slice(i, i + 50);
+  for (let i = 0; i < ends.length; i += 33) {
+    const chunk = ends.slice(i, i + 33);
     const values = chunk.map((_, j) => `(?${j * 3 + 1}, ?${j * 3 + 2}, ?${j * 3 + 3})`).join(", ");
     const { results } = await db
       .prepare(
@@ -158,6 +160,7 @@ function toAssignment(r: Row): Assignment {
     format: s("format"),
     hook: s("hook"),
     landingPage: s("landing_page"),
+    tagsSource: s("tags_source"),
   };
 }
 
@@ -195,6 +198,7 @@ export async function loadPosts(
     return {
       postId,
       name: String(r.name ?? postId),
+      adsetName: r.adset_name == null ? null : String(r.adset_name),
       mediaType: String(r.media_type),
       thumbnailUrl: r.thumbnail_url == null ? null : String(r.thumbnail_url),
       launched,

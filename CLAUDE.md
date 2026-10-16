@@ -36,7 +36,8 @@ Before pushing: `npm run typecheck && npm test && npm run build` must all pass.
 - Charts: one y-axis per chart (no dual axes), hover tooltips, thin marks. See `docs/DESIGN.md`.
 - **D1 writes are the scarce resource** (free plan: 100k rows written/day). Syncs read what is stored and write only changed rows; keep it that way, and test that an unchanged re-sync writes 0 rows.
 - Meta sync lives in `worker/meta/` (Graph API v26.0). Test against fake Graph responses with `worker/testing/db.ts` (sql.js D1); this sandbox can't reach graph.facebook.com.
-- Connection and sync routes require Cloudflare Access (`worker/access.ts`). Don't weaken that.
+- Connection, sync and editing routes require Cloudflare Access (`worker/access.ts`, `requireAccess` on each write route). Don't weaken that.
+- D1 allows at most **100 bound values per statement**; chunk anything built from a list. `worker/testing/sqljs-d1.ts` enforces it in tests.
 - Read-only Meta access (`ads_read`) until the ad-management phase. Any write action needs a preview, explicit approval, defaults to paused, and an audit log entry.
 - Secrets (`META_APP_SECRET`, `TOKEN_KEY`, Triple Whale key) are Worker secrets, never in code or `wrangler.jsonc`. The Meta user token is stored encrypted in D1.
 - Sample data (`scripts/gen-sample.ts`) is fake. The UI shows the "Sample data" banner until a Meta sync succeeds; the first connection wipes it. Never reseed a live database.

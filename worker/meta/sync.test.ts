@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import app from "../index.ts";
 import type { Env } from "../env.ts";
 import { testDb } from "../testing/db.ts";
-import { runSync, thumbnailNeedsRefresh, wipeSampleData } from "./sync.ts";
+import { attribute, runSync, thumbnailNeedsRefresh, wipeSampleData } from "./sync.ts";
 import type { GraphAd, GraphInsight } from "./transform.ts";
 
 const ACT = "act_2930078677198801";
@@ -249,6 +249,31 @@ describe("runSync", () => {
     expect(result).toMatchObject({ ok: false, reconnect: true });
     const [run] = await q<{ status: string; message: string }>("SELECT status, message FROM sync_runs ORDER BY id DESC LIMIT 1");
     expect(run).toEqual({ status: "error", message: "Error validating access token: Session has expired" });
+  });
+});
+
+describe("many concepts", () => {
+  it("loads more concepts than fit in one D1 query", async () => {
+    const stmts: D1PreparedStatement[] = [];
+    for (let i = 0; i < 80; i++) {
+      stmts.push(
+        env.DB.prepare("INSERT INTO posts (id, media_type) VALUES (?1, 'video')").bind(`p${i}`),
+        env.DB.prepare(
+          "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time) VALUES (?1, ?2, ?3, ?4, ?5, 'ACTIVE', '2026-10-01T00:00:00.000Z')",
+        ).bind(`a${i}`, `p${i}`, `Static ${i}`, `as${i}`, `Shameer | Static ${i} | Test`),
+        env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES (?1, '2026-10-01', 12000, 9, 21000)").bind(`a${i}`),
+      );
+    }
+    await env.DB.batch(stmts);
+    await attribute(env.DB);
+    for (const path of ["/api/concepts?range=all", "/api/pods?range=all", "/api/rankings?range=all"]) {
+      const res = await app.fetch(new Request(`https://hub.test${path}`), env, {} as ExecutionContext);
+      expect(res.status, path).toBe(200);
+    }
+    const res = await app.fetch(new Request("https://hub.test/api/concepts?range=all"), env, {} as ExecutionContext);
+    const rows = ((await res.json()) as { rows: { window: { spendCents: number } }[] }).rows;
+    expect(rows).toHaveLength(80);
+    expect(rows.every((r) => r.window.spendCents === 12000)).toBe(true);
   });
 });
 

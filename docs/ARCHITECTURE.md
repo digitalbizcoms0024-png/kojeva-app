@@ -39,9 +39,16 @@ adds `tw_ad_daily` so Triple Whale numbers never mix with Meta's.
 | `POST /api/connection/token` | connect with a pasted token |
 | `POST /api/connection/disconnect` | forget the stored token |
 | `POST /api/sync` `{since, until, ads}` | sync one window (≤ 31 days) |
+| `GET /api/concepts?range&pod` | concepts with judging window, totals and hit status |
+| `PATCH /api/posts/:id/assignment` | set pod / editor / tags by hand, or `reset` to automatic |
+| `POST /api/assignments/bulk` `{postIds, patch}` | same, for up to 500 posts |
+| `PUT /api/settings` `{targets?, attribution?}` | edit targets; attribution changes re-credit every post |
+| `POST /api/editors`, `DELETE /api/editors/:id` | editor roster |
+| `POST /api/attribute` | re-credit every post from stored data |
 
-Ranges are relative to the latest synced day, not the wall clock. Connection and sync routes return
-403 until Cloudflare Access is configured; once it is, every `/api` call needs a valid Access JWT.
+Ranges are relative to the latest synced day, not the wall clock. Connection, sync and editing routes
+return 403 until Cloudflare Access is configured; once it is, every `/api` call needs a valid Access JWT.
+D1 accepts at most 100 bound values per statement; the test adapter enforces the same limit.
 
 ## Configuration
 | Name | Kind | Where |

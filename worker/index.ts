@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type {
   ConceptsResponse,
+  Editor,
   CopyRow,
   MetaResponse,
   PodRow,
@@ -13,6 +14,7 @@ import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, roas, type Totals } from "..
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { accessConfigured, accessMiddleware } from "./access.ts";
 import type { AppEnv, Env } from "./env.ts";
+import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
 import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
@@ -54,7 +56,7 @@ const SORTERS: Record<SortKey, (t: Totals) => number | null> = {
 
 app.get("/meta", async (c) => {
   const db = c.env.DB;
-  const [targets, latestDate, lastRun, pods, live, conn, attr, detected] = await Promise.all([
+  const [targets, latestDate, lastRun, pods, live, conn, attr, detected, editors] = await Promise.all([
     getTargets(db),
     getLatestDate(db),
     db
@@ -67,6 +69,7 @@ app.get("/meta", async (c) => {
     db.prepare("SELECT expires_at FROM meta_connections WHERE id = 1").first<{ expires_at: string | null }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'pods_start_detected'").first<{ value: string }>(),
+    db.prepare("SELECT id, name, pod_id AS podId FROM editors ORDER BY name").all<Editor>(),
   ]);
   const attribution = { ...DEFAULT_ATTRIBUTION, ...(attr ? (JSON.parse(attr.value) as Partial<AttributionSettings>) : {}) };
   const body: MetaResponse = {
@@ -85,6 +88,8 @@ app.get("/meta", async (c) => {
       podsStartDate: attribution.podsStartDate ?? (detected ? (JSON.parse(detected.value) as string | null) : null),
       detected: !attribution.podsStartDate,
     },
+    editors: editors.results,
+    canEdit: accessConfigured(c.env),
   };
   return c.json(body);
 });
@@ -245,6 +250,9 @@ app.get("/concepts", async (c) => {
   const body: ConceptsResponse = { ...range, rows };
   return c.json(body);
 });
+
+// Mounted last so the read routes above take precedence.
+app.route("/", editing);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 
