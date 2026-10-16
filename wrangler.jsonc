@@ -7,7 +7,10 @@
   "workers_dev": true,
   "preview_urls": false,
   "assets": {
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    // Browser navigations to /api (the Facebook login redirect and its callback) must
+    // reach the Worker instead of getting the app's index.html.
+    "run_worker_first": ["/api/*"]
   },
   "d1_databases": [
     {

@@ -14,6 +14,7 @@ for which phase we're in.
 
 ## Commands
 - `npm run dev` — Vite + Worker locally at http://localhost:5173 (uses local D1 in `.wrangler/`).
+  `wrangler.jsonc` sets `ACCESS_TEAM_DOMAIN`, so the local API answers 401; create `.dev.vars` with `ACCESS_TEAM_DOMAIN=""` for local work.
 - `npm run db:reset:local` — recreate the local DB, apply migrations, load sample data.
 - `npm test` — Vitest (parser + metrics). `npm run typecheck` — both tsconfigs.
 - `npm run build` — production build. Pushing to the production branch deploys via Cloudflare Workers Builds (`npm run deploy`: migrations → build → deploy).
