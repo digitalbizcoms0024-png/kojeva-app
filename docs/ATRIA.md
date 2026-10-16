@@ -27,18 +27,20 @@ people can't call them, and the token can't call anything else.
    `kojeva-atria-sync`. Save.
 3. **Tell the hub which token** — put the Client ID in `wrangler.jsonc` → `vars.ATRIA_CLIENT_ID`
    (not secret on its own) and push.
-4. **Let Claude reach the hub** — in the Claude Code cloud environment's settings: add
-   `kojeva-hub.digitalbizcoms0024.workers.dev` to Network access → Allowed domains, and add the
-   environment variables `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (as secrets).
-5. **Schedule the task** (Claude does this): nightly, fresh session, Atria connector, prompt below.
+4. **Let Claude reach the hub** — in the Claude Code cloud environment's settings (Edit environment):
+   - Network access → **Custom**, Allowed domains `kojeva-hub.digitalbizcoms0024.workers.dev`, keep
+     "Also include default list of common package managers" ticked.
+   - Network secrets → Add secret: Allowed websites `kojeva-hub.digitalbizcoms0024.workers.dev`, Path
+     prefix `/api/ingest/atria`, custom headers `CF-Access-Client-Id` and `CF-Access-Client-Secret`
+     (no prefix). Sessions get the headers added automatically and never see the values.
+5. **Schedule the task**: "Kojeva Hub · Atria tag sync", daily 10:07 UTC (after the 09:17 Meta sync),
+   fresh session per run. Add the **Atria connector** to it in claude.ai's scheduled tasks.
 
 ## Nightly task prompt
 ```
 Sync Atria creative tags into Kojeva Hub. Use bash + curl and the Atria connector.
 Hub: https://kojeva-hub.digitalbizcoms0024.workers.dev
-Every request to the hub sends headers:
-  CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID
-  CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET
+The environment's network secret adds the Access headers to /api/ingest/atria requests automatically.
 Atria account_id: 8d763d97729547f9839030bdbbfac292
 
 Repeat up to 5 rounds:
