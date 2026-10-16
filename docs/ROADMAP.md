@@ -52,8 +52,10 @@ attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ 
   untagged spend), suggested pods with Accept in Needs Tagging, configurable amber CPA band, recently
   generated names in the Naming Tool (per browser).
 
-## Phase 4: Triple Whale + analytics
-- Triple Whale attributed revenue/ROAS per ad as separate columns.
+## Phase 4: Triple Whale + analytics (in progress)
+- ✅ (app side) Triple Whale attributed orders/revenue per ad and day ("Clicks & deterministic views",
+  lifetime), pushed nightly by a Claude task to `/api/ingest/tw` (`docs/TRIPLE_WHALE.md`). Shown as
+  separate "· TW" values: Dashboard ROAS tile, ranking cards, ad detail, Pods page and table.
 - Fatigue signals (frequency ↑, CTR ↓, CPA drift), trend charts, CSV export.
 
 ## Phase 5: Operations (needs `ads_management`)

@@ -52,3 +52,10 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - **High:** the same video/image (`ads.asset_id`) runs in a post credited to exactly one pod.
 - **Medium:** the ad name contains exactly one roster editor's name (as a whole word), and that editor has a pod.
 - Never applied automatically; accepting one sets the pod by hand (`manual`).
+
+## Triple Whale (`shared/metrics.ts`, `docs/TRIPLE_WHALE.md`)
+- **ROAS · TW** = Triple Whale attributed revenue ÷ Meta spend. **CPA · TW** = Meta spend ÷ Triple Whale
+  attributed orders (fractional under this model). Same color bands as Meta's values.
+- Model: Clicks & deterministic views (`Clicks & Views` in Triple Whale's data), lifetime window.
+- Never summed with Meta's purchases or revenue. "—" when no day in the period is synced.
+- Hit rate and concepts stay on Meta's numbers.

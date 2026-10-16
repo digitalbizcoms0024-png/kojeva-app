@@ -1,5 +1,5 @@
 // Response shapes shared by the Worker API and the React app.
-import type { HitStatus, Targets, Totals } from "./metrics.ts";
+import type { HitStatus, Targets, Totals, TwTotals } from "./metrics.ts";
 
 export type RangeKey = "week" | "month" | "all" | "custom";
 export type SortKey = "spend" | "purchases" | "roas" | "cpa" | "ctr";
@@ -57,6 +57,8 @@ export interface MetaResponse {
   viewer: string | null;
   /** Posts with spend in the last 30 days that no pod or the agency is credited with. */
   needsTagging: number;
+  /** Triple Whale sync state; null until the first push. */
+  tripleWhale: { lastSync: string; latestDate: string; days: number; model: string } | null;
 }
 
 export interface Assignment {
@@ -88,12 +90,23 @@ export interface PostSummary {
   hit: HitStatus | null;
   /** Atria's tags for the post's creative, by category (theme, core_desire, …); null if untagged. */
   atria: Record<string, string[]> | null;
+  /** Triple Whale results over the same days; null when none of those days is synced from Triple Whale. */
+  tw: TwTotals | null;
+}
+
+/** How many of the period's days (with Meta data) Triple Whale has been synced for. */
+export interface TwCoverage {
+  days: number;
+  covered: number;
+  model: string | null;
 }
 
 export interface RankingsResponse {
   from: string;
   to: string;
   totals: Totals;
+  tw: TwTotals | null;
+  twCoverage: TwCoverage;
   count: number;
   items: PostSummary[];
 }
@@ -127,6 +140,7 @@ export interface PodRow {
   editors: { editorId: string | null; name: string; totals: Totals; concepts: number }[];
   /** Daily spend in cents for the last 7 synced days, oldest first (0 on days without spend). */
   spark: number[];
+  tw: TwTotals | null;
 }
 
 export interface ConceptResult {
@@ -187,6 +201,7 @@ export interface PodsResponse {
   from: string;
   to: string;
   rows: PodRow[];
+  twCoverage: TwCoverage;
 }
 
 /** Something on the dashboard worth a look. Tone follows the status colors (always shown with an icon). */

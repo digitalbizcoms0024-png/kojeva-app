@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import type { AlertsResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse } from "../../shared/api.ts";
-import { cpa, roas, type Targets, type Totals } from "../../shared/metrics.ts";
+import { cpa, roas, twCpa, twRoas, type Targets, type Totals } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { Sparkline } from "../components/Sparkline.tsx";
 import { CpaValue, Empty, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Tag, Thumb } from "../components/ui.tsx";
-import { int, money, pct, shortDate } from "../format.ts";
+import { dollars, int, money, pct, shortDate, TW_MODEL_LABEL, twCoverageNote } from "../format.ts";
 
 export function shiftDay(day: string, delta: number): string {
   const d = new Date(`${day}T00:00:00Z`);
@@ -60,12 +60,12 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
 
   return (
     <div>
-      <PageHeader title="Dashboard" subtitle="Kojeva performance on Meta">
+      <PageHeader title="Dashboard" subtitle={meta.tripleWhale ? "Kojeva performance on Meta, with Triple Whale beside it" : "Kojeva performance on Meta"}>
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
 
       <div className="flex flex-col gap-8 px-4 py-6 md:px-8">
-        <div className="grid grid-cols-2 gap-0.5 border-2 border-divider bg-divider lg:grid-cols-4 [&>*]:bg-page">
+        <div className={`grid grid-cols-2 gap-0.5 border-2 border-divider bg-divider [&>*]:bg-page ${meta.tripleWhale ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
           <Kpi
             label="Spend"
             source="Meta"
@@ -90,6 +90,19 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
             value={t ? <RoasValue value={roas(t)} target={tg.targetRoas} /> : "—"}
             sub={<>{b && t && <Delta now={roas(t)} before={roas(b)} better="up" fmt={pctFmt} />} Target {tg.targetRoas.toFixed(2)}</>}
           />
+          {meta.tripleWhale && (
+            <Kpi
+              label="ROAS"
+              source="Triple Whale"
+              value={t && top.data?.tw ? <RoasValue value={twRoas(top.data.tw, t.spendCents)} target={tg.targetRoas} /> : "—"}
+              sub={
+                <span title={TW_MODEL_LABEL}>
+                  {twCoverageNote(top.data?.twCoverage) ??
+                    (t && top.data?.tw ? `CPA ${dollars(twCpa(top.data.tw, t.spendCents))} · ${int(Math.round(top.data.tw.purchases))} orders` : TW_MODEL_LABEL)}
+                </span>
+              }
+            />
+          )}
         </div>
 
         <section>

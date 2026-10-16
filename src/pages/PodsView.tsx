@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ConceptResult, ConceptsResponse, MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { addTotals, cpa, roas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
+import { addTotals, cpa, roas, twRoas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, FORMATS, GROUPS } from "../../shared/taxonomy.ts";
 import { CpaValue, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select } from "../components/ui.tsx";
 import { int, money, pct, shortDate } from "../format.ts";
@@ -62,6 +62,7 @@ function PodColumn({
     ["Spend", money(r.totals.spendCents, { compact: true })],
     ["CPA · Meta", <CpaValue key="c" value={cpa(r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />],
     ["ROAS · Meta", <RoasValue key="r" value={roas(r.totals)} target={targets.targetRoas} />],
+    ["ROAS · Triple Whale", <RoasValue key="t" value={twRoas(r.tw, r.totals.spendCents)} target={targets.targetRoas} />],
     ["Best angle", best(mine, "angle") ?? "—"],
     ["Best format", best(mine, "format") ?? "—"],
   ];
@@ -261,6 +262,7 @@ export function PodsTable({ data, error, targets }: Props) {
             <th className="py-2 pr-3 text-right font-normal">Purchases</th>
             <th className="py-2 pr-3 text-right font-normal">CPA · Meta</th>
             <th className="py-2 pr-3 text-right font-normal">ROAS · Meta</th>
+            <th className="py-2 pr-3 text-right font-normal">ROAS · TW</th>
             <th className="py-2 pr-3 text-right font-normal">Hit rate</th>
             <th className="py-2 text-right font-normal">Concepts</th>
           </tr>
@@ -279,6 +281,9 @@ export function PodsTable({ data, error, targets }: Props) {
               </td>
               <td className="py-2.5 pr-3 text-right">
                 <RoasValue value={roas(r.totals)} target={targets.targetRoas} />
+              </td>
+              <td className="py-2.5 pr-3 text-right">
+                <RoasValue value={twRoas(r.tw, r.totals.spendCents)} target={targets.targetRoas} />
               </td>
               <td className="num py-2.5 pr-3 text-right text-ink">
                 {pct(r.hitRate, 0)} <span className="text-xs text-ink-3">{r.hits}/{r.hits + r.misses}</span>

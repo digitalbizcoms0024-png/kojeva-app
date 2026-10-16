@@ -37,6 +37,7 @@ Before pushing: `npm run typecheck && npm test && npm run build` must all pass.
 - Charts: one y-axis per chart (no dual axes), hover tooltips, thin marks. See `docs/DESIGN.md`.
 - **D1 writes are the scarce resource** (free plan: 100k rows written/day). Syncs read what is stored and write only changed rows; keep it that way, and test that an unchanged re-sync writes 0 rows.
 - Meta sync lives in `worker/meta/` (Graph API v26.0). Test against fake Graph responses with `worker/testing/db.ts` (sql.js D1); this sandbox can't reach graph.facebook.com.
+- Triple Whale numbers arrive via `/api/ingest/tw` from a nightly Claude task (same service token as Atria); stored in `tw_daily`, shown as "· TW" beside Meta's. See `docs/TRIPLE_WHALE.md`.
 - Atria tags arrive via `/api/ingest/atria` from a nightly Claude task signed in with an Access service token (`requireService`); service tokens can't use any other write route. See `docs/ATRIA.md`.
 - Connection, sync and editing routes require Cloudflare Access (`worker/access.ts`, `requireAccess` on each write route). Don't weaken that.
 - D1 allows at most **100 bound values per statement**; chunk anything built from a list. `worker/testing/sqljs-d1.ts` enforces it in tests.

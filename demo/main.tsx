@@ -2,11 +2,6 @@
 // in-memory SQLite database loaded with the sample data. No server needed.
 import initSqlJs from "sql.js";
 import wasmBase64 from "virtual:sql-wasm";
-import schema from "../migrations/0001_init.sql?raw";
-import metaSchema from "../migrations/0002_meta.sql?raw";
-import agencySchema from "../migrations/0003_agency.sql?raw";
-import conceptSchema from "../migrations/0004_concepts.sql?raw";
-import atriaSchema from "../migrations/0005_atria.sql?raw";
 import seed from "../seed/sample.sql?raw";
 import api from "../worker/index.ts";
 import { d1FromSqlJs } from "../worker/testing/sqljs-d1.ts";
@@ -20,11 +15,9 @@ function bytesFromBase64(b64: string): Uint8Array {
 
 const SQL = await initSqlJs({ wasmBinary: bytesFromBase64(wasmBase64) as unknown as ArrayBuffer });
 const db = new SQL.Database();
-db.exec(schema);
-db.exec(metaSchema);
-db.exec(agencySchema);
-db.exec(conceptSchema);
-db.exec(atriaSchema);
+// Every migration, in order, so a new one can't be forgotten here.
+const migrations = import.meta.glob<string>("../migrations/*.sql", { query: "?raw", import: "default", eager: true });
+for (const file of Object.keys(migrations).sort()) db.exec(migrations[file]!);
 db.exec(seed);
 const env = {
   DB: d1FromSqlJs(db),

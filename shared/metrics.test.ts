@@ -4,6 +4,8 @@ import {
   ZERO_TOTALS,
   cpa,
   cpaBand,
+  twCpa,
+  twRoas,
   ctr,
   hitRate,
   hitStatus,
@@ -91,5 +93,19 @@ describe("hitRate", () => {
   it("only counts decided concepts", () => {
     expect(hitRate(["hit", "miss", "miss", "testing", "ineligible"])).toBeCloseTo(1 / 3);
     expect(hitRate(["testing"])).toBeNull();
+  });
+});
+
+describe("Triple Whale metrics", () => {
+  it("divides attributed revenue and orders by Meta spend", () => {
+    const tw = { purchases: 2.5, revenueCents: 9000 };
+    expect(twRoas(tw, 6000)).toBeCloseTo(1.5);
+    expect(twCpa(tw, 6000)).toBeCloseTo(24);
+  });
+  it("is missing (not zero) without spend, orders or synced data", () => {
+    expect(twRoas({ purchases: 0, revenueCents: 0 }, 0)).toBeNull();
+    expect(twCpa({ purchases: 0, revenueCents: 0 }, 5000)).toBeNull();
+    expect(twRoas(null, 5000)).toBeNull();
+    expect(twRoas({ purchases: 0, revenueCents: 0 }, 5000)).toBe(0);
   });
 });

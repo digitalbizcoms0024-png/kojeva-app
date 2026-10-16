@@ -50,6 +50,8 @@ export async function wipeSampleData(db: D1Database) {
     db.prepare("DELETE FROM ads"),
     db.prepare("DELETE FROM posts"),
     db.prepare("DELETE FROM editors"),
+    db.prepare("DELETE FROM tw_daily"),
+    db.prepare("DELETE FROM tw_days"),
     db.prepare("DELETE FROM sync_runs WHERE source = 'sample'"),
   ]);
   return true;

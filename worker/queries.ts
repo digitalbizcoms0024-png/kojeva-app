@@ -1,6 +1,6 @@
-import type { Assignment, ConceptResult, PostSummary } from "../shared/api.ts";
+import type { Assignment, ConceptResult, PostSummary, TwCoverage } from "../shared/api.ts";
 import { classify } from "../shared/classify.ts";
-import { DEFAULT_TARGETS, hitStatus, judgingWindowEnd, type HitStatus, type Targets, type Totals } from "../shared/metrics.ts";
+import { DEFAULT_TARGETS, hitStatus, judgingWindowEnd, type HitStatus, type Targets, type Totals, type TwTotals } from "../shared/metrics.ts";
 
 type Row = Record<string, unknown>;
 
@@ -39,6 +39,23 @@ export async function getTargets(db: D1Database): Promise<Targets> {
 export async function getLatestDate(db: D1Database): Promise<string | null> {
   const row = await db.prepare("SELECT MAX(date) AS d FROM ad_daily").first<{ d: string | null }>();
   return row?.d ?? null;
+}
+
+/** Days in [from, to] that have Meta data, and how many of them Triple Whale has been synced for. */
+export async function twCoverage(db: D1Database, from: string, to: string): Promise<TwCoverage> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS days, COUNT(t.date) AS covered, MAX(t.model) AS model
+       FROM (SELECT DISTINCT date FROM ad_daily WHERE date BETWEEN ?1 AND ?2) m
+       LEFT JOIN tw_days t ON t.date = m.date`,
+    )
+    .bind(from, to)
+    .first<{ days: number; covered: number; model: string | null }>();
+  return { days: Number(row?.days ?? 0), covered: Number(row?.covered ?? 0), model: row?.model ?? null };
+}
+
+export function toTw(r: Row | undefined): TwTotals {
+  return { purchases: Number(r?.orders_milli ?? 0) / 1000, revenueCents: Number(r?.revenue_cents ?? 0) };
 }
 
 /** Post-level facts that don't depend on the selected date range. */
@@ -208,7 +225,7 @@ export async function loadPosts(
   const [targets, latest, concepts] = await Promise.all([getTargets(db), getLatestDate(db), loadConcepts(db)]);
   const conceptStatus = new Map(concepts.map((c) => [c.conceptId, c.status]));
   const where = opts.postId ? "WHERE p.id = ?1" : "";
-  const [base, ranged, windows] = await Promise.all([
+  const [base, ranged, windows, twRows, coverage] = await Promise.all([
     db.prepare(`${POST_BASE_SQL} ${where}`).bind(...(opts.postId ? [opts.postId] : [])).all<Row>(),
     db
       .prepare(
@@ -220,8 +237,21 @@ export async function loadPosts(
       .bind(...(opts.postId ? [from, to, opts.postId] : [from, to]))
       .all<Row>(),
     testWindows(db, targets.testWindowDays, opts.postId),
+    db
+      .prepare(
+        `SELECT a.post_id, SUM(t.orders_milli) AS orders_milli, SUM(t.revenue_cents) AS revenue_cents
+         FROM tw_daily t JOIN ads a ON a.id = t.ad_id
+         WHERE t.date BETWEEN ?1 AND ?2 ${opts.postId ? "AND a.post_id = ?3" : ""}
+         GROUP BY a.post_id`,
+      )
+      .bind(...(opts.postId ? [from, to, opts.postId] : [from, to]))
+      .all<Row>(),
+    twCoverage(db, from, to),
   ]);
   const totalsByPost = new Map(ranged.results.map((r) => [String(r.post_id), toTotals(r)]));
+  const twByPost = new Map(twRows.results.map((r) => [String(r.post_id), toTw(r)]));
+  // No synced Triple Whale day in the period: unknown, not zero.
+  const twKnown = coverage.covered > 0;
 
   return base.results.map((r) => {
     const postId = String(r.post_id);
@@ -244,6 +274,7 @@ export async function loadPosts(
       totals: totalsByPost.get(postId) ?? toTotals(undefined),
       hit,
       atria: r.atria_tags == null ? null : (JSON.parse(String(r.atria_tags)) as Record<string, string[]>),
+      tw: twKnown ? (twByPost.get(postId) ?? toTw(undefined)) : null,
     };
   });
 }

@@ -15,7 +15,7 @@ import type {
   SortKey,
   SuggestionsResponse,
 } from "../shared/api.ts";
-import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, roas, type Totals } from "../shared/metrics.ts";
+import { ZERO_TOTALS, ZERO_TW, addTotals, addTw, cpa, ctr, hitRate, roas, type Totals, type TwTotals } from "../shared/metrics.ts";
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware } from "./access.ts";
@@ -25,7 +25,8 @@ import { atria } from "./atria.ts";
 import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
-import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
+import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL, twCoverage } from "./queries.ts";
+import { tripleWhale, twStatus } from "./triplewhale.ts";
 
 const app = new Hono<AppEnv>().basePath("/api");
 
@@ -33,6 +34,7 @@ app.use("*", accessMiddleware);
 app.route("/connection", connection);
 app.route("/sync", sync);
 app.route("/ingest/atria", atria);
+app.route("/ingest/tw", tripleWhale);
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -70,7 +72,7 @@ const SORTERS: Record<SortKey, (t: Totals) => number | null> = {
 
 app.get("/meta", async (c) => {
   const db = c.env.DB;
-  const [targets, latestDate, lastRun, pods, live, conn, attr, detected, editors, untagged] = await Promise.all([
+  const [targets, latestDate, lastRun, pods, live, conn, attr, detected, editors, untagged, tw] = await Promise.all([
     getTargets(db),
     getLatestDate(db),
     db
@@ -92,6 +94,7 @@ app.get("/meta", async (c) => {
          WHERE d.date >= date((SELECT MAX(date) FROM ad_daily), '-29 days') AND d.spend_cents > 0 AND s.pod_id IS NULL`,
       )
       .first<{ n: number }>(),
+    twStatus(db),
   ]);
   const attribution = { ...DEFAULT_ATTRIBUTION, ...(attr ? (JSON.parse(attr.value) as Partial<AttributionSettings>) : {}) };
   const body: MetaResponse = {
@@ -115,6 +118,7 @@ app.get("/meta", async (c) => {
     canEdit: accessConfigured(c.env),
     viewer: c.get("userEmail"),
     needsTagging: Number(untagged?.n ?? 0),
+    tripleWhale: tw,
   };
   return c.json(body);
 });
@@ -166,9 +170,13 @@ app.get("/rankings", async (c) => {
     return vb - va || b.totals.spendCents - a.totals.spendCents;
   });
 
+  const sumTw = (list: typeof items): TwTotals | null =>
+    list.some((p) => p.tw) ? list.reduce((acc, p) => addTw(acc, p.tw ?? ZERO_TW), ZERO_TW) : null;
   const body: RankingsResponse = {
     ...range,
     totals: items.reduce((acc, p) => addTotals(acc, p.totals), ZERO_TOTALS),
+    tw: sumTw(items),
+    twCoverage: await twCoverage(c.env.DB, range.from, range.to),
     count: items.length,
     items: items.slice(0, limit),
   };
@@ -284,10 +292,11 @@ app.get("/pods", async (c) => {
       hitRate: hitRate(statuses),
       editors: [...editors.values()].sort((a, b) => b.totals.spendCents - a.totals.spendCents),
       spark: sparkDays.map((d) => spendOn.get(`${g.podId ?? ""}|${d}`) ?? 0),
+      tw: mine.some((p) => p.tw) ? mine.reduce((acc, p) => addTw(acc, p.tw ?? ZERO_TW), ZERO_TW) : null,
     };
   });
 
-  const body: PodsResponse = { ...range, rows };
+  const body: PodsResponse = { ...range, rows, twCoverage: await twCoverage(db, range.from, range.to) };
   return c.json(body);
 });
 
