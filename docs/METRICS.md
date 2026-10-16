@@ -41,9 +41,18 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - Minimum test spend (default: $100)
 - Should the test window only count the testing campaign (ABO)? (default: all copies)
 
+## Fatigue (`shared/fatigue.ts`)
+- Compares a post's **last 3 synced days** with its **first 7 days of spend**. Only posts spending in the last 3 days, at least
+  10 days old, with ≥ $150 spend in the last 3 days.
+- Signals: **frequency** (impressions ÷ reach) up ≥ 25% · **link CTR** down ≥ 25% · **CPA** up ≥ 30% *and* above the amber limit
+  (no purchases on that spend counts as a CPA rise).
+- 2+ signals = **Fatigued** (✕), 1 = **Watch** (!). Shown on ranking cards, in the ad detail and in the Status filter.
+- Reach is stored per ad per day (from Oct 2026 syncs on). Window reach sums daily reach, so frequency is approximate
+  but comparable between the two windows; without reach for a window, the frequency signal is skipped, not zero.
+
 ## Dashboard alerts (`worker/alerts.ts`)
-- **Fatigue** (✕): a post with ≥ $150 spend in the last 3 synced days whose CPA there is above the amber limit and ≥ 30% above
-  its CPA in the 7 days before (which needs ≥ 3 purchases). Also flagged: no purchases in 3 days on ≥ 2× the amber limit in spend.
+- **Fatigue** (✕): Fatigued posts, and posts whose only signal is CPA (a CPA jump is worth a look on its own); biggest recent
+  spend first, at most 3.
 - **Hit** (✓): a concept whose judging window closed in the last 7 days as a hit.
 - **Needs a pod** (!): posts with spend in the last 7 days that no pod or the agency is credited with.
 - Computed on read from stored data; no D1 writes.
@@ -59,3 +68,11 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - Model: Clicks & deterministic views (`Clicks & Views` in Triple Whale's data), lifetime window.
 - Never summed with Meta's purchases or revenue. "—" when no day in the period is synced.
 - Hit rate and concepts stay on Meta's numbers.
+
+## Trends (`/api/trends`)
+- Spend (Meta), CPA and ROAS by day or by Monday-start week, for the account, one pod or unassigned ads. Defaults to weekly
+  for ranges over ~2 months. Meta solid, Triple Whale dashed (only in buckets with a synced Triple Whale day).
+
+## CSV export
+- Rankings (current filters), Concepts and the Pods table. Money in plain dollars, every value labelled with its source;
+  missing values are empty cells, never 0.

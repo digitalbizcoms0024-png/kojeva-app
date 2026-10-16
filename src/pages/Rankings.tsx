@@ -5,8 +5,9 @@ import { ANGLES, FORMATS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { DailyCharts } from "../components/DailyCharts.tsx";
-import { CpaValue, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb } from "../components/ui.tsx";
-import { dollars, int, money, pct, shortDate, TW_MODEL_LABEL, twCoverageNote } from "../format.ts";
+import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb } from "../components/ui.tsx";
+import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate, TW_MODEL_LABEL, twCoverageNote } from "../format.ts";
+import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
 
 type Tab = "ads" | "pods" | "editors";
@@ -113,25 +114,34 @@ export function RankingsPage({
                     { value: "all", label: "All" },
                     { value: "active", label: "Active" },
                     { value: "paused", label: "Paused" },
+                    { value: "fatigued", label: "Fatigued or watch" },
                   ]}
                 />
                 <Select stacked label="Format" value={format} onChange={setFormat} options={vocab(FORMATS, "All formats")} />
                 <Select stacked label="Angle" value={angle} onChange={setAngle} options={vocab(ANGLES, "All angles")} />
               </div>
               {rankings.data && (
-                <p className="num text-xs text-ink-3">
-                  {int(rankings.data.count)} posts · {shortDate(rankings.data.from === "2000-01-01" ? null : rankings.data.from)} – {shortDate(rankings.data.to)} · spend{" "}
-                  <b className="text-ink">{money(rankings.data.totals.spendCents, { compact: true })}</b> · CPA{" "}
-                  <b className="text-ink">{dollars(cpa(rankings.data.totals))}</b> · ROAS <b className="text-ink">{roas(rankings.data.totals)?.toFixed(2) ?? "—"}</b> · targets $
-                  {meta.targets.targetCpa} / {meta.targets.targetRoas}
-                  {rankings.data.tw && (
-                    <>
-                      {" "}
-                      · ROAS · TW <b className="text-ink">{twRoas(rankings.data.tw, rankings.data.totals.spendCents)?.toFixed(2) ?? "—"}</b>
-                    </>
-                  )}
-                  {twCoverageNote(rankings.data.twCoverage) && ` · ${twCoverageNote(rankings.data.twCoverage)}`}
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="num text-xs text-ink-3">
+                    {int(rankings.data.count)} posts · {shortDate(rankings.data.from === "2000-01-01" ? null : rankings.data.from)} –{" "}
+                    {shortDate(rankings.data.to)} · spend{" "}
+                    <b className="text-ink">
+                      {money(rankings.data.totals.spendCents, {
+                        compact: true,
+                      })}
+                    </b>{" "}
+                    · CPA <b className="text-ink">{dollars(cpa(rankings.data.totals))}</b> · ROAS{" "}
+                    <b className="text-ink">{roas(rankings.data.totals)?.toFixed(2) ?? "—"}</b> · targets ${meta.targets.targetCpa} / {meta.targets.targetRoas}
+                    {rankings.data.tw && (
+                      <>
+                        {" "}
+                        · ROAS · TW <b className="text-ink">{twRoas(rankings.data.tw, rankings.data.totals.spendCents)?.toFixed(2) ?? "—"}</b>
+                      </>
+                    )}
+                    {twCoverageNote(rankings.data.twCoverage) && ` · ${twCoverageNote(rankings.data.twCoverage)}`}
+                  </p>
+                  <CsvButton disabled={items.length === 0} onClick={() => exportRankings(items, rankings.data!.from, rankings.data!.to)} />
+                </div>
               )}
             </div>
 
@@ -141,7 +151,14 @@ export function RankingsPage({
                 {rankings.data && items.length === 0 && <Empty>No ads with spend match these filters.</Empty>}
                 <ol className="flex flex-col gap-2">
                   {items.map((p, i) => (
-                    <RankCard key={p.postId} post={p} rank={i + 1} targets={meta.targets} active={p.postId === activeId} onSelect={() => setSelected(p.postId)} />
+                    <RankCard
+                      key={p.postId}
+                      post={p}
+                      rank={i + 1}
+                      targets={meta.targets}
+                      active={p.postId === activeId}
+                      onSelect={() => setSelected(p.postId)}
+                    />
                   ))}
                 </ol>
               </div>
@@ -163,15 +180,88 @@ export function RankingsPage({
   );
 }
 
+const signed = (v: number) => `${v > 0 ? "+" : "−"}${Math.round(Math.abs(v) * 100)}%`;
+
+const SIGNAL_LABEL = {
+  frequency: "frequency up",
+  ctr: "CTR down",
+  cpa: "CPA up",
+} as const;
+
+function FatigueTag({ f }: { f: PostSummary["fatigue"] }) {
+  if (!f) return null;
+  const title = `Last 3 days vs first week: ${f.signals.map((s) => SIGNAL_LABEL[s]).join(", ")}`;
+  return f.status === "fatigued" ? (
+    <span className="bg-bad-soft px-1.5 py-px text-[11px] font-semibold text-bad" title={title}>
+      ✕ Fatigued
+    </span>
+  ) : (
+    <span className="bg-warn-soft px-1.5 py-px text-[11px] font-semibold text-warn" title={title}>
+      ! Watch
+    </span>
+  );
+}
+
+function exportRankings(items: PostSummary[], from: string, to: string) {
+  downloadCsv(
+    `kojeva-rankings-${from === "2000-01-01" ? "all" : from}-to-${to}.csv`,
+    [
+      "Rank",
+      "Post ID",
+      "Ad name",
+      "Pod",
+      "Editor",
+      "Ad set",
+      "Launched",
+      "Days live",
+      "Copies",
+      "Status",
+      "Spend (Meta, $)",
+      "Purchases (Meta)",
+      "Revenue (Meta, $)",
+      "CPA (Meta, $)",
+      "ROAS (Meta)",
+      "Link CTR (%)",
+      "Purchases (Triple Whale)",
+      "Revenue (Triple Whale, $)",
+      "CPA (Triple Whale, $)",
+      "ROAS (Triple Whale)",
+      "Concept result",
+      "Fatigue",
+      "Angle",
+      "Format",
+    ],
+    items.map((p, i) => [
+      i + 1,
+      p.postId,
+      p.name,
+      p.assignment.podId ? (podById(p.assignment.podId)?.name ?? p.assignment.podId) : "Unassigned",
+      p.assignment.editorName,
+      p.adsetName,
+      p.launched,
+      p.daysLive,
+      p.copies,
+      p.active ? "Active" : "Paused",
+      plainDollars(p.totals.spendCents),
+      p.totals.purchases,
+      plainDollars(p.totals.revenueCents),
+      plain(cpa(p.totals)),
+      plain(roas(p.totals)),
+      plain(ctr(p.totals) == null ? null : ctr(p.totals)! * 100),
+      plain(p.tw?.purchases, 1),
+      plainDollars(p.tw?.revenueCents),
+      plain(twCpa(p.tw, p.totals.spendCents)),
+      plain(twRoas(p.tw, p.totals.spendCents)),
+      p.hit,
+      p.fatigue?.status,
+      p.assignment.angle,
+      p.assignment.format,
+    ]),
+  );
+}
+
 function RankBadge({ rank }: { rank: number }) {
-  const cls =
-    rank === 1
-      ? "bg-accent text-on-accent"
-      : rank === 2
-        ? "bg-ink text-page"
-        : rank === 3
-          ? "border-2 border-ink text-ink"
-          : "text-ink-2";
+  const cls = rank === 1 ? "bg-accent text-on-accent" : rank === 2 ? "bg-ink text-page" : rank === 3 ? "border-2 border-ink text-ink" : "text-ink-2";
   return <span className={`num grid size-8 shrink-0 place-items-center text-sm font-extrabold ${cls}`}>{rank}</span>;
 }
 
@@ -205,6 +295,7 @@ function RankCard({ post, rank, targets, active, onSelect }: { post: PostSummary
             {post.daysLive != null && <span>· {post.daysLive} days live</span>}
             {post.copies > 1 && <span>· {post.copies} copies</span>}
             <Tag tone={post.active ? "neutral" : "outline"}>{post.active ? "Active" : "Paused"}</Tag>
+            <FatigueTag f={post.fatigue} />
             <HitBadge status={post.hit} />
           </div>
           <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-2 border-t border-divider pt-2 2xl:grid-cols-6">
@@ -265,11 +356,32 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
       <div className="flex items-center justify-between gap-2 border-b-2 border-divider pb-2">
         <span className="kicker">Ad details</span>
         <span className="flex gap-1.5">
-          {rank > 0 && <Tag tone="ink">#{rank} by {sortLabel}</Tag>}
+          {rank > 0 && (
+            <Tag tone="ink">
+              #{rank} by {sortLabel}
+            </Tag>
+          )}
           <Tag>{data.active ? "Active" : "Paused"}</Tag>
+          <FatigueTag f={data.fatigue} />
           <HitBadge status={data.hit} />
         </span>
       </div>
+      {data.fatigue && (
+        <p className={`px-3 py-2 text-sm ${data.fatigue.status === "fatigued" ? "bg-bad-soft text-ink" : "bg-warn-soft text-ink"}`}>
+          <b>{data.fatigue.status === "fatigued" ? "✕ Fatiguing" : "! Worth watching"}</b> · last 3 days vs its first week:{" "}
+          {[
+            data.fatigue.frequencyChange != null && `frequency ${signed(data.fatigue.frequencyChange)}`,
+            data.fatigue.ctrChange != null && `CTR ${signed(data.fatigue.ctrChange)}`,
+            data.fatigue.signals.includes("cpa")
+              ? data.fatigue.cpaChange == null
+                ? "no purchases"
+                : `CPA ${signed(data.fatigue.cpaChange)}`
+              : data.fatigue.cpaChange != null && `CPA ${signed(data.fatigue.cpaChange)}`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      )}
 
       <div className="flex flex-col gap-4 sm:flex-row">
         <Thumb
@@ -303,7 +415,10 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
             ))}
           </div>
           <p className="border border-divider bg-page px-3 py-2 text-sm text-ink-2">
-            Runs as <b className="text-ink">{data.copies} {data.copies === 1 ? "ad" : "ads"}</b>
+            Runs as{" "}
+            <b className="text-ink">
+              {data.copies} {data.copies === 1 ? "ad" : "ads"}
+            </b>
             {campaigns.length > 0 && ` across ${campaigns.join(", ")}`}
           </p>
         </div>
@@ -324,7 +439,13 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
           </Cell>
           <Cell label="Link CTR">{pct(ctr(data.totals))}</Cell>
           <Cell label="CPM">{dollars(cpm(data.totals))}</Cell>
-          <Cell label="Purchases · TW">{data.tw ? data.tw.purchases.toLocaleString("en-US", { maximumFractionDigits: 1 }) : "—"}</Cell>
+          <Cell label="Purchases · TW">
+            {data.tw
+              ? data.tw.purchases.toLocaleString("en-US", {
+                  maximumFractionDigits: 1,
+                })
+              : "—"}
+          </Cell>
           <Cell label="CPA · TW">
             <CpaValue value={twCpa(data.tw, data.totals.spendCents)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
           </Cell>
@@ -332,7 +453,9 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
             <RoasValue value={twRoas(data.tw, data.totals.spendCents)} target={targets.targetRoas} />
           </Cell>
         </div>
-        <div className="mt-1 text-xs text-ink-3">TW = Triple Whale pixel, {TW_MODEL_LABEL}, on Meta's spend. Shown beside Meta's numbers, never added to them.</div>
+        <div className="mt-1 text-xs text-ink-3">
+          TW = Triple Whale pixel, {TW_MODEL_LABEL}, on Meta's spend. Shown beside Meta's numbers, never added to them.
+        </div>
         <div className="num mt-2 text-xs text-ink-3">
           All time: {money(data.allTime.spendCents)} spend · {int(data.allTime.purchases)} purchases · ROAS {roas(data.allTime)?.toFixed(2) ?? "—"}
         </div>

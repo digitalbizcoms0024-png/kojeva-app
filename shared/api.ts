@@ -1,4 +1,5 @@
 // Response shapes shared by the Worker API and the React app.
+import type { Fatigue } from "./fatigue.ts";
 import type { HitStatus, Targets, Totals, TwTotals } from "./metrics.ts";
 
 export type RangeKey = "week" | "month" | "all" | "custom";
@@ -92,6 +93,8 @@ export interface PostSummary {
   atria: Record<string, string[]> | null;
   /** Triple Whale results over the same days; null when none of those days is synced from Triple Whale. */
   tw: TwTotals | null;
+  /** Last 3 days vs the first week; null when not spending, too new, or nothing flagged. */
+  fatigue: Fatigue | null;
 }
 
 /** How many of the period's days (with Meta data) Triple Whale has been synced for. */
@@ -230,4 +233,22 @@ export interface PodSuggestion {
 export interface SuggestionsResponse {
   /** Keyed by post ID; posts without a suggestion are left out. */
   suggestions: Record<string, PodSuggestion>;
+}
+
+export type TrendGrain = "day" | "week";
+
+export interface TrendPoint {
+  /** First day of the bucket (weeks start on Monday). */
+  start: string;
+  totals: Totals;
+  /** Null when no day in the bucket is synced from Triple Whale. */
+  tw: TwTotals | null;
+}
+
+export interface TrendsResponse {
+  from: string;
+  to: string;
+  grain: TrendGrain;
+  pod: string | null;
+  points: TrendPoint[];
 }

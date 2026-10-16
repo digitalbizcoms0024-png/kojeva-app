@@ -14,6 +14,8 @@ import type {
   RankingsResponse,
   SortKey,
   SuggestionsResponse,
+  TrendGrain,
+  TrendsResponse,
 } from "../shared/api.ts";
 import { ZERO_TOTALS, ZERO_TW, addTotals, addTw, cpa, ctr, hitRate, roas, type Totals, type TwTotals } from "../shared/metrics.ts";
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
@@ -25,7 +27,7 @@ import { atria } from "./atria.ts";
 import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
-import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL, twCoverage } from "./queries.ts";
+import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL, toTw, twCoverage } from "./queries.ts";
 import { tripleWhale, twStatus } from "./triplewhale.ts";
 
 const app = new Hono<AppEnv>().basePath("/api");
@@ -154,6 +156,7 @@ app.get("/rankings", async (c) => {
   if (angle) items = items.filter((p) => p.assignment.angle === angle);
   if (status === "active") items = items.filter((p) => p.active);
   if (status === "paused") items = items.filter((p) => !p.active);
+  if (status === "fatigued") items = items.filter((p) => p.fatigue);
   if (search)
     items = items.filter((p) =>
       [p.name, p.assignment.editorName, p.assignment.angle, p.assignment.format]
@@ -336,6 +339,54 @@ app.get("/insights", async (c) => {
   });
   rows.sort((a, b) => (a.value === null ? 1 : b.value === null ? -1 : b.concepts - a.concepts || b.window.spendCents - a.window.spendCents));
   const body: InsightsResponse = { ...range, dimension, rows };
+  return c.json(body);
+});
+
+/**
+ * Spend, purchases and revenue over time, by day or week (Monday start), for the account or one
+ * pod (?pod=<id> or ?pod=unassigned). Triple Whale comes back separately per bucket.
+ */
+app.get("/trends", async (c) => {
+  const db = c.env.DB;
+  const range = await resolveRange(db, (k) => c.req.query(k));
+  if (!range) return c.json({ error: "Invalid custom date range" }, 400);
+  const span = Math.round((Date.parse(range.to) - Date.parse(range.from === "2000-01-01" ? range.to : range.from)) / 86_400_000);
+  const grain: TrendGrain = c.req.query("grain") === "day" ? "day" : c.req.query("grain") === "week" || range.from === "2000-01-01" || span > 62 ? "week" : "day";
+  const pod = c.req.query("pod") || null;
+  const bucket = (col: string) => (grain === "week" ? `date(${col}, 'weekday 0', '-6 days')` : col);
+  const podSql = pod === "unassigned" ? "AND s.pod_id IS NULL" : pod ? "AND s.pod_id = ?3" : "";
+  const binds = pod && pod !== "unassigned" ? [range.from, range.to, pod] : [range.from, range.to];
+  const [meta, tw, twDays] = await Promise.all([
+    db
+      .prepare(
+        `SELECT ${bucket("d.date")} AS b, ${TOTALS_SQL}
+         FROM ad_daily d JOIN ads a ON a.id = d.ad_id LEFT JOIN assignments s ON s.post_id = a.post_id
+         WHERE d.date BETWEEN ?1 AND ?2 ${podSql} GROUP BY b ORDER BY b`,
+      )
+      .bind(...binds)
+      .all<Record<string, unknown>>(),
+    db
+      .prepare(
+        `SELECT ${bucket("t.date")} AS b, SUM(t.orders_milli) AS orders_milli, SUM(t.revenue_cents) AS revenue_cents
+         FROM tw_daily t JOIN ads a ON a.id = t.ad_id LEFT JOIN assignments s ON s.post_id = a.post_id
+         WHERE t.date BETWEEN ?1 AND ?2 ${podSql} GROUP BY b`,
+      )
+      .bind(...binds)
+      .all<Record<string, unknown>>(),
+    db.prepare(`SELECT DISTINCT ${bucket("date")} AS b FROM tw_days WHERE date BETWEEN ?1 AND ?2`).bind(range.from, range.to).all<{ b: string }>(),
+  ]);
+  const twBy = new Map(tw.results.map((r) => [String(r.b), toTw(r)]));
+  const synced = new Set(twDays.results.map((r) => r.b));
+  const body: TrendsResponse = {
+    ...range,
+    grain,
+    pod,
+    points: meta.results.map((r) => ({
+      start: String(r.b),
+      totals: toTotals(r),
+      tw: synced.has(String(r.b)) ? (twBy.get(String(r.b)) ?? toTw(undefined)) : null,
+    })),
+  };
   return c.json(body);
 });
 

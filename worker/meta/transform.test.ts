@@ -18,6 +18,10 @@ describe("pickAction", () => {
 });
 
 describe("insightToDaily", () => {
+  it("keeps reach unknown (null) when Meta leaves it out", () => {
+    expect(insightToDaily({ ad_id: "1", date_start: "2026-10-08", impressions: "10" }).reach).toBeNull();
+  });
+
   it("converts Meta's strings to cents and counts", () => {
     expect(
       insightToDaily({
@@ -25,6 +29,7 @@ describe("insightToDaily", () => {
         date_start: "2026-10-08",
         spend: "68394.02",
         impressions: "1897316",
+        reach: "1320455",
         inline_link_clicks: "41000",
         actions: [{ action_type: "omni_purchase", value: "4885" }],
         action_values: [{ action_type: "omni_purchase", value: "117240.55" }],
@@ -34,6 +39,7 @@ describe("insightToDaily", () => {
       date: "2026-10-08",
       spendCents: 6839402,
       impressions: 1897316,
+      reach: 1320455,
       linkClicks: 41000,
       purchases: 4885,
       revenueCents: 11724055,

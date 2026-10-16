@@ -1,5 +1,6 @@
 import type { Assignment, ConceptResult, PostSummary, TwCoverage } from "../shared/api.ts";
 import { classify } from "../shared/classify.ts";
+import { loadFatigue } from "./fatigue.ts";
 import { DEFAULT_TARGETS, hitStatus, judgingWindowEnd, type HitStatus, type Targets, type Totals, type TwTotals } from "../shared/metrics.ts";
 
 type Row = Record<string, unknown>;
@@ -225,7 +226,7 @@ export async function loadPosts(
   const [targets, latest, concepts] = await Promise.all([getTargets(db), getLatestDate(db), loadConcepts(db)]);
   const conceptStatus = new Map(concepts.map((c) => [c.conceptId, c.status]));
   const where = opts.postId ? "WHERE p.id = ?1" : "";
-  const [base, ranged, windows, twRows, coverage] = await Promise.all([
+  const [base, ranged, windows, twRows, coverage, fatigueByPost] = await Promise.all([
     db.prepare(`${POST_BASE_SQL} ${where}`).bind(...(opts.postId ? [opts.postId] : [])).all<Row>(),
     db
       .prepare(
@@ -247,6 +248,7 @@ export async function loadPosts(
       .bind(...(opts.postId ? [from, to, opts.postId] : [from, to]))
       .all<Row>(),
     twCoverage(db, from, to),
+    loadFatigue(db, targets, latest),
   ]);
   const totalsByPost = new Map(ranged.results.map((r) => [String(r.post_id), toTotals(r)]));
   const twByPost = new Map(twRows.results.map((r) => [String(r.post_id), toTw(r)]));
@@ -275,6 +277,7 @@ export async function loadPosts(
       hit,
       atria: r.atria_tags == null ? null : (JSON.parse(String(r.atria_tags)) as Record<string, string[]>),
       tw: twKnown ? (twByPost.get(postId) ?? toTw(undefined)) : null,
+      fatigue: fatigueByPost.get(postId) ?? null,
     };
   });
 }

@@ -56,3 +56,28 @@ export function twCoverageNote(c: { days: number; covered: number } | null | und
   if (c.covered === 0) return "Triple Whale not synced for these days";
   return c.covered < c.days ? `Triple Whale: ${c.covered} of ${c.days} days synced` : null;
 }
+
+/** Plain dollars for exports: 1234.5 → "1234.50" (no symbol or separators). */
+export function plainDollars(cents: number | null | undefined): string {
+  return cents == null ? "" : (cents / 100).toFixed(2);
+}
+
+/** Plain number for exports; missing stays empty, never 0. */
+export function plain(v: number | null | undefined, digits = 2): string {
+  return v == null || !Number.isFinite(v) ? "" : String(Number(v.toFixed(digits)));
+}
+
+/** Builds a CSV (quoted where needed) and downloads it. */
+export function downloadCsv(filename: string, header: string[], rows: (string | number | null | undefined)[][]) {
+  const cell = (v: string | number | null | undefined) => {
+    const t = v == null ? "" : String(v);
+    return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const text = [header, ...rows].map((r) => r.map(cell).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

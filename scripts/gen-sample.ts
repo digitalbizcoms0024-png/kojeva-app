@@ -126,7 +126,9 @@ for (let i = 0; i < 64; i++) {
       const revenue = purchases * between(20, 29); // ~$24 AOV, matching $14 CPA ↔ 1.7 ROAS
       const impressions = Math.round((spend / between(14, 24)) * 1000);
       const clicks = Math.round(impressions * between(0.012, 0.055));
-      rows.push(`(${q(adId)}, ${q(isoDay(day))}, ${Math.round(spend * 100)}, ${impressions}, ${clicks}, ${purchases}, ${Math.round(revenue * 100)})`);
+      // Frequency creeps up as an ad ages (derived without rand() so the rest of the sample is unchanged).
+      const reach = Math.round(impressions / (1.05 + age * 0.012));
+      rows.push(`(${q(adId)}, ${q(isoDay(day))}, ${Math.round(spend * 100)}, ${impressions}, ${reach}, ${clicks}, ${purchases}, ${Math.round(revenue * 100)})`);
       // Triple Whale's pixel usually credits somewhat fewer orders than Meta. Derived without rand()
       // so the rest of the sample stays the same.
       const twShare = 0.7 + ((day * 7 + c * 3) % 9) / 30;
@@ -134,7 +136,7 @@ for (let i = 0; i < 64; i++) {
     }
     if (twRows.length) out.push(`INSERT INTO tw_daily (ad_id, date, orders_milli, revenue_cents) VALUES\n${twRows.join(",\n")};`);
     if (rows.length)
-      out.push(`INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, link_clicks, purchases, revenue_cents) VALUES\n${rows.join(",\n")};`);
+      out.push(`INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, reach, link_clicks, purchases, revenue_cents) VALUES\n${rows.join(",\n")};`);
   }
 
   // Same rules the live sync will use; about a third of the rest were tagged by hand.

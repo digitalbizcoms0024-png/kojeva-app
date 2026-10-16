@@ -34,6 +34,7 @@ export interface GraphInsight {
   date_start: string;
   spend?: string;
   impressions?: string;
+  reach?: string;
   inline_link_clicks?: string;
   actions?: GraphAction[];
   action_values?: GraphAction[];
@@ -60,6 +61,8 @@ export interface DailyRow {
   date: string;
   spendCents: number;
   impressions: number;
+  /** People reached that day; null when Meta didn't report it. */
+  reach: number | null;
   linkClicks: number;
   purchases: number;
   revenueCents: number;
@@ -71,6 +74,7 @@ export function insightToDaily(r: GraphInsight): DailyRow {
     date: r.date_start,
     spendCents: cents(r.spend),
     impressions: Number(r.impressions) || 0,
+    reach: r.reach == null || r.reach === "" ? null : Number(r.reach) || 0,
     linkClicks: Number(r.inline_link_clicks) || 0,
     purchases: Math.round(pickAction(r.actions)),
     revenueCents: Math.round(pickAction(r.action_values) * 100),

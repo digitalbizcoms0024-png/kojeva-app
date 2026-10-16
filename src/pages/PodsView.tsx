@@ -3,11 +3,15 @@ import type { ConceptResult, ConceptsResponse, MetaResponse, PodRow, PodsRespons
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { addTotals, cpa, roas, twRoas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
-import { ANGLES, FORMATS, GROUPS } from "../../shared/taxonomy.ts";
-import { CpaValue, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select } from "../components/ui.tsx";
-import { int, money, pct, shortDate } from "../format.ts";
+import { ANGLES, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
+import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select } from "../components/ui.tsx";
+import { downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
 
-type Props = { data: PodsResponse | null; error: Error | null; targets: Targets };
+type Props = {
+  data: PodsResponse | null;
+  error: Error | null;
+  targets: Targets;
+};
 
 /** Harris, Dhia, Shameer, Ali, then the agency: the order pods are always shown in. */
 export const podOrder = (id: string | null) => {
@@ -67,7 +71,12 @@ function PodColumn({
     ["Best format", best(mine, "format") ?? "—"],
   ];
   return (
-    <div className={`flex min-w-0 flex-col p-4 ${agency ? "bg-page" : "bg-surface"}`} style={{ borderTop: `4px ${agency ? "dashed" : "solid"} var(--pod-${r.podId})` }}>
+    <div
+      className={`flex min-w-0 flex-col p-4 ${agency ? "bg-page" : "bg-surface"}`}
+      style={{
+        borderTop: `4px ${agency ? "dashed" : "solid"} var(--pod-${r.podId})`,
+      }}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 text-xl font-extrabold text-ink">
           <span className="size-2.5" style={{ background: `var(--pod-${r.podId})` }} aria-hidden />
@@ -75,7 +84,9 @@ function PodColumn({
         </div>
         {top && <span className="bg-accent-soft px-1.5 py-px text-[11px] font-semibold text-accent-ink">Top hit rate</span>}
       </div>
-      <div className="mt-0.5 min-h-4 text-xs text-ink-3">{agency ? "Before the in-house pods · not counted in them" : editors.length ? `Strategist · ${editors.join(", ")}` : "Strategist"}</div>
+      <div className="mt-0.5 min-h-4 text-xs text-ink-3">
+        {agency ? "Before the in-house pods · not counted in them" : editors.length ? `Strategist · ${editors.join(", ")}` : "Strategist"}
+      </div>
       <div className="mt-4 border-t border-divider pt-3">
         <div className="kicker">Hit rate</div>
         <div className="num text-[52px] leading-none font-extrabold tracking-[-0.03em] text-ink">{pct(r.hitRate, 0)}</div>
@@ -114,7 +125,12 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
 
   return (
     <div>
-      <PageHeader title="Pods" subtitle={`${GROUPS.filter((g) => g.id !== "agency").map((p) => p.name).join(" vs ")} · hit rate per concept`}>
+      <PageHeader
+        title="Pods"
+        subtitle={`${GROUPS.filter((g) => g.id !== "agency")
+          .map((p) => p.name)
+          .join(" vs ")} · hit rate per concept`}
+      >
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
       <div className="flex flex-col gap-6 px-4 py-6 md:px-8">
@@ -140,8 +156,8 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
         )}
         {unassigned && unassigned.totals.spendCents > 0 && (
           <p className="text-sm text-ink-2">
-            <b className="text-ink">{money(unassigned.totals.spendCents, { compact: true })}</b> of spend in this period is on ads the hub can't credit to a pod or
-            the agency ({int(unassigned.concepts)} concepts).{" "}
+            <b className="text-ink">{money(unassigned.totals.spendCents, { compact: true })}</b> of spend in this period is on ads the hub can't credit to a pod
+            or the agency ({int(unassigned.concepts)} concepts).{" "}
             <a href="#/tagging" className="link">
               Tag them →
             </a>
@@ -165,7 +181,13 @@ export function ConceptsTable({
   range: string;
   targets: Targets;
   pods: { podId: string | null; name: string }[];
-  filter?: { angle?: string; format?: string; atria_theme?: string; atria_desire?: string; pod?: string };
+  filter?: {
+    angle?: string;
+    format?: string;
+    atria_theme?: string;
+    atria_desire?: string;
+    pod?: string;
+  };
   title?: string;
 }) {
   const [pod, setPod] = useState(filter.pod ?? "");
@@ -177,12 +199,57 @@ export function ConceptsTable({
       <SectionTitle
         title={`${title}${data ? ` · ${data.rows.length}` : ""}`}
         right={
-          <Select
-            label="Pod"
-            value={pod}
-            onChange={setPod}
-            options={[{ value: "", label: "All" }, ...pods.filter((p) => p.podId).map((p) => ({ value: p.podId!, label: p.name }))]}
-          />
+          <span className="flex flex-wrap items-center gap-3">
+            <Select
+              label="Pod"
+              value={pod}
+              onChange={setPod}
+              options={[{ value: "", label: "All" }, ...pods.filter((p) => p.podId).map((p) => ({ value: p.podId!, label: p.name }))]}
+            />
+            <CsvButton
+              disabled={!data?.rows.length}
+              onClick={() =>
+                data &&
+                downloadCsv(
+                  `kojeva-concepts-${data.from === "2000-01-01" ? "all" : data.from}-to-${data.to}.csv`,
+                  [
+                    "Pod",
+                    "Concept",
+                    "Ad set",
+                    "Ads",
+                    "First spend",
+                    "Qualified on",
+                    "Judged until",
+                    "Test spend (Meta, $)",
+                    "Test purchases (Meta)",
+                    "Test CPA (Meta, $)",
+                    "Test ROAS (Meta)",
+                    "Result",
+                    "Angle",
+                    "Format",
+                    "Atria themes",
+                  ],
+                  data.rows.map((k) => [
+                    podById(k.podId)?.name ?? k.podId,
+                    k.label,
+                    k.adsetName,
+                    k.ads,
+                    k.firstSpend,
+                    k.qualifiedOn,
+                    k.windowEnd,
+                    plainDollars(k.window.spendCents),
+                    k.window.purchases,
+                    plain(cpa(k.window)),
+                    plain(roas(k.window)),
+                    k.status,
+                    k.angle ? (ANGLES[k.angle] ?? k.angle) : "",
+                    k.format ? (FORMATS[k.format] ?? k.format) : "",
+                    k.atriaThemes.join("; "),
+                  ]),
+                )
+              }
+            />
+          </span>
         }
       />
       {error && <Empty>Couldn't load concepts: {error.message}</Empty>}
@@ -253,46 +320,88 @@ export function PodsTable({ data, error, targets }: Props) {
   if (!data) return <Empty>Loading…</Empty>;
   const rows = data.rows.filter((r) => r.totals.spendCents > 0).sort((a, b) => b.totals.spendCents - a.totals.spendCents);
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="kicker text-left">
-          <tr className="border-b-2 border-divider">
-            <th className="py-2 pr-3 font-normal">Group</th>
-            <th className="py-2 pr-3 text-right font-normal">Spend</th>
-            <th className="py-2 pr-3 text-right font-normal">Purchases</th>
-            <th className="py-2 pr-3 text-right font-normal">CPA · Meta</th>
-            <th className="py-2 pr-3 text-right font-normal">ROAS · Meta</th>
-            <th className="py-2 pr-3 text-right font-normal">ROAS · TW</th>
-            <th className="py-2 pr-3 text-right font-normal">Hit rate</th>
-            <th className="py-2 text-right font-normal">Concepts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.podId ?? "none"} className="border-b border-divider">
-              <td className="py-2.5 pr-3">
-                <PodChip podId={r.podId} />
-                {r.kind === "agency" && <span className="ml-2 text-xs text-ink-3">not counted in pods</span>}
-              </td>
-              <td className="num py-2.5 pr-3 text-right font-bold text-ink">{money(r.totals.spendCents, { compact: true })}</td>
-              <td className="num py-2.5 pr-3 text-right text-ink">{int(r.totals.purchases)}</td>
-              <td className="py-2.5 pr-3 text-right">
-                <CpaValue value={cpa(r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
-              </td>
-              <td className="py-2.5 pr-3 text-right">
-                <RoasValue value={roas(r.totals)} target={targets.targetRoas} />
-              </td>
-              <td className="py-2.5 pr-3 text-right">
-                <RoasValue value={twRoas(r.tw, r.totals.spendCents)} target={targets.targetRoas} />
-              </td>
-              <td className="num py-2.5 pr-3 text-right text-ink">
-                {pct(r.hitRate, 0)} <span className="text-xs text-ink-3">{r.hits}/{r.hits + r.misses}</span>
-              </td>
-              <td className="num py-2.5 text-right text-ink">{int(r.concepts)}</td>
+    <div className="flex flex-col gap-3">
+      <div className="flex justify-end">
+        <CsvButton
+          onClick={() =>
+            downloadCsv(
+              `kojeva-pods-${data.from === "2000-01-01" ? "all" : data.from}-to-${data.to}.csv`,
+              [
+                "Group",
+                "Spend (Meta, $)",
+                "Purchases (Meta)",
+                "CPA (Meta, $)",
+                "ROAS (Meta)",
+                "Purchases (Triple Whale)",
+                "ROAS (Triple Whale)",
+                "Hit rate (%)",
+                "Hits",
+                "Decided",
+                "Testing",
+                "Concepts",
+              ],
+              rows.map((r) => [
+                r.name,
+                plainDollars(r.totals.spendCents),
+                r.totals.purchases,
+                plain(cpa(r.totals)),
+                plain(roas(r.totals)),
+                plain(r.tw?.purchases, 1),
+                plain(twRoas(r.tw, r.totals.spendCents)),
+                plain(r.hitRate == null ? null : r.hitRate * 100, 1),
+                r.hits,
+                r.hits + r.misses,
+                r.testing,
+                r.concepts,
+              ]),
+            )
+          }
+        />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="kicker text-left">
+            <tr className="border-b-2 border-divider">
+              <th className="py-2 pr-3 font-normal">Group</th>
+              <th className="py-2 pr-3 text-right font-normal">Spend</th>
+              <th className="py-2 pr-3 text-right font-normal">Purchases</th>
+              <th className="py-2 pr-3 text-right font-normal">CPA · Meta</th>
+              <th className="py-2 pr-3 text-right font-normal">ROAS · Meta</th>
+              <th className="py-2 pr-3 text-right font-normal">ROAS · TW</th>
+              <th className="py-2 pr-3 text-right font-normal">Hit rate</th>
+              <th className="py-2 text-right font-normal">Concepts</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.podId ?? "none"} className="border-b border-divider">
+                <td className="py-2.5 pr-3">
+                  <PodChip podId={r.podId} />
+                  {r.kind === "agency" && <span className="ml-2 text-xs text-ink-3">not counted in pods</span>}
+                </td>
+                <td className="num py-2.5 pr-3 text-right font-bold text-ink">{money(r.totals.spendCents, { compact: true })}</td>
+                <td className="num py-2.5 pr-3 text-right text-ink">{int(r.totals.purchases)}</td>
+                <td className="py-2.5 pr-3 text-right">
+                  <CpaValue value={cpa(r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
+                </td>
+                <td className="py-2.5 pr-3 text-right">
+                  <RoasValue value={roas(r.totals)} target={targets.targetRoas} />
+                </td>
+                <td className="py-2.5 pr-3 text-right">
+                  <RoasValue value={twRoas(r.tw, r.totals.spendCents)} target={targets.targetRoas} />
+                </td>
+                <td className="num py-2.5 pr-3 text-right text-ink">
+                  {pct(r.hitRate, 0)}{" "}
+                  <span className="text-xs text-ink-3">
+                    {r.hits}/{r.hits + r.misses}
+                  </span>
+                </td>
+                <td className="num py-2.5 text-right text-ink">{int(r.concepts)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

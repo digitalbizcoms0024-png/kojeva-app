@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
-import type { AlertsResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse } from "../../shared/api.ts";
+import { useState, type ReactNode } from "react";
+import type { AlertsResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
 import { cpa, roas, twCpa, twRoas, type Targets, type Totals } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { Sparkline } from "../components/Sparkline.tsx";
-import { CpaValue, Empty, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Tag, Thumb } from "../components/ui.tsx";
+import { TrendCharts } from "../components/TrendCharts.tsx";
+import { CpaValue, Empty, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb } from "../components/ui.tsx";
 import { dollars, int, money, pct, shortDate, TW_MODEL_LABEL, twCoverageNote } from "../format.ts";
 
 export function shiftDay(day: string, delta: number): string {
@@ -126,6 +127,8 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
           )}
         </section>
 
+        <TrendsSection meta={meta} range={range} />
+
         <div className="grid gap-8 xl:grid-cols-2">
           <section className="min-w-0">
             <SectionTitle
@@ -209,6 +212,41 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
         </div>
       </div>
     </div>
+  );
+}
+
+function TrendsSection({ meta, range }: { meta: MetaResponse; range: Range }) {
+  const [pod, setPod] = useState("");
+  const [grain, setGrain] = useState<TrendGrain | "auto">("auto");
+  const { data, error } = useApi<TrendsResponse>(`/api/trends?${qs({ range, pod, grain: grain === "auto" ? undefined : grain })}`);
+  return (
+    <section>
+      <SectionTitle
+        title="Trends"
+        right={
+          <span className="flex flex-wrap items-center gap-3">
+            <Select
+              label="Pod"
+              value={pod}
+              onChange={setPod}
+              options={[{ value: "", label: "Whole account" }, ...meta.pods.map((p) => ({ value: p.id, label: p.name })), { value: "unassigned", label: "Unassigned" }]}
+            />
+            <Segmented
+              label="Grouping"
+              value={data && grain === "auto" ? data.grain : grain}
+              onChange={setGrain}
+              options={[
+                { value: "day", label: "Daily" },
+                { value: "week", label: "Weekly" },
+              ]}
+            />
+          </span>
+        }
+      />
+      {error && <Empty>{error.message}</Empty>}
+      {data && <TrendCharts points={data.points} targetCpa={meta.targets.targetCpa} targetRoas={meta.targets.targetRoas} />}
+      <p className="mt-2 text-xs text-ink-3">Solid line: Meta. Dashed: Triple Whale (shown only on synced days). Weeks start on Monday.</p>
+    </section>
   );
 }
 

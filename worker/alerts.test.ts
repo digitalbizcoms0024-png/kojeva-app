@@ -19,10 +19,12 @@ async function ad(post: string, id: string, name: string, opts: { pod?: string; 
 }
 
 /** One day of results: spend and revenue in dollars. */
-async function day(adId: string, date: string, spend: number, purchases: number, revenue = 0) {
+async function day(adId: string, date: string, spend: number, purchases: number, revenue = 0, opts: { reach?: number; clicks?: number } = {}) {
   await db
-    .prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, link_clicks, purchases, revenue_cents) VALUES (?1, ?2, ?3, 1000, 10, ?4, ?5)")
-    .bind(adId, date, spend * 100, purchases, revenue * 100)
+    .prepare(
+      "INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, reach, link_clicks, purchases, revenue_cents) VALUES (?1, ?2, ?3, 1000, ?6, ?7, ?4, ?5)",
+    )
+    .bind(adId, date, spend * 100, purchases, revenue * 100, opts.reach ?? null, opts.clicks ?? 10)
     .run();
 }
 
@@ -40,7 +42,19 @@ describe("alerts", () => {
     expect(asOf).toBe("2026-10-15");
     expect(alerts).toHaveLength(1);
     expect(alerts[0]).toMatchObject({ tone: "bad", href: "#/rankings?post=p1" });
-    expect(alerts[0]!.title).toBe("Video 131 CPA up 150% in 3 days, likely fatigue");
+    expect(alerts[0]!.title).toBe("Video 131 CPA +150% vs its first week");
+    expect(alerts[0]!.detail).toBe("Last 3 days vs first week: CPA +150% · $300 spend");
+  });
+
+  it("calls an ad fatiguing when frequency rose and CTR fell too", async () => {
+    await ad("p1", "a1", "HxM-120 Proving My Husband Wrong", { pod: "harris" });
+    // First week: frequency 1.25, CTR 2%, $10 CPA. Last 3 days: frequency 2, CTR 1%, $25 CPA.
+    for (let d = 6; d <= 12; d++) await day("a1", `2026-10-${String(d).padStart(2, "0")}`, 100, 10, 0, { reach: 800, clicks: 20 });
+    for (let d = 13; d <= 15; d++) await day("a1", `2026-10-${d}`, 100, 4, 0, { reach: 500, clicks: 10 });
+    const { alerts } = await loadAlerts(db);
+    expect(alerts[0]).toMatchObject({ tone: "bad", title: "HxM-120 Proving My Husband Wrong is fatiguing" });
+    expect(alerts[0]!.detail).toContain("frequency +60%");
+    expect(alerts[0]!.detail).toContain("CTR −50%");
   });
 
   it("doesn't flag a steady ad, and counts untagged spend from the last 7 days", async () => {

@@ -56,7 +56,8 @@ attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ 
 - ✅ (app side) Triple Whale attributed orders/revenue per ad and day ("Clicks & deterministic views",
   lifetime), pushed nightly by a Claude task to `/api/ingest/tw` (`docs/TRIPLE_WHALE.md`). Shown as
   separate "· TW" values: Dashboard ROAS tile, ranking cards, ad detail, Pods page and table.
-- Fatigue signals (frequency ↑, CTR ↓, CPA drift), trend charts, CSV export.
+- ✅ Fatigue signals (frequency ↑, CTR ↓, CPA ↑ vs the ad's first week; reach stored from migration 0007), dashboard
+  trend charts (spend / CPA / ROAS, Meta and Triple Whale), CSV export on Rankings, Concepts and Pods.
 
 ## Phase 5: Operations (needs `ads_management`)
 - Approval queue: copy winners to Cost Cap Scale / Bid Cap Graveyard by post ID, pause losers.

@@ -1,44 +1,27 @@
 // Dashboard alerts and pod suggestions, computed from stored data (read-only: no D1 writes).
 import type { Alert, Editor, PodSuggestion } from "../shared/api.ts";
-import { cpa, cpaWarnLimit, roas, type Targets } from "../shared/metrics.ts";
+import type { Fatigue } from "../shared/fatigue.ts";
+import { cpa, roas } from "../shared/metrics.ts";
 import { podById } from "../shared/taxonomy.ts";
-import { getLatestDate, getTargets, loadConcepts, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
-
-type Row = Record<string, unknown>;
+import { loadFatigue } from "./fatigue.ts";
+import { getLatestDate, getTargets, loadConcepts, shiftDay } from "./queries.ts";
 
 const usd = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
 const usd2 = (v: number) => `$${v.toFixed(2)}`;
 
-/** A fatiguing ad needs this much spend in the last 3 days before it's worth flagging. */
-const FATIGUE_MIN_SPEND_CENTS = 150_00;
-/** …and its recent CPA must be at least this much above the week before. */
-const FATIGUE_RISE = 0.3;
-
 /**
  * Up to ~7 alerts, worst first:
- * - fatigue: CPA over the last 3 days is above the amber limit and ≥ 30% above the 7 days before;
+ * - fatigue (shared/fatigue.ts): two or more signals vs the ad's first week, or a CPA rise on its own;
  * - concepts whose test window closed in the last 7 days as a hit;
  * - spend in the last 7 days that no pod or the agency is credited with.
  */
 export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null; alerts: Alert[] }> {
   const [latest, targets] = await Promise.all([getLatestDate(db), getTargets(db)]);
   if (!latest) return { asOf: null, alerts: [] };
-  const recentFrom = shiftDay(latest, -2);
-  const priorFrom = shiftDay(latest, -9);
-  const priorTo = shiftDay(latest, -3);
   const weekFrom = shiftDay(latest, -6);
 
-  const [periods, untagged, concepts] = await Promise.all([
-    db
-      .prepare(
-        `SELECT a.post_id, d.date >= ?1 AS recent, ${TOTALS_SQL},
-           (SELECT x.name FROM ads x WHERE x.post_id = a.post_id ORDER BY x.created_time, x.id LIMIT 1) AS name
-         FROM ad_daily d JOIN ads a ON a.id = d.ad_id
-         WHERE d.date BETWEEN ?2 AND ?3
-         GROUP BY a.post_id, recent`,
-      )
-      .bind(recentFrom, priorFrom, latest)
-      .all<Row>(),
+  const [tired, untagged, concepts] = await Promise.all([
+    loadFatigue(db, targets, latest),
     db
       .prepare(
         `SELECT COUNT(DISTINCT a.post_id) AS posts, COALESCE(SUM(d.spend_cents), 0) AS spend_cents
@@ -52,7 +35,7 @@ export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null;
   ]);
 
   const alerts: Alert[] = [];
-  alerts.push(...fatigueAlerts(periods.results, targets, priorTo));
+  alerts.push(...(await fatigueAlerts(db, tired)));
 
   for (const k of concepts
     .filter((k) => k.status === "hit" && k.windowEnd >= weekFrom && k.windowEnd <= latest)
@@ -84,56 +67,52 @@ export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null;
   return { asOf: latest, alerts: alerts.sort((a, b) => order[a.tone] - order[b.tone]) };
 }
 
-function fatigueAlerts(rows: Row[], targets: Targets, priorTo: string): Alert[] {
-  const byPost = new Map<string, { name: string; recent?: ReturnType<typeof toTotals>; prior?: ReturnType<typeof toTotals> }>();
-  for (const r of rows) {
-    const id = String(r.post_id);
-    const e = byPost.get(id) ?? { name: String(r.name ?? id) };
-    if (Number(r.recent) === 1) e.recent = toTotals(r);
-    else e.prior = toTotals(r);
-    byPost.set(id, e);
+const pctChange = (v: number | null) => (v == null ? null : `${v > 0 ? "+" : "−"}${Math.round(Math.abs(v) * 100)}%`);
+
+/** Fatigued ads, and ads whose CPA alone jumped; biggest recent spend first, at most 3. */
+async function fatigueAlerts(db: D1Database, tired: Map<string, Fatigue>): Promise<Alert[]> {
+  const flagged = [...tired].filter(([, f]) => f.status === "fatigued" || f.signals.includes("cpa"));
+  if (flagged.length === 0) return [];
+  const names = new Map<string, { name: string; spend: number }>();
+  for (let i = 0; i < flagged.length; i += 90) {
+    const ids = flagged.slice(i, i + 90).map(([id]) => id);
+    const { results } = await db
+      .prepare(
+        `SELECT p.id, (SELECT x.name FROM ads x WHERE x.post_id = p.id ORDER BY x.created_time, x.id LIMIT 1) AS name,
+           (SELECT SUM(d.spend_cents) FROM ads x JOIN ad_daily d ON d.ad_id = x.id WHERE x.post_id = p.id
+              AND d.date >= date((SELECT MAX(date) FROM ad_daily), '-2 days')) AS spend
+         FROM posts p WHERE p.id IN (${ids.map((_, j) => `?${j + 1}`).join(", ")})`,
+      )
+      .bind(...ids)
+      .all<{ id: string; name: string | null; spend: number | null }>();
+    for (const r of results) names.set(r.id, { name: r.name ?? r.id, spend: Number(r.spend ?? 0) });
   }
-  const limit = cpaWarnLimit(targets.targetCpa, targets.cpaWarnMax);
-  const out: (Alert & { spend: number })[] = [];
-  for (const [postId, { name, recent, prior }] of byPost) {
-    if (!recent || !prior || recent.spendCents < FATIGUE_MIN_SPEND_CENTS) continue;
-    const before = cpa(prior);
-    if (before == null || prior.purchases < 3) continue;
-    const now = cpa(recent);
-    const href = `#/rankings?post=${encodeURIComponent(postId)}`;
-    if (now == null) {
-      // No purchases in 3 days despite real spend.
-      if (recent.spendCents >= limit * 2 * 100)
-        out.push({
-          id: `fatigue:${postId}`,
-          tone: "bad",
-          title: `${name}: no purchases in 3 days`,
-          detail: `${usd(recent.spendCents)} spent since ${shortDay(priorTo, 1)} · ${usd2(before)} CPA the week before`,
-          href,
-          action: "View ad",
-          spend: recent.spendCents,
-        });
-      continue;
-    }
-    if (now > limit && now >= before * (1 + FATIGUE_RISE))
-      out.push({
+  return flagged
+    .map(([postId, f]) => {
+      const { name, spend } = names.get(postId) ?? { name: postId, spend: 0 };
+      const parts = [
+        f.signals.includes("frequency") && `frequency ${pctChange(f.frequencyChange)}`,
+        f.signals.includes("ctr") && `CTR ${pctChange(f.ctrChange)}`,
+        f.signals.includes("cpa") && (f.cpaChange == null ? "no purchases" : `CPA ${pctChange(f.cpaChange)}`),
+      ].filter(Boolean);
+      const alert: Alert = {
         id: `fatigue:${postId}`,
         tone: "bad",
-        title: `${name} CPA up ${Math.round((now / before - 1) * 100)}% in 3 days, likely fatigue`,
-        detail: `${usd2(now)} CPA vs ${usd2(before)} the week before · target ${usd2(targets.targetCpa)} · ${usd(recent.spendCents)} spend`,
-        href,
+        title:
+          f.status === "fatigued"
+            ? `${name} is fatiguing`
+            : f.cpaChange == null
+              ? `${name}: no purchases in 3 days`
+              : `${name} CPA ${pctChange(f.cpaChange)} vs its first week`,
+        detail: `Last 3 days vs first week: ${parts.join(" · ")} · ${usd(spend)} spend`,
+        href: `#/rankings?post=${encodeURIComponent(postId)}`,
         action: "View ad",
-        spend: recent.spendCents,
-      });
-  }
-  return out
+      };
+      return { alert, spend };
+    })
     .sort((a, b) => b.spend - a.spend)
     .slice(0, 3)
-    .map(({ spend: _spend, ...a }) => a);
-}
-
-function shortDay(day: string, delta: number): string {
-  return new Date(`${shiftDay(day, delta)}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+    .map((x) => x.alert);
 }
 
 /** Words in a name, upper-cased, split on anything that isn't a letter. */

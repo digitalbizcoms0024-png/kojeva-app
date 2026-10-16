@@ -22,6 +22,7 @@ const ICONS = {
   play: "M7 4v16l13-8z",
   menu: "M4 6h16M4 12h16M4 18h16",
   arrow: "M5 12h14M13 6l6 6-6 6",
+  download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -293,5 +294,14 @@ export function MeterBar({ value, max, tone, target }: { value: number; max: num
         <div className="absolute -inset-y-1.5 border-l-2 border-dashed border-accent" style={{ left: `${Math.min(1, target / max) * 100}%` }} aria-hidden />
       )}
     </div>
+  );
+}
+
+export function CsvButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  return (
+    <button className="btn btn-secondary py-1.5 text-[13px]" onClick={onClick} disabled={disabled}>
+      <Icon name="download" size={14} />
+      Download CSV
+    </button>
   );
 }
