@@ -1,5 +1,6 @@
 // Generates deterministic SAMPLE data (not real Kojeva numbers) as SQL on stdout.
 // Usage: node scripts/gen-sample.ts > seed/sample.sql
+import { attributePod, type AttributionAd } from "../shared/attribution.ts";
 import { parseAdName } from "../shared/naming.ts";
 import { PODS } from "../shared/taxonomy.ts";
 
@@ -64,7 +65,8 @@ const posts: PostPlan[] = [];
 let creative = 600;
 for (let i = 0; i < 64; i++) {
   const legacy = i < LEGACY_NAMES.length;
-  const pod = pick(PODS);
+  const hinted = legacy ? parseAdName(LEGACY_NAMES[i]!).strategistHint : null;
+  const pod = hinted ? PODS.find((p) => p.code === hinted)! : pick(PODS);
   const name = legacy
     ? LEGACY_NAMES[i]!
     : `${pod.code}-V${creative++}${rand() < 0.4 ? `-i${1 + Math.floor(rand() * 3)}` : ""} | ${pick(ANGLES)} | ${pick(FORMATS)} | ${pick(HOOKS)} | ${pick(LPS)}`;
@@ -84,34 +86,27 @@ for (let i = 0; i < 64; i++) {
   const mediaType = parsed.format === "Static" ? "image" : "video";
   out.push(`INSERT INTO posts (id, media_type, created_time) VALUES (${q(plan.id)}, ${q(mediaType)}, ${q(isoDay(launch))});`);
 
-  // Standard names carry their pod; about half of legacy posts were tagged by hand.
-  const fromName = parsed.podCode ?? parsed.strategistHint;
-  const manual = !fromName && rand() < 0.5;
-  const podId = fromName ? PODS.find((p) => p.code === fromName)!.id : manual ? pod.id : null;
-  if (podId || parsed.angle || parsed.format) {
-    const editor = podId ? pick(editors.filter((e) => e.pod === podId)) : null;
-    out.push(
-      `INSERT INTO assignments (post_id, pod_id, pod_source, editor_id, angle, format, hook, landing_page, tags_source, updated_at, updated_by) VALUES (` +
-        [q(plan.id), q(podId), q(podId ? (fromName ? "name" : "manual") : null), q(editor?.id ?? null),
-         q(parsed.angle), q(parsed.format), q(parsed.hook), q(parsed.landingPage), q("name"), q(isoDay(0)), q("sample")].join(", ") + ");",
-    );
-  }
-
   // Winners get copied into scaling campaigns, like real account structure.
   const copies = winner ? 2 + Math.floor(rand() * 7) : rand() < 0.3 ? 2 : 1;
+  // Like the real account: testing ad sets carry the strategist's name; a few don't.
+  const testAdSet = rand() < 0.85 ? `ABO | ${pod.name} | Test ${1 + (i % 9)}` : "ABO | Broad test";
+  const adsForAttribution: AttributionAd[] = [];
   for (let c = 0; c < copies; c++) {
     const camp = c === 0 ? CAMPAIGNS[0]! : pick(CAMPAIGNS.slice(1));
     const adId = `${plan.id.replace("post", "ad")}_${c}`;
     const adName = c === 0 ? name : `${name} - Copy${c > 1 ? ` ${c}` : ""}`;
+    const adsetName = c === 0 ? testAdSet : `${camp.name.split(" |")[0]} | Scale ${c}`;
+    const createdDay = plan.launch - (c === 0 ? 0 : Math.min(plan.launch, Math.floor(between(3, 8))));
+    adsForAttribution.push({ name: adName, adsetName, createdTime: isoDay(createdDay) });
     const alive = plan.launch - plan.life;
     const status = alive <= 0 && (winner || rand() < 0.5) ? "ACTIVE" : "PAUSED";
     out.push(
       `INSERT INTO ads (id, post_id, name, campaign_id, campaign_name, adset_id, adset_name, status, created_time) VALUES (` +
-        [q(adId), q(plan.id), q(adName), q(camp.id), q(camp.name), q(`${camp.id}_as${c}`), q(`${camp.name.split(" |")[0]} ad set ${c + 1}`), q(status), q(isoDay(plan.launch))].join(", ") + ");",
+        [q(adId), q(plan.id), q(adName), q(camp.id), q(camp.name), q(`${camp.id}_as${c}`), q(adsetName), q(status), q(isoDay(createdDay))].join(", ") + ");",
     );
 
     const rows: string[] = [];
-    const start = plan.launch - (c === 0 ? 0 : Math.floor(between(3, 8)));
+    const start = createdDay;
     for (let day = start; day > Math.max(-1, plan.launch - plan.life) && day >= 0; day--) {
       const age = plan.launch - day;
       const fatigue = 1 + Math.max(0, age - 21) * 0.015;
@@ -125,6 +120,19 @@ for (let i = 0; i < 64; i++) {
     }
     if (rows.length)
       out.push(`INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, link_clicks, purchases, revenue_cents) VALUES\n${rows.join(",\n")};`);
+  }
+
+  // Same rules the live sync will use; about a third of the rest were tagged by hand.
+  const auto = attributePod(adsForAttribution);
+  const manual = !auto && rand() < 0.35;
+  const podId = auto ? PODS.find((p) => p.code === auto.podCode)!.id : manual ? pod.id : null;
+  if (podId || parsed.angle || parsed.format) {
+    const editor = podId ? pick(editors.filter((e) => e.pod === podId)) : null;
+    out.push(
+      `INSERT INTO assignments (post_id, pod_id, pod_source, editor_id, angle, format, hook, landing_page, tags_source, updated_at, updated_by) VALUES (` +
+        [q(plan.id), q(podId), q(auto ? auto.source : manual ? "manual" : null), q(editor?.id ?? null),
+         q(parsed.angle), q(parsed.format), q(parsed.hook), q(parsed.landingPage), q("name"), q(isoDay(0)), q("sample")].join(", ") + ");",
+    );
   }
 }
 

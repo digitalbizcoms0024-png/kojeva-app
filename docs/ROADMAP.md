@@ -14,6 +14,7 @@ Each phase is one branch + PR. A phase is done when its acceptance criteria pass
 - Nightly Cron sync: ads, ad sets, campaigns, creatives (`effective_object_story_id`), daily insights.
   Re-pull the last 7 days every run (late attribution). Backfill 90+ days via Queues.
 - Copy thumbnails to R2 (Meta URLs expire).
+- Attribute pods on every sync with `shared/attribution.ts` (ad set name first), skipping manual assignments.
 - Banner: last successful sync; reconnect warning before the token expires.
 - Cloudflare Access in front of the app.
 
@@ -21,7 +22,7 @@ Each phase is one branch + PR. A phase is done when its acceptance criteria pass
 attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ posts stay fast.
 
 ## Phase 2: Attribution
-- Parse names on sync; legacy-prefix → pod mapping in Settings (e.g. HxM → ?).
+- Review attribution conflicts (copies whose ad sets name different strategists).
 - Needs Tagging: inline + bulk edit of pod / editor / angle / format / hook / landing page.
 - Optional one-time import of a creative tracker (creative ID → strategist).
 - Editable targets and pod roster in Settings.

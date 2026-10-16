@@ -25,7 +25,8 @@ Before pushing: `npm run typecheck && npm test && npm run build` must all pass.
 - **Missing is not zero.** Ratios return `null` when the denominator is 0 and render as "—".
 - **Money is integer cents** in the DB and API; convert only in `src/format.ts`.
 - **Rank by post, not by ad.** Copies of an ad share a post (`effective_object_story_id`) and are grouped.
-- **Never overwrite manual tags.** `assignments.*_source` records `name | manual | atria`; a re-parse may only fill fields whose source is `name` or empty.
+- **Pods come from ad set names** (strategist's name), via `shared/attribution.ts`. Ad names are mostly random. See `docs/NAMING.md`.
+- **Never overwrite manual tags.** `assignments.pod_source` is `manual | name | adset` (tags: `manual | name | atria`); a sync may only fill fields whose source isn't `manual`.
 - **Metric definitions live in `shared/metrics.ts`** and are documented in `docs/METRICS.md`. Change both together, with tests.
 - **New ad-name patterns** go in `shared/naming.ts` with a test case in `shared/naming.test.ts` using the real name. See `docs/NAMING.md`.
 - Pod colors come from the validated palette in `src/index.css` (`--pod-*`). Always show the pod name next to its color. Status colors (good/warn/bad) are reserved and always paired with an icon.

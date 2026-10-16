@@ -1,4 +1,20 @@
-# Ad naming
+# Ad naming & pod attribution
+
+## How a post gets its pod (`shared/attribution.ts`)
+
+Today Kojeva separates pods by **ad set**: each creative strategist's name is in the names of the
+ad sets that hold their ads. Ad names are mostly free-form and carry no meaning (e.g. "HxM").
+
+First match wins:
+1. **Set by hand** in the app. Never overwritten by a sync.
+2. **Pod code** in a standard ad name (`HAR-…`, `DHI-…`, `SHA-…`, `ALI-…`).
+3. **Strategist named in the ad set** as a separate word ("ABO | Harris | Oct" → Harris).
+   The ad set of the post's **earliest** ad is checked first, so a winner copied into unnamed
+   Scale / Graveyard ad sets keeps the pod that made it. An ad set naming two strategists is skipped.
+4. **Strategist named in the ad name** (`…VSL_HARRIS-h2`).
+5. A legacy prefix configured in Settings (none configured; prefixes like "HxM" are random).
+
+Anything left goes to **Needs Tagging**.
 
 ## The convention (for all new ads)
 
@@ -33,9 +49,8 @@ stripped before parsing, and copies are grouped by post anyway.
 | `Copy of …` prefix | `Copy of 22v1` | copy of creative `22`, iteration 1 |
 | Underscore tokens | `Funeral_MatureFace_UGC_Story` | known tags are picked out (angle MatureFace, format UGC, hook Story) |
 
-Legacy names set a pod only when a strategist is named in them (HARRIS, DHIA, SHAMEER, ALI as a
-separate word). A prefix such as `HxM` maps to a pod only after it's added to the legacy prefix map in Settings. Everything else goes to **Needs Tagging**.
+Prefixes like `HxM` are random and don't identify a pod; the ad set does (see above).
 
 ## Open questions
-- What does `HxM` stand for, and which pod is it?
-- Is there a tracker mapping `Video N` / `batchN` numbers to strategists? (It would tag most old ads in one import.)
+- Do older ad sets (before the naming habit started) also carry strategist names? If not, a tracker
+  mapping creative numbers to strategists would tag those in one import.

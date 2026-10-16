@@ -41,7 +41,7 @@ CREATE INDEX ads_post ON ads(post_id);
 CREATE TABLE assignments (
   post_id       TEXT PRIMARY KEY REFERENCES posts(id),
   pod_id        TEXT REFERENCES pods(id),
-  pod_source    TEXT,                            -- name | manual | atria
+  pod_source    TEXT,                            -- manual | name | adset
   editor_id     TEXT REFERENCES editors(id),
   angle         TEXT,
   format        TEXT,

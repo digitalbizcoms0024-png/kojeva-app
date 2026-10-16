@@ -8,6 +8,12 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
   return <div className={`rounded-2xl border border-line bg-surface ${className}`}>{children}</div>;
 }
 
+const SOURCE_LABEL: Record<string, string> = {
+  adset: "from the ad set name",
+  name: "from the ad name",
+  manual: "by hand",
+};
+
 export function PodChip({ podId, source }: { podId: string | null; source?: string | null }) {
   const pod = podId ? podById(podId) : null;
   if (!pod)
@@ -20,7 +26,7 @@ export function PodChip({ podId, source }: { podId: string | null; source?: stri
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink"
-      title={source ? `Pod set ${source === "name" ? "from the ad name" : source === "manual" ? "by hand" : `by ${source}`}` : undefined}
+      title={source ? `Pod set ${SOURCE_LABEL[source] ?? `by ${source}`}` : undefined}
     >
       <span className="size-2 rounded-full" style={{ background: `var(--pod-${pod.id})` }} aria-hidden />
       {pod.name}

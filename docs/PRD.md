@@ -10,7 +10,8 @@ strategist: **Harris, Dhia, Shameer, Ali**. Ads Manager can't answer:
 4. What should we scale, iterate or kill, and what should each pod make next?
 
 Ad names are inconsistent ("Video 153", "V457 | CBO", "HxM 7.1 Funeral_MatureFace_UGC_Story",
-"batch15-2", "23v2 - Copy"), so most ads can't be tied to a pod today.
+"batch15-2", "23v2 - Copy"). Pods are identified by **ad set names**, which carry the strategist's
+name; see `NAMING.md` for the attribution rules.
 
 ## Users
 - **Founder / media buyer**: account health, pod comparison, scaling decisions.
