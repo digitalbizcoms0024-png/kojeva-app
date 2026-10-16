@@ -72,6 +72,8 @@ export interface Targets {
   hitRule: "both" | "either";
   /** CPA up to this shows amber ("near target"); null means 25% over target. */
   cpaWarnMax: number | null;
+  /** Length of the rolling window a day-3 miss can still hit target in (late hit); 0 turns it off. */
+  lateWindowDays: number;
 }
 
 export const DEFAULT_TARGETS: Targets = {
@@ -81,6 +83,7 @@ export const DEFAULT_TARGETS: Targets = {
   minTestSpend: 100,
   hitRule: "both",
   cpaWarnMax: null,
+  lateWindowDays: 7,
 };
 
 export type Band = "good" | "warn" | "bad" | "none";
@@ -104,7 +107,16 @@ export function roasBand(value: number | null, target: number): Band {
   return value >= target * 0.8 ? "warn" : "bad";
 }
 
-export type HitStatus = "hit" | "miss" | "testing" | "ineligible";
+export type HitStatus = "hit" | "late_hit" | "miss" | "testing" | "ineligible";
+
+/** Whether totals meet the targets under the hit rule (CPA and/or ROAS). */
+export function meetsTargets(totals: Totals, t: Targets): boolean {
+  const c = cpa(totals);
+  const r = roas(totals);
+  const cpaOk = c != null && c <= t.targetCpa;
+  const roasOk = r != null && r >= t.targetRoas;
+  return t.hitRule === "both" ? cpaOk && roasOk : cpaOk || roasOk;
+}
 
 /**
  * Classifies one concept's test. A concept qualifies once any single ad in it has spent
@@ -117,12 +129,43 @@ export type HitStatus = "hit" | "miss" | "testing" | "ineligible";
 export function hitStatus(windowTotals: Totals, state: { qualified: boolean; complete: boolean }, t: Targets): HitStatus {
   if (!state.complete) return "testing";
   if (!state.qualified) return "ineligible";
-  const c = cpa(windowTotals);
-  const r = roas(windowTotals);
-  const cpaOk = c != null && c <= t.targetCpa;
-  const roasOk = r != null && r >= t.targetRoas;
-  const hit = t.hitRule === "both" ? cpaOk && roasOk : cpaOk || roasOk;
-  return hit ? "hit" : "miss";
+  return meetsTargets(windowTotals, t) ? "hit" : "miss";
+}
+
+const addDays = (day: string, n: number) => {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * Second look at a concept that missed its day-3 test: the first run of `lateWindowDays`
+ * consecutive days (counted from first spend, days without spend included) that ends after the
+ * judging window, has at least `minTestSpend` of spend, and meets the targets. Null if none.
+ * @param daily the concept's totals per day with spend, any order
+ */
+export function lateHitWindow(
+  daily: ({ date: string } & Totals)[],
+  firstSpend: string,
+  judgingEnd: string,
+  latest: string,
+  t: Targets,
+): { from: string; to: string; totals: Totals } | null {
+  const n = t.lateWindowDays;
+  if (n <= 0) return null;
+  const byDay = new Map(daily.map((d) => [d.date, d]));
+  // Windows [from, from + n - 1] that end after the judging window and by the latest synced day.
+  for (let from = firstSpend; addDays(from, n - 1) <= latest; from = addDays(from, 1)) {
+    const to = addDays(from, n - 1);
+    if (to <= judgingEnd) continue;
+    let w = ZERO_TOTALS;
+    for (let d = from; d <= to; d = addDays(d, 1)) {
+      const v = byDay.get(d);
+      if (v) w = addTotals(w, v);
+    }
+    if (w.spendCents >= t.minTestSpend * 100 && meetsTargets(w, t)) return { from, to, totals: w };
+  }
+  return null;
 }
 
 /** Last day of the judging window: day N from first spend, or the qualifying day if later. */
@@ -133,9 +176,9 @@ export function judgingWindowEnd(firstSpend: string, qualifiedOn: string | null,
   return qualifiedOn && qualifiedOn > dayN ? qualifiedOn : dayN;
 }
 
-/** Hits / (hits + misses). Testing and ineligible concepts are excluded. */
+/** (Hits + late hits) / decided (hits, late hits and misses). Testing and ineligible concepts are excluded. */
 export function hitRate(statuses: HitStatus[]): number | null {
-  const hits = statuses.filter((s) => s === "hit").length;
+  const hits = statuses.filter((s) => s === "hit" || s === "late_hit").length;
   const decided = hits + statuses.filter((s) => s === "miss").length;
   return decided > 0 ? hits / decided : null;
 }

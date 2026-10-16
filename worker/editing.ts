@@ -127,6 +127,8 @@ function checkTargets(t: Partial<Targets>): Problem {
     return "Judging days must be a whole number from 1 to 30.";
   if (t.minTestSpend !== undefined && !num(t.minTestSpend, 0, 100_000)) return "Minimum spend must be 0 or more.";
   if (t.hitRule !== undefined && t.hitRule !== "both" && t.hitRule !== "either") return 'Hit rule must be "both" or "either".';
+  if (t.lateWindowDays !== undefined && !(Number.isInteger(t.lateWindowDays) && num(t.lateWindowDays, 0, 30)))
+    return "The late-hit window must be a whole number of days from 0 to 30.";
   if (t.cpaWarnMax !== undefined && t.cpaWarnMax !== null && !num(t.cpaWarnMax, 0.01, 10_000))
     return "The amber CPA limit must be a positive amount, or empty for 25% over target.";
   if (t.cpaWarnMax != null && t.targetCpa !== undefined && t.cpaWarnMax <= t.targetCpa)

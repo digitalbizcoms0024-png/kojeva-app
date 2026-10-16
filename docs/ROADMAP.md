@@ -59,6 +59,10 @@ attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ 
 - ✅ Fatigue signals (frequency ↑, CTR ↓, CPA ↑ vs the ad's first week; reach stored from migration 0007), dashboard
   trend charts (spend / CPA / ROAS, Meta and Triple Whale), CSV export on Rankings, Concepts and Pods.
 
+## Pod reporting ✅
+- Late hits (rolling 7-day second look for day-3 misses still spending), Spend by pod for the selected range, concepts
+  launched per Monday–Sunday week per pod, and a Custom date range.
+
 ## Out of scope: managing ads
 The hub reports and analyses; it never changes campaigns. Meta access stays read-only (`ads_read`).
 Copying winners, pausing losers and other ad-management work stay in Ads Manager.

@@ -76,3 +76,22 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 ## CSV export
 - Rankings (current filters), Concepts and the Pods table. Money in plain dollars, every value labelled with its source;
   missing values are empty cells, never 0.
+
+## Late hits (`shared/metrics.ts` → `lateHitWindow`)
+- A concept that **missed** its day-3 test but **kept spending after** its judging window gets a second look: if any run of
+  `lateWindowDays` consecutive days (default 7, Settings → "Late-hit window"; 0 turns it off) from first spend onward, ending
+  after the judging window, has at least the qualifying spend ($100) and meets the targets, it becomes a **Late hit**.
+- Late hits count in the hit rate (hits + late hits ÷ decided) and are shown split out: "7 hits from 20 decided (2 late)".
+- Until then it stays a **Miss**; one still spending in the last 3 days is labelled "Miss · still running". Once any window hits,
+  the late hit is permanent (more days can only add windows).
+
+## Spend by pod
+- Pods page section (and a share bar on the Dashboard): spend per pod, the agency and unassigned for the global range, share of
+  total, and change vs the period before (same length). Spend changes are shown without good/bad color.
+
+## Concepts launched per week
+- New concepts per pod by the Monday–Sunday week of their first spend, last 8 weeks, ending with the week of the latest synced
+  day ("This week"). The Dashboard pod cards show this week's count. `/api/launches`.
+
+## Date range
+- This week (last 7 synced days) · This month (last 30) · All time · Custom (any from–to). Every page follows it.

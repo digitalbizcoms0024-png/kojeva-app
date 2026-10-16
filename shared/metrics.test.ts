@@ -8,6 +8,7 @@ import {
   twRoas,
   ctr,
   hitRate,
+  lateHitWindow,
   hitStatus,
   judgingWindowEnd,
   roas,
@@ -107,5 +108,40 @@ describe("Triple Whale metrics", () => {
     expect(twCpa({ purchases: 0, revenueCents: 0 }, 5000)).toBeNull();
     expect(twRoas(null, 5000)).toBeNull();
     expect(twRoas({ purchases: 0, revenueCents: 0 }, 5000)).toBe(0);
+  });
+});
+
+describe("lateHitWindow", () => {
+  const T = { ...DEFAULT_TARGETS };
+  // $100/day. Days 1–3 at $25 CPA (a day-3 miss), then $10 CPA and $250 revenue a day.
+  const daily = Array.from({ length: 12 }, (_, i) => {
+    const date = `2026-10-${String(i + 1).padStart(2, "0")}`;
+    const purchases = i < 3 ? 4 : 10;
+    return { date, spendCents: 10000, impressions: 1000, linkClicks: 10, purchases, revenueCents: purchases * 2500 };
+  });
+
+  it("finds the first rolling window that hits target after the judging window", () => {
+    // Oct 1–7: $700 / 58 purchases = $12.07 CPA, ROAS 2.07 → hits.
+    expect(lateHitWindow(daily, "2026-10-01", "2026-10-03", "2026-10-12", T)).toMatchObject({ from: "2026-10-01", to: "2026-10-07" });
+  });
+
+  it("needs a full window of synced days", () => {
+    expect(lateHitWindow(daily.slice(0, 6), "2026-10-01", "2026-10-03", "2026-10-06", T)).toBeNull();
+  });
+
+  it("can find a later window when early days drag the first one down", () => {
+    const slow = daily.map((d, i) => (i < 5 ? { ...d, purchases: 2, revenueCents: 5000 } : d));
+    // Oct 1–7 has 5 slow days; the first window that hits starts Oct 4.
+    expect(lateHitWindow(slow, "2026-10-01", "2026-10-03", "2026-10-12", T)).toMatchObject({ from: "2026-10-04", to: "2026-10-10" });
+  });
+
+  it("counts days without spend as part of the window, and respects the minimum spend and switch-off", () => {
+    const sparse = [{ ...daily[0]!, date: "2026-10-05", spendCents: 5000, purchases: 5, revenueCents: 12500 }];
+    expect(lateHitWindow(sparse, "2026-10-01", "2026-10-03", "2026-10-12", T)).toBeNull(); // $50 < $100 minimum
+    expect(lateHitWindow(daily, "2026-10-01", "2026-10-03", "2026-10-12", { ...T, lateWindowDays: 0 })).toBeNull();
+  });
+
+  it("counts late hits in the hit rate", () => {
+    expect(hitRate(["hit", "late_hit", "miss", "testing"])).toBeCloseTo(2 / 3);
   });
 });

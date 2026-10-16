@@ -6,6 +6,7 @@ import type {
   InsightDimension,
   InsightRow,
   InsightsResponse,
+  LaunchesResponse,
   CopyRow,
   MetaResponse,
   PodRow,
@@ -289,7 +290,8 @@ app.get("/pods", async (c) => {
       ...g,
       totals: mine.reduce((acc, p) => addTotals(acc, p.totals), ZERO_TOTALS),
       concepts: statuses.length,
-      hits: statuses.filter((s) => s === "hit").length,
+      hits: statuses.filter((s) => s === "hit" || s === "late_hit").length,
+      lateHits: statuses.filter((s) => s === "late_hit").length,
       misses: statuses.filter((s) => s === "miss").length,
       testing: statuses.filter((s) => s === "testing").length,
       hitRate: hitRate(statuses),
@@ -329,7 +331,8 @@ app.get("/insights", async (c) => {
     return {
       value,
       concepts: list.length,
-      hits: statuses.filter((s) => s === "hit").length,
+      hits: statuses.filter((s) => s === "hit" || s === "late_hit").length,
+      lateHits: statuses.filter((s) => s === "late_hit").length,
       misses: statuses.filter((s) => s === "miss").length,
       testing: statuses.filter((s) => s === "testing").length,
       hitRate: hitRate(statuses),
@@ -387,6 +390,37 @@ app.get("/trends", async (c) => {
       tw: synced.has(String(r.b)) ? (twBy.get(String(r.b)) ?? toTw(undefined)) : null,
     })),
   };
+  return c.json(body);
+});
+
+/** Monday of the week a day falls in. */
+function mondayOf(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  return shiftDay(day, -((d.getUTCDay() + 6) % 7));
+}
+
+/** Concepts launched (first spend) per pod per Monday–Sunday week; ?weeks=8 (max 26). */
+app.get("/launches", async (c) => {
+  const db = c.env.DB;
+  const n = Math.min(Math.max(Number(c.req.query("weeks") ?? 8) || 8, 1), 26);
+  const [latest, concepts, pods] = await Promise.all([
+    getLatestDate(db),
+    loadConcepts(db),
+    db.prepare("SELECT id, name, kind FROM pods").all<{ id: string; name: string; kind: "pod" | "agency" }>(),
+  ]);
+  const current = mondayOf(latest ?? new Date().toISOString().slice(0, 10));
+  const weeks = Array.from({ length: n }, (_, i) => shiftDay(current, (i - n + 1) * 7));
+  const index = new Map(weeks.map((w, i) => [w, i]));
+  const rows = [...pods.results]
+    .sort((a, b) => groupOrder(a.id) - groupOrder(b.id))
+    .map((p) => ({ podId: p.id, name: p.name, kind: p.kind, counts: weeks.map(() => 0) }));
+  const byPod = new Map(rows.map((r) => [r.podId, r]));
+  for (const k of concepts) {
+    const i = index.get(mondayOf(k.firstSpend));
+    const row = byPod.get(k.podId);
+    if (i !== undefined && row) row.counts[i]!++;
+  }
+  const body: LaunchesResponse = { weeks, rows };
   return c.json(body);
 });
 

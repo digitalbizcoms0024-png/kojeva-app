@@ -296,6 +296,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
   const [days, setDays] = useState(String(t.testWindowDays));
   const [min, setMin] = useState(String(t.minTestSpend));
   const [rule, setRule] = useState(t.hitRule);
+  const [late, setLate] = useState(String(t.lateWindowDays));
   const { busy, run, note } = useSave(onSaved);
   const amberShown = amber ? Number(amber) : Number(cpa) * 1.25;
   const save = () =>
@@ -310,6 +311,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           testWindowDays: Number(days),
           minTestSpend: Number(min),
           hitRule: rule,
+          lateWindowDays: Number(late),
         },
       },
       "Saved. Hit rates use the new targets.",
@@ -317,7 +319,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
   return (
     <section>
       <SectionTitle title="Targets" />
-      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-7">
         <Labeled label="Target CPA ($)">
           <input id="t-cpa" type="number" min="0.01" step="0.01" value={cpa} onChange={(e) => setCpa(e.target.value)} className={field} disabled={!meta.canEdit} />
         </Labeled>
@@ -339,6 +341,9 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
         </Labeled>
         <Labeled label="Testing window (days)">
           <input id="t-days" type="number" min="1" max="30" step="1" value={days} onChange={(e) => setDays(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+        <Labeled label="Late-hit window (days)" hint="0 turns late hits off">
+          <input id="t-late" type="number" min="0" max="30" step="1" value={late} onChange={(e) => setLate(e.target.value)} className={field} disabled={!meta.canEdit} />
         </Labeled>
         <Labeled label="Qualifies at ($ on one ad)">
           <input id="t-min" type="number" min="0" step="10" value={min} onChange={(e) => setMin(e.target.value)} className={field} disabled={!meta.canEdit} />
@@ -362,6 +367,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
         </span>
         <span className="text-ink-3">
           A concept qualifies once one ad has spent ${min}, and is judged from first spend to day {days} or the day it qualified, whichever is later.
+          {Number(late) > 0 && ` A miss that keeps spending becomes a late hit if any ${late} days in a row reach target (with at least $${min} spent).`}
         </span>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">

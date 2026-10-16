@@ -136,7 +136,9 @@ export interface PodRow {
   color: string | null;
   totals: Totals;
   concepts: number;
+  /** Hits including late hits. */
   hits: number;
+  lateHits: number;
   misses: number;
   testing: number;
   hitRate: number | null;
@@ -160,7 +162,14 @@ export interface ConceptResult {
   /** Concept totals from first spend to windowEnd. */
   window: Totals;
   allTime: Totals;
+  /** "late_hit" when a day-3 miss later hit target over a rolling window (see lateWindow). */
   status: HitStatus;
+  /** The first rolling window that hit target, for late hits. */
+  lateWindow: { from: string; to: string; totals: Totals } | null;
+  /** Last day with spend. */
+  lastSpend: string | null;
+  /** Spent in the last 3 synced days. */
+  stillRunning: boolean;
   angle: string | null;
   format: string | null;
   /** "manual" when someone tagged one of its ads by hand, else read from names. */
@@ -183,7 +192,9 @@ export interface InsightRow {
   /** Tag key, or null for concepts with no tag on this dimension. */
   value: string | null;
   concepts: number;
+  /** Hits including late hits. */
   hits: number;
+  lateHits: number;
   misses: number;
   testing: number;
   hitRate: number | null;
@@ -251,4 +262,11 @@ export interface TrendsResponse {
   grain: TrendGrain;
   pod: string | null;
   points: TrendPoint[];
+}
+
+/** New concepts per pod per calendar week (Monday–Sunday), by first day of spend. */
+export interface LaunchesResponse {
+  /** Monday of each week, oldest first; the last one is the current week (the week of the latest synced day). */
+  weeks: string[];
+  rows: { podId: string; name: string; kind: "pod" | "agency"; counts: number[] }[];
 }

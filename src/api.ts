@@ -30,7 +30,16 @@ export function useApi<T>(path: string | null) {
 
 export function qs(params: Record<string, string | number | undefined>): string {
   const p = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") p.set(k, String(v));
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === "") continue;
+    // A custom range travels as range=custom&from=…&to=….
+    const custom = k === "range" ? /^custom:(\d{4}-\d{2}-\d{2}):(\d{4}-\d{2}-\d{2})$/.exec(String(v)) : null;
+    if (custom) {
+      p.set("range", "custom");
+      p.set("from", custom[1]!);
+      p.set("to", custom[2]!);
+    } else p.set(k, String(v));
+  }
   return p.toString();
 }
 

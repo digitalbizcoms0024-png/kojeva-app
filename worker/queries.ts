@@ -1,7 +1,7 @@
 import type { Assignment, ConceptResult, PostSummary, TwCoverage } from "../shared/api.ts";
 import { classify } from "../shared/classify.ts";
 import { loadFatigue } from "./fatigue.ts";
-import { DEFAULT_TARGETS, hitStatus, judgingWindowEnd, type HitStatus, type Targets, type Totals, type TwTotals } from "../shared/metrics.ts";
+import { DEFAULT_TARGETS, hitStatus, judgingWindowEnd, lateHitWindow, type HitStatus, type Targets, type Totals, type TwTotals } from "../shared/metrics.ts";
 
 type Row = Record<string, unknown>;
 
@@ -111,6 +111,7 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
            (SELECT s.format FROM ads x JOIN assignments s ON s.post_id = x.post_id
               WHERE x.concept_id = c.id AND s.tags_source = 'manual' AND s.format IS NOT NULL LIMIT 1) AS manual_format,
            MIN(CASE WHEN daily.spend_cents > 0 THEN daily.date END) AS first_date,
+           MAX(CASE WHEN daily.spend_cents > 0 THEN daily.date END) AS last_date,
            MIN(CASE WHEN daily.running >= ?1 THEN daily.date END) AS qualified_on
          FROM concepts c JOIN daily ON daily.concept_id = c.id
          GROUP BY c.id
@@ -151,8 +152,38 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
     for (const row of results) windows.set(String(row.concept_id), toTotals(row));
   }
 
-  return ends.map(({ r, firstSpend, qualifiedOn, windowEnd }) => {
-    const window = windows.get(String(r.id)) ?? toTotals(undefined);
+  const base = ends.map((e) => {
+    const window = windows.get(String(e.r.id)) ?? toTotals(undefined);
+    const status = hitStatus(window, { qualified: e.qualifiedOn != null, complete: latest != null && latest >= e.windowEnd }, targets);
+    return { ...e, window, status };
+  });
+
+  // Second look for day-3 misses that kept spending after their judging window.
+  const late = new Map<string, { from: string; to: string; totals: Totals }>();
+  const recheck = latest ? base.filter((b) => b.status === "miss" && String(b.r.last_date) > b.windowEnd) : [];
+  for (let i = 0; i < recheck.length; i += 90) {
+    const chunk = recheck.slice(i, i + 90);
+    const { results } = await db
+      .prepare(
+        `SELECT a.concept_id, d.date, ${TOTALS_SQL} FROM ad_daily d JOIN ads a ON a.id = d.ad_id
+         WHERE a.concept_id IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")}) GROUP BY a.concept_id, d.date`,
+      )
+      .bind(...chunk.map((b) => String(b.r.id)))
+      .all<Row>();
+    const days = new Map<string, ({ date: string } & Totals)[]>();
+    for (const row of results) {
+      const id = String(row.concept_id);
+      days.set(id, [...(days.get(id) ?? []), { date: String(row.date), ...toTotals(row) }]);
+    }
+    for (const b of chunk) {
+      const w = lateHitWindow(days.get(String(b.r.id)) ?? [], b.firstSpend, b.windowEnd, latest!, targets);
+      if (w) late.set(String(b.r.id), w);
+    }
+  }
+
+  return base.map(({ r, firstSpend, qualifiedOn, windowEnd, window, status }) => {
+    const lateWindow = late.get(String(r.id)) ?? null;
+    const lastSpend = r.last_date == null ? null : String(r.last_date);
     const guess = classify({
       label: String(r.label),
       adset: String(r.adset_name),
@@ -175,7 +206,11 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
       windowEnd,
       window,
       allTime: allTime.get(String(r.id)) ?? window,
-      status: hitStatus(window, { qualified: qualifiedOn != null, complete: latest != null && latest >= windowEnd }, targets),
+      status: lateWindow ? ("late_hit" as const) : status,
+      lateWindow,
+      lastSpend,
+      // Spent in the last 3 synced days.
+      stillRunning: lastSpend != null && latest != null && lastSpend >= shiftDay(latest, -2),
     };
   });
 }

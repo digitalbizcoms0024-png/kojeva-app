@@ -1,25 +1,13 @@
 import { useState, type ReactNode } from "react";
-import type { AlertsResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
+import type { AlertsResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
 import { cpa, roas, twCpa, twRoas, type Targets, type Totals } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
-import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
+import { HeaderControls, previousPeriod, rangeLabel, shiftDay, type Range } from "../components/HeaderControls.tsx";
+import { PodSpend } from "../components/PodSpend.tsx";
 import { Sparkline } from "../components/Sparkline.tsx";
 import { TrendCharts } from "../components/TrendCharts.tsx";
 import { CpaValue, Empty, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb } from "../components/ui.tsx";
 import { dollars, int, money, pct, shortDate, TW_MODEL_LABEL, twCoverageNote } from "../format.ts";
-
-export function shiftDay(day: string, delta: number): string {
-  const d = new Date(`${day}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
-}
-
-/** The period just before the selected one, for "vs last week" deltas. */
-function previousPeriod(range: Range, latest: string | null): { from: string; to: string; label: string } | null {
-  if (!latest || range === "all") return null;
-  const days = range === "week" ? 7 : 30;
-  return { from: shiftDay(latest, -2 * days + 1), to: shiftDay(latest, -days), label: range === "week" ? "vs last week" : "vs last 30 days" };
-}
 
 function Delta({ now, before, better, fmt }: { now: number | null; before: number | null; better: "up" | "down"; fmt: (d: number) => string }) {
   if (now == null || before == null || before === 0) return null;
@@ -49,6 +37,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
   const top = useApi<RankingsResponse>(`/api/rankings?${qs({ range, sort: "spend", limit: 5 })}`);
   const pods = useApi<PodsResponse>(`/api/pods?${qs({ range })}`);
   const alerts = useApi<AlertsResponse>("/api/alerts");
+  const launches = useApi<LaunchesResponse>("/api/launches?weeks=1");
   const prev = previousPeriod(range, meta.latestDate);
   const before = useApi<RankingsResponse>(prev ? `/api/rankings?${qs({ range: "custom", from: prev.from, to: prev.to, limit: 1 })}` : null);
   const t = top.data?.totals;
@@ -106,12 +95,21 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
           )}
         </div>
 
+        <PodSpend range={range} latest={meta.latestDate} targets={tg} compact />
+
         <section>
           <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by hit rate · ${shortDate(pods.data.from === "2000-01-01" ? null : pods.data.from)} – ${shortDate(pods.data.to)} · Meta`} />
           {pods.error && <Empty>{pods.error.message}</Empty>}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {ranked.map((r, i) => (
-              <PodCard key={r.podId} r={r} rank={i + 1} targets={tg} sparkDays={sparkDays} />
+              <PodCard
+                key={r.podId}
+                r={r}
+                rank={i + 1}
+                targets={tg}
+                sparkDays={sparkDays}
+                launchedThisWeek={launches.data?.rows.find((l) => l.podId === r.podId)?.counts[0] ?? null}
+              />
             ))}
           </div>
           {agency && agency.totals.spendCents > 0 && (
@@ -132,7 +130,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
         <div className="grid gap-8 xl:grid-cols-2">
           <section className="min-w-0">
             <SectionTitle
-              title={`Top 5 ads ${range === "week" ? "this week" : range === "month" ? "this month" : "of all time"}`}
+              title={`Top 5 ads ${rangeLabel(range)}`}
               right={
                 <a href="#/rankings" className="link inline-flex items-center gap-1 text-sm">
                   All rankings <Icon name="arrow" size={14} />
@@ -250,7 +248,19 @@ function TrendsSection({ meta, range }: { meta: MetaResponse; range: Range }) {
   );
 }
 
-function PodCard({ r, rank, targets, sparkDays }: { r: PodRow; rank: number; targets: Targets; sparkDays: string[] }) {
+function PodCard({
+  r,
+  rank,
+  targets,
+  sparkDays,
+  launchedThisWeek,
+}: {
+  r: PodRow;
+  rank: number;
+  targets: Targets;
+  sparkDays: string[];
+  launchedThisWeek: number | null;
+}) {
   const editors = r.editors.filter((e) => e.editorId).length;
   const decided = r.hits + r.misses;
   const tot: Totals = r.totals;
@@ -264,6 +274,12 @@ function PodCard({ r, rank, targets, sparkDays }: { r: PodRow; rank: number; tar
           </div>
           <div className="text-xs text-ink-3">
             Strategist · {editors} {editors === 1 ? "editor" : "editors"} with ads
+            {launchedThisWeek != null && (
+              <>
+                {" · "}
+                <b className="text-ink">{launchedThisWeek}</b> {launchedThisWeek === 1 ? "concept" : "concepts"} this week
+              </>
+            )}
           </div>
         </div>
         <span className="num text-sm font-bold text-ink-3">#{rank}</span>
@@ -271,7 +287,7 @@ function PodCard({ r, rank, targets, sparkDays }: { r: PodRow; rank: number; tar
       <div className="kicker mt-4">Hit rate</div>
       <div className="num text-[44px] leading-none font-extrabold tracking-[-0.03em] text-ink">{pct(r.hitRate, 0)}</div>
       <div className="mt-1 text-xs text-ink-3">
-        {decided ? `${r.hits} of ${decided} concepts hit` : "No decided concepts yet"}
+        {decided ? `${r.hits} of ${decided} concepts hit${r.lateHits ? ` (${r.lateHits} late)` : ""}` : "No decided concepts yet"}
         {r.testing > 0 && ` · ${r.testing} testing`}
       </div>
       <div className="mt-4">

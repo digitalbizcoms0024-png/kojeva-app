@@ -150,15 +150,21 @@ export function RoasValue({ value, target, className }: { value: number | null; 
 
 const HIT_STYLE: Record<HitStatus, { cls: string; label: string }> = {
   hit: { cls: "bg-good-soft text-good", label: "✓ Hit" },
+  late_hit: { cls: "bg-good-soft text-good", label: "✓ Late hit" },
   miss: { cls: "bg-surface-2 text-ink-2", label: "✕ Miss" },
   testing: { cls: "bg-accent-soft text-accent-ink", label: "◷ Testing" },
   ineligible: { cls: "bg-surface-2 text-ink-3", label: "No ad at $100" },
 };
 
-export function HitBadge({ status }: { status: HitStatus | null }) {
+export function HitBadge({ status, stillRunning }: { status: HitStatus | null; stillRunning?: boolean }) {
   if (!status) return null;
   const s = HIT_STYLE[status];
-  return <span className={`px-1.5 py-px text-xs font-semibold whitespace-nowrap ${s.cls}`}>{s.label}</span>;
+  return (
+    <span className={`px-1.5 py-px text-xs font-semibold whitespace-nowrap ${s.cls}`} title={status === "late_hit" ? "Missed at day 3, then hit target over a later rolling window" : undefined}>
+      {s.label}
+      {status === "miss" && stillRunning && " · still running"}
+    </span>
+  );
 }
 
 /** Plain tag (status, source, counts). */

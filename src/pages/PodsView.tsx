@@ -1,11 +1,14 @@
 import { useState } from "react";
 import type { ConceptResult, ConceptsResponse, MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { qs, useApi } from "../api.ts";
+import { LaunchCadence, type LaunchCell } from "../components/LaunchCadence.tsx";
+import { PodSpend } from "../components/PodSpend.tsx";
+import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { addTotals, cpa, roas, twRoas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
 import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select } from "../components/ui.tsx";
-import { downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
+import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
 
 type Props = {
   data: PodsResponse | null;
@@ -20,7 +23,7 @@ export const podOrder = (id: string | null) => {
 };
 
 export function hitRuleText(t: Targets): string {
-  return `A concept qualifies once one of its ads has spent $${t.minTestSpend}, and is judged from first spend to day ${t.testWindowDays} or the day it qualified, whichever is later. Hit = CPA ≤ $${t.targetCpa} ${t.hitRule === "both" ? "and" : "or"} ROAS ≥ ${t.targetRoas} (Meta) over that window.`;
+  return `A concept qualifies once one of its ads has spent $${t.minTestSpend}, and is judged from first spend to day ${t.testWindowDays} or the day it qualified, whichever is later. Hit = CPA ≤ $${t.targetCpa} ${t.hitRule === "both" ? "and" : "or"} ROAS ≥ ${t.targetRoas} (Meta) over that window.${t.lateWindowDays > 0 ? ` A miss that keeps spending becomes a late hit if any ${t.lateWindowDays} days in a row reach target with at least $${t.minTestSpend} spent; late hits count in the hit rate.` : ""}`;
 }
 
 /** The tag value with the most hits among a pod's concepts (ties: more test spend). */
@@ -30,7 +33,7 @@ function best(concepts: ConceptResult[], key: "angle" | "format"): string | null
     const v = k[key];
     if (!v) continue;
     const e = by.get(v) ?? { hits: 0, spend: 0 };
-    if (k.status === "hit") e.hits++;
+    if (k.status === "hit" || k.status === "late_hit") e.hits++;
     e.spend += k.window.spendCents;
     by.set(v, e);
   }
@@ -61,7 +64,7 @@ function PodColumn({
   const rows: [string, React.ReactNode][] = [
     ["Concepts launched", int(r.concepts)],
     ["Concepts decided", int(decided)],
-    ["Hits", int(r.hits)],
+    ["Hits", r.lateHits ? `${int(r.hits)} (${r.lateHits} late)` : int(r.hits)],
     ["Test spend", money(testSpend, { compact: true })],
     ["Spend", money(r.totals.spendCents, { compact: true })],
     ["CPA · Meta", <CpaValue key="c" value={cpa(r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />],
@@ -91,7 +94,9 @@ function PodColumn({
         <div className="kicker">Hit rate</div>
         <div className="num text-[52px] leading-none font-extrabold tracking-[-0.03em] text-ink">{pct(r.hitRate, 0)}</div>
         <div className="mt-1 text-xs text-ink-3">
-          {decided ? `${r.hits} ${r.hits === 1 ? "hit" : "hits"} from ${decided} decided concepts` : "No decided concepts yet"}
+          {decided
+            ? `${r.hits} ${r.hits === 1 ? "hit" : "hits"} from ${decided} decided concepts${r.lateHits ? ` (${r.lateHits} late)` : ""}`
+            : "No decided concepts yet"}
           {r.testing > 0 && ` · ${r.testing} testing`}
         </div>
       </div>
@@ -114,6 +119,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
   const pods = useApi<PodsResponse>(`/api/pods?${qs({ range })}`);
   const concepts = useApi<ConceptsResponse>(`/api/concepts?${qs({ range })}`);
   const [open, setOpen] = useState("");
+  const [cell, setCell] = useState<LaunchCell | null>(null);
   const t = meta.targets;
   const rows = pods.data?.rows ?? [];
   const inHouse = rows.filter((r) => r.kind === "pod").sort((a, b) => podOrder(a.podId) - podOrder(b.podId));
@@ -134,6 +140,8 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
       <div className="flex flex-col gap-6 px-4 py-6 md:px-8">
+        <PodSpend range={range} latest={meta.latestDate} targets={t} />
+        <SectionTitle title="Hit rate by pod" className="mb-0" />
         <p className="max-w-[110ch] text-sm text-ink-3">{hitRuleText(t)} Concepts count toward the period in which they first spent.</p>
         {pods.error && <Empty>Couldn't load pods: {pods.error.message}</Empty>}
         {pods.data && (
@@ -147,6 +155,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
                 editors={editorsOf(r.podId)}
                 top={r.kind === "pod" && r.hitRate != null && r.hitRate === topRate}
                 onOpen={() => {
+                  setCell(null);
                   setOpen(r.podId ?? "");
                   document.getElementById("concepts")?.scrollIntoView({ behavior: "smooth" });
                 }}
@@ -163,8 +172,22 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
             </a>
           </p>
         )}
+        <LaunchCadence
+          selected={cell}
+          onSelect={(c) => {
+            setCell(c);
+            if (c) document.getElementById("concepts")?.scrollIntoView({ behavior: "smooth" });
+          }}
+        />
         <div id="concepts" className="scroll-mt-4">
-          <ConceptsTable key={open} range={range} targets={t} pods={rows} filter={{ pod: open }} />
+          <ConceptsTable
+            key={cell ? `${cell.podId}:${cell.week}` : open}
+            range={cell ? `custom:${cell.week}:${shiftDay(cell.week, 6)}` : range}
+            targets={t}
+            pods={rows}
+            filter={{ pod: cell ? cell.podId : open }}
+            title={cell ? `Launched week of ${shortDate(cell.week)}` : undefined}
+          />
         </div>
       </div>
     </div>
@@ -302,7 +325,13 @@ export function ConceptsTable({
                     <RoasValue value={roas(k.window)} target={targets.targetRoas} />
                   </td>
                   <td className="py-2.5">
-                    <HitBadge status={k.status} />
+                    <HitBadge status={k.status} stillRunning={k.stillRunning} />
+                    {k.lateWindow && (
+                      <div className="num mt-0.5 text-[11px] text-ink-3">
+                        {shortDate(k.lateWindow.from)} – {shortDate(k.lateWindow.to)} · CPA {dollars(cpa(k.lateWindow.totals))} · ROAS{" "}
+                        {roas(k.lateWindow.totals)?.toFixed(2) ?? "—"}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
