@@ -30,7 +30,8 @@ function currentPath(): Path {
 export default function App() {
   const [path, setPath] = useState<Path>(currentPath);
   const [range, setRange] = useState<Range>("month");
-  const meta = useApi<MetaResponse>("/api/meta");
+  const [metaVersion, setMetaVersion] = useState(0);
+  const meta = useApi<MetaResponse>(`/api/meta?v=${metaVersion}`);
 
   useEffect(() => {
     const onHash = () => setPath(currentPath());
@@ -72,14 +73,28 @@ export default function App() {
             <span className="rounded-full bg-surface-2 px-3 py-1 text-ink-2">
               Last synced {dateTime(meta.data.lastSync?.finishedAt)}
             </span>
+            {meta.data.lastSync?.status === "error" && (
+              <a href="#/settings" className="rounded-full bg-bad-soft px-3 py-1 text-bad">Last sync failed · details</a>
+            )}
+            {!meta.data.accessProtected && (
+              <a href="#/settings" className="rounded-full bg-bad-soft px-3 py-1 text-bad">Not locked · anyone with the link can open this</a>
+            )}
           </div>
+        )}
+        {meta.data?.connectionExpiresInDays != null && meta.data.connectionExpiresInDays <= 7 && (
+          <a href="#/settings" className="mb-5 block rounded-xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-ink">
+            {meta.data.connectionExpiresInDays < 0
+              ? "The Meta connection has expired, so syncing has stopped."
+              : `The Meta connection expires in ${meta.data.connectionExpiresInDays} days.`}{" "}
+            <span className="text-accent underline">Reconnect in Settings →</span>
+          </a>
         )}
         {meta.error && <Empty>Couldn't reach the API: {meta.error.message}</Empty>}
         {meta.data && path === "dashboard" && <DashboardPage meta={meta.data} range={range} setRange={setRange} />}
         {meta.data && path === "rankings" && <RankingsPage meta={meta.data} range={range} setRange={setRange} />}
         {meta.data && path === "tagging" && <TaggingPage meta={meta.data} />}
         {path === "naming" && <NamingToolPage />}
-        {meta.data && path === "settings" && <SettingsPage meta={meta.data} />}
+        {meta.data && path === "settings" && <SettingsPage meta={meta.data} onSynced={() => setMetaVersion((v) => v + 1)} />}
         {path === "insights" && (
           <Empty>
             Creative Insights (performance by angle, format and hook, plus AI write-ups) is planned for Phase 3, once ads are tagged.

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { HitStatus } from "../../shared/metrics.ts";
 import { cpaBand, roasBand, type Band } from "../../shared/metrics.ts";
 import { podById } from "../../shared/taxonomy.ts";
@@ -140,9 +140,12 @@ export function Select({
   );
 }
 
-/** Stand-in until thumbnails are copied to R2 in Phase 1. */
+/** Creative thumbnail, or a placeholder when there is none. */
 export function Thumb({ mediaType, label, url, className = "" }: { mediaType: string; label: string; url: string | null; className?: string }) {
-  if (url) return <img src={url} alt="" className={`rounded-xl object-cover ${className}`} />;
+  const [failed, setFailed] = useState(false);
+  // Meta's thumbnail links expire; fall back to the placeholder until the next sync refreshes them.
+  if (url && !failed)
+    return <img src={url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className={`rounded-xl bg-surface-2 object-cover ${className}`} />;
   return (
     <div
       className={`flex flex-col items-center justify-center rounded-xl bg-gradient-to-br from-surface-2 to-line text-ink-3 ${className}`}

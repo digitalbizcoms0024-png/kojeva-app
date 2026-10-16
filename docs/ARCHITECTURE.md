@@ -23,8 +23,8 @@ Browser ──► Cloudflare Access (Google login for the team)
 | `settings` | key | targets, legacy prefix map (JSON) |
 | `sync_runs` | sync attempt | source, status, timestamps; drives the "last synced" banner |
 
-Phase 1 adds `meta_connections` (encrypted token, expiry, ad account). Phase 4 adds
-`tw_ad_daily` so Triple Whale numbers never mix with Meta's.
+`meta_connections` (migration 0002) holds at most one encrypted Meta token with its expiry. Phase 4
+adds `tw_ad_daily` so Triple Whale numbers never mix with Meta's.
 
 ## API
 | Route | Returns |
@@ -34,7 +34,25 @@ Phase 1 adds `meta_connections` (encrypted token, expiry, ad account). Phase 4 a
 | `GET /api/posts/:id?range…` | one post: totals, all-time totals, every copy, daily series |
 | `GET /api/pods?range…` | per-pod totals, concepts launched, hits/misses/testing, hit rate, editors |
 
-Ranges are relative to the latest synced day, not the wall clock.
+| `GET /api/connection` | Meta connection status, missing secrets, Access status, OAuth redirect URI |
+| `GET /api/connection/facebook/start` → `/callback` | Facebook login (OAuth) |
+| `POST /api/connection/token` | connect with a pasted token |
+| `POST /api/connection/disconnect` | forget the stored token |
+| `POST /api/sync` `{since, until, ads}` | sync one window (≤ 31 days) |
+
+Ranges are relative to the latest synced day, not the wall clock. Connection and sync routes return
+403 until Cloudflare Access is configured; once it is, every `/api` call needs a valid Access JWT.
+
+## Configuration
+| Name | Kind | Where |
+|---|---|---|
+| `META_APP_ID`, `META_AD_ACCOUNT_ID`, `META_GRAPH_VERSION` | var | `wrangler.jsonc` |
+| `ACCESS_TEAM_DOMAIN` (e.g. `kojeva.cloudflareaccess.com`), `ACCESS_AUD` | var | `wrangler.jsonc` |
+| `META_APP_SECRET` | secret | Worker → Settings → Variables and Secrets |
+| `TOKEN_KEY` (random, 32+ chars) | secret | same |
+| `META_SYSTEM_TOKEN` (optional) | secret | same |
+
+Vars in `wrangler.jsonc` overwrite dashboard vars on every deploy; secrets are kept.
 
 ## Meta connection (Phase 1)
 **Option A: Connect with Facebook (default).** The user clicks "Connect", logs in, grants
@@ -60,5 +78,6 @@ scheduled Claude task runs nightly, reads tags/transcripts via the Atria MCP, an
 1. Cloudflare dashboard → Storage & databases → D1 → Create database `kojeva-hub`; put its ID in `wrangler.jsonc`.
 2. Workers & Pages → Create → Import a repository → `kojeva-app`.
    - Build command: *(empty)*
-   - Deploy command: `npm run deploy:sample` until Phase 1 (**it wipes and reseeds the DB on every deploy**), then `npm run deploy`.
+   - Deploy command: `npm run deploy` (applies migrations, builds, deploys). `deploy:sample` is an alias
+     kept for the existing project setting; it no longer reseeds.
 3. Worker → Settings → Domains & Routes → workers.dev → enable Cloudflare Access, allow the team's emails.

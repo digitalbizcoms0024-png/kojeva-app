@@ -9,11 +9,17 @@ import type {
   SortKey,
 } from "../shared/api.ts";
 import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, roas, type Totals } from "../shared/metrics.ts";
+import { accessConfigured, accessMiddleware } from "./access.ts";
+import type { AppEnv, Env } from "./env.ts";
+import { connection, sync } from "./meta/routes.ts";
+import { runSync, utcDay } from "./meta/sync.ts";
 import { getLatestDate, getTargets, loadPosts, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 
-type Env = { Bindings: { DB: D1Database; DATA_MODE: string } };
+const app = new Hono<AppEnv>().basePath("/api");
 
-const app = new Hono<Env>().basePath("/api");
+app.use("*", accessMiddleware);
+app.route("/connection", connection);
+app.route("/sync", sync);
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -46,17 +52,24 @@ const SORTERS: Record<SortKey, (t: Totals) => number | null> = {
 
 app.get("/meta", async (c) => {
   const db = c.env.DB;
-  const [targets, latestDate, sync, pods] = await Promise.all([
+  const [targets, latestDate, lastRun, pods, live, conn] = await Promise.all([
     getTargets(db),
     getLatestDate(db),
     db
-      .prepare("SELECT source, finished_at, status FROM sync_runs ORDER BY id DESC LIMIT 1")
-      .first<{ source: string; finished_at: string | null; status: string }>(),
+      .prepare("SELECT source, finished_at, status, message FROM sync_runs ORDER BY id DESC LIMIT 1")
+      .first<{ source: string; finished_at: string | null; status: string; message: string | null }>(),
     db.prepare("SELECT id, code, name, color FROM pods ORDER BY name").all<MetaResponse["pods"][number]>(),
+    db.prepare("SELECT 1 AS x FROM sync_runs WHERE source = 'meta' AND status = 'ok' LIMIT 1").first(),
+    db.prepare("SELECT expires_at FROM meta_connections WHERE id = 1").first<{ expires_at: string | null }>(),
   ]);
   const body: MetaResponse = {
-    dataMode: c.env.DATA_MODE === "live" ? "live" : "sample",
-    lastSync: sync ? { source: sync.source, finishedAt: sync.finished_at, status: sync.status } : null,
+    dataMode: live ? "live" : "sample",
+    connectionExpiresInDays:
+      conn?.expires_at && !c.env.META_SYSTEM_TOKEN ? Math.floor((Date.parse(conn.expires_at) - Date.now()) / 86_400_000) : null,
+    accessProtected: accessConfigured(c.env),
+    lastSync: lastRun
+      ? { source: lastRun.source, finishedAt: lastRun.finished_at, status: lastRun.status, message: lastRun.message }
+      : null,
     latestDate,
     targets,
     pods: pods.results,
@@ -205,4 +218,10 @@ app.get("/pods", async (c) => {
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  /** Nightly: refresh ads and re-pull the last 7 days (Meta keeps revising recent days). */
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(runSync(env, { since: utcDay(-6), until: utcDay(0), ads: true }));
+  },
+} satisfies ExportedHandler<Env>;

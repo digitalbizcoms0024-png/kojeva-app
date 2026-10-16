@@ -18,7 +18,16 @@
     }
   ],
   "vars": {
-    // "sample" shows a banner in the UI; set to "live" once Meta sync is running.
-    "DATA_MODE": "sample"
+    "META_APP_ID": "2206600029921100",
+    "META_AD_ACCOUNT_ID": "act_2930078677198801",
+    "META_GRAPH_VERSION": "v26.0",
+    // From Zero Trust → Access → Applications → this app. Until both are set, the app
+    // refuses to connect Meta. Secrets (META_APP_SECRET, TOKEN_KEY) are set in the dashboard.
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": ""
+  },
+  "triggers": {
+    // Nightly Meta sync, 09:17 UTC (~5am New York).
+    "crons": ["17 9 * * *"]
   }
 }

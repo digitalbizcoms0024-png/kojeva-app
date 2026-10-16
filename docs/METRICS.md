@@ -5,9 +5,9 @@ Code: `shared/metrics.ts` (tested in `shared/metrics.test.ts`). Source for all o
 | Metric | Definition | When undefined |
 |---|---|---|
 | Spend | Σ spend | — |
-| Purchases | Σ Meta purchase conversions (account attribution setting) | — |
+| Purchases | Σ Meta `omni_purchase` actions (what Ads Manager's Purchases column shows), falling back to `purchase`, then `offsite_conversion.fb_pixel_purchase`. Account's default attribution setting. | — |
 | CPA | spend ÷ purchases | 0 purchases → "—" |
-| ROAS (Meta) | purchase value ÷ spend | 0 spend → "—" |
+| ROAS (Meta) | purchase value (same action type) ÷ spend | 0 spend → "—" |
 | Link CTR | link clicks ÷ impressions | 0 impressions → "—" |
 
 Totals for a post = sum over **all its copies** (every ad sharing the post ID).

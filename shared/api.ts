@@ -4,9 +4,30 @@ import type { HitStatus, Targets, Totals } from "./metrics.ts";
 export type RangeKey = "week" | "month" | "all" | "custom";
 export type SortKey = "spend" | "purchases" | "roas" | "cpa" | "ctr";
 
+export interface ConnectionStatus {
+  accessProtected: boolean;
+  userEmail: string | null;
+  missingSecrets: string[];
+  appId: string;
+  adAccountId: string;
+  redirectUri: string;
+  systemToken: boolean;
+  connection: {
+    method: string;
+    userName: string | null;
+    expiresAt: string | null;
+    connectedAt: string;
+    connectedBy: string | null;
+  } | null;
+  maxWindowDays: number;
+}
+
 export interface MetaResponse {
   dataMode: "sample" | "live";
-  lastSync: { source: string; finishedAt: string | null; status: string } | null;
+  /** Days until the Meta login expires; null when not connected or it never expires. */
+  connectionExpiresInDays: number | null;
+  accessProtected: boolean;
+  lastSync: { source: string; finishedAt: string | null; status: string; message: string | null } | null;
   latestDate: string | null;
   targets: Targets;
   pods: { id: string; code: string; name: string; color: string }[];

@@ -42,7 +42,7 @@ export async function getLatestDate(db: D1Database): Promise<string | null> {
 
 /** Post-level facts that don't depend on the selected date range. */
 const POST_BASE_SQL = `
-  SELECT p.id AS post_id, p.media_type, p.thumbnail_key,
+  SELECT p.id AS post_id, p.media_type, p.thumbnail_url,
     (SELECT x.name FROM ads x WHERE x.post_id = p.id ORDER BY x.created_time, x.id LIMIT 1) AS name,
     (SELECT COUNT(*) FROM ads x WHERE x.post_id = p.id) AS copies,
     (SELECT MAX(x.status = 'ACTIVE') FROM ads x WHERE x.post_id = p.id) AS active,
@@ -122,7 +122,7 @@ export async function loadPosts(
       postId,
       name: String(r.name ?? postId),
       mediaType: String(r.media_type),
-      thumbnailUrl: r.thumbnail_key ? `/api/thumbnails/${encodeURIComponent(String(r.thumbnail_key))}` : null,
+      thumbnailUrl: r.thumbnail_url == null ? null : String(r.thumbnail_url),
       launched,
       firstSpend: w?.firstDate ?? null,
       daysLive: w && latest ? daysBetween(w.firstDate, latest) + 1 : null,

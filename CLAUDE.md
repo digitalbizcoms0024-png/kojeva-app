@@ -16,7 +16,8 @@ for which phase we're in.
 - `npm run dev` — Vite + Worker locally at http://localhost:5173 (uses local D1 in `.wrangler/`).
 - `npm run db:reset:local` — recreate the local DB, apply migrations, load sample data.
 - `npm test` — Vitest (parser + metrics). `npm run typecheck` — both tsconfigs.
-- `npm run build` — production build. Deploy only when asked: `npm run deploy`.
+- `npm run build` — production build. Pushing to the production branch deploys via Cloudflare Workers Builds (`npm run deploy`: migrations → build → deploy).
+- `npm run build:preview` — single-file preview (in-browser SQLite + sample data) for claude.ai.
 
 Before pushing: `npm run typecheck && npm test && npm run build` must all pass.
 
@@ -31,6 +32,8 @@ Before pushing: `npm run typecheck && npm test && npm run build` must all pass.
 - **New ad-name patterns** go in `shared/naming.ts` with a test case in `shared/naming.test.ts` using the real name. See `docs/NAMING.md`.
 - Pod colors come from the validated palette in `src/index.css` (`--pod-*`). Always show the pod name next to its color. Status colors (good/warn/bad) are reserved and always paired with an icon.
 - Charts: one y-axis per chart (no dual axes), hover tooltips, thin marks. See `docs/DESIGN.md`.
+- Meta sync lives in `worker/meta/` (Graph API v26.0). Test against fake Graph responses with `worker/testing/db.ts` (sql.js D1); this sandbox can't reach graph.facebook.com.
+- Connection and sync routes require Cloudflare Access (`worker/access.ts`). Don't weaken that.
 - Read-only Meta access (`ads_read`) until the ad-management phase. Any write action needs a preview, explicit approval, defaults to paused, and an audit log entry.
-- Secrets (Meta token, Triple Whale key, ingest key) are Worker secrets (`wrangler secret put`), never in code or `wrangler.jsonc`.
-- Sample data (`scripts/gen-sample.ts`) is fake. Any screen showing it must show the "Sample data" banner (driven by `DATA_MODE`).
+- Secrets (`META_APP_SECRET`, `TOKEN_KEY`, Triple Whale key) are Worker secrets, never in code or `wrangler.jsonc`. The Meta user token is stored encrypted in D1.
+- Sample data (`scripts/gen-sample.ts`) is fake. The UI shows the "Sample data" banner until a Meta sync succeeds; the first connection wipes it. Never reseed a live database.

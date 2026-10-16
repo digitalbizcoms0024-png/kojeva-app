@@ -7,16 +7,16 @@ Each phase is one branch + PR. A phase is done when its acceptance criteria pass
 - Rankings (Ads / Pods / Editors), Dashboard, Naming Tool, read-only Needs Tagging and Settings, on **sample data**.
 - Naming parser and metric math with tests built from real ad names.
 
-## Phase 1: Live Meta data
-**Needs:** a Meta developer app (see `ARCHITECTURE.md` → Meta), the Cloudflare account, D1 database created.
-- "Connect with Facebook" (Facebook Login for Business, `ads_read`), with token stored encrypted in D1.
-  Later, an optional system-user token for a connection that never expires.
-- Nightly Cron sync: ads, ad sets, campaigns, creatives (`effective_object_story_id`), daily insights.
-  Re-pull the last 7 days every run (late attribution). Backfill 90+ days via Queues.
-- Copy thumbnails to R2 (Meta URLs expire).
-- Attribute pods on every sync with `shared/attribution.ts` (ad set name first), skipping manual assignments.
-- Banner: last successful sync; reconnect warning before the token expires.
-- Cloudflare Access in front of the app.
+## Phase 1: Live Meta data ✅ (built; first live sync pending)
+- "Connect with Facebook" (OAuth, `ads_read`) or paste a Graph Explorer token. Either is swapped for a
+  60-day token, checked against the ad account, and stored AES-GCM encrypted. An optional
+  `META_SYSTEM_TOKEN` secret (never expires) takes precedence.
+- Sync: all ads (every status) with ad set, campaign, creative and post ID; daily ad-level insights.
+  Nightly cron re-pulls the last 7 days. Backfill 90/180/365 days from Settings, in 14-day requests.
+- Thumbnails: Meta's URLs, refreshed every sync (they expire). Copying to R2 is deferred.
+- Pods attributed on every sync with `shared/attribution.ts` (ad set name first); manual values kept.
+- Sample data is wiped on first connection. Banners: sync failure, token expiry, not locked.
+- Cloudflare Access JWT verified on every API call; Meta can't be connected until Access is configured.
 
 **Done when:** totals for a date range match Ads Manager (same timezone, 7-day click / 1-day view
 attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ posts stay fast.
