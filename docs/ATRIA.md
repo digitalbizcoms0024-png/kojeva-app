@@ -36,7 +36,24 @@ people can't call them, and the token can't call anything else.
 5. **Schedule the task**: "Kojeva Hub · Atria tag sync", daily 10:07 UTC (after the 09:17 Meta sync),
    fresh session per run. Add the **Atria connector** to it in claude.ai's scheduled tasks.
 
+## Awareness level and belief (labelled by the same task)
+Atria has no awareness or belief tag, so after syncing tags the task labels each tagged creative itself
+(no transcripts, no API key): `GET /api/ingest/atria/unlabeled` lists tagged assets without labels (or
+whose tags changed), with their tags, ad names and the **belief groups already in use**;
+`POST /api/ingest/atria/labels` stores `{ assetId, awareness, belief, beliefGroup }`.
+
+- **awareness**: Schwartz's five levels: `unaware | problem | solution | product | most`.
+- **belief**: Claude's sentence, "<believes now> → <ad makes them believe>".
+- **beliefGroup**: a short shared name (reused across creatives) that Insights groups by.
+- A concept's awareness is the most common label across its creatives; its belief groups are the union.
+- Hand-set values in Needs Tagging (Awareness, Belief shifted) always win. Re-sending unchanged labels
+  writes 0 rows.
+
 ## Nightly task prompt
+The live prompt is stored on the scheduled task "Kojeva Hub · Atria tag sync". Part 1 is the tag sync
+below; part 2 runs `/unlabeled` → label → `/labels` in up to 3 rounds of 40, with the level definitions
+and belief format above, reusing existing belief group names wherever the idea is the same.
+
 ```
 Sync Atria creative tags into Kojeva Hub. Use bash + curl and the Atria connector.
 Hub: https://kojeva-hub.digitalbizcoms0024.workers.dev

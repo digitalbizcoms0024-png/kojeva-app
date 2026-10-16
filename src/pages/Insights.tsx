@@ -1,16 +1,53 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { InsightDimension, InsightRow, InsightsResponse, MetaResponse } from "../../shared/api.ts";
 import { cpa, cpaBand, type Targets } from "../../shared/metrics.ts";
-import { ANGLES, FORMATS, podById } from "../../shared/taxonomy.ts";
+import { ANGLES, AWARENESS, FORMATS, podById } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { CpaValue, Empty, PageHeader, PodSwatch, SectionTitle, Select } from "../components/ui.tsx";
 import { money, pct } from "../format.ts";
 import { ConceptsTable, hitRuleText } from "./PodsView.tsx";
 
-const LABELS: Record<InsightDimension, Record<string, string>> = { angle: ANGLES, format: FORMATS, atria_theme: {}, atria_desire: {} };
-const DIM_NAME: Record<InsightDimension, string> = { angle: "By angle", format: "By format", atria_theme: "By Atria theme", atria_desire: "By core desire" };
-const isAtria = (d: InsightDimension) => d === "atria_theme" || d === "atria_desire";
+const LABELS: Record<InsightDimension, Record<string, string>> = {
+  angle: ANGLES,
+  format: FORMATS,
+  awareness: AWARENESS,
+  atria_hook: {},
+  atria_persona: {},
+  atria_desire: {},
+  belief: {},
+  atria_theme: {},
+};
+const DIM_NAME: Record<InsightDimension, string> = {
+  angle: "By angle",
+  format: "By format",
+  awareness: "By awareness level",
+  atria_hook: "By hook type",
+  atria_persona: "By avatar",
+  atria_desire: "By mass desire",
+  belief: "By belief shifted",
+  atria_theme: "By Atria theme",
+};
+/** Where each dimension comes from, shown under its title. */
+const DIM_SOURCE: Partial<Record<InsightDimension, string>> = {
+  awareness: "Labelled by Claude from Atria's tags; hand-set values win",
+  atria_hook: "Atria · visual hook",
+  atria_persona: "Atria · persona",
+  atria_desire: "Atria · core desire",
+  belief: "Written and grouped by Claude from Atria's tags; hand-set groups win",
+  atria_theme: "Atria · theme",
+};
+/** Dimensions where a concept can carry several values, so rows overlap. */
+const isAtria = (d: InsightDimension) => d.startsWith("atria_") || d === "belief";
+const isLabel = (d: InsightDimension) => d === "awareness" || d === "belief";
+
+/** Panels, two per row, in the order the team reads them. */
+const GROUPS: InsightDimension[][] = [
+  ["angle", "format"],
+  ["awareness", "atria_hook"],
+  ["atria_persona", "atria_desire"],
+  ["belief", "atria_theme"],
+];
 
 /** Fewer decided tests than this and a hit rate is shown as a hint, not a verdict. */
 const MIN_DECIDED = 3;
@@ -18,7 +55,7 @@ const MIN_DECIDED = 3;
 const BAND_FILL = { good: "var(--good)", warn: "var(--warn-line)", bad: "var(--bad)", none: "var(--line)" } as const;
 
 function name(dimension: InsightDimension, v: string | null) {
-  if (v == null) return isAtria(dimension) ? "Not tagged by Atria" : `No ${dimension}`;
+  if (v == null) return isLabel(dimension) ? "Not labelled yet" : isAtria(dimension) ? "Not tagged by Atria" : `No ${dimension}`;
   return LABELS[dimension][v] ?? v;
 }
 
@@ -48,7 +85,12 @@ function Panel({
   return (
     <section className="min-w-0">
       <SectionTitle
-        title={DIM_NAME[dimension]}
+        title={
+          <>
+            {DIM_NAME[dimension]}
+            {DIM_SOURCE[dimension] && <span className="mt-0.5 block text-xs font-normal tracking-normal text-ink-3">{DIM_SOURCE[dimension]}</span>}
+          </>
+        }
         right={
           <span className="flex items-center gap-3">
             <span className="inline-flex items-center gap-1">
@@ -100,7 +142,7 @@ function Panel({
       )}
       {total != null && total > 0 && (
         <p className="num mt-2 text-xs text-ink-3">
-          {total} concepts · {pct((total - untagged) / total, 0)} have {dimension === "angle" ? "an angle" : "a format"} · click a row for its concepts
+          {total} concepts · {pct((total - untagged) / total, 0)} have {dimension === "angle" ? "an angle" : dimension === "format" ? "a format" : "an awareness level"} · click a row for its concepts
         </p>
       )}
       {isAtria(dimension) && rows.length > 0 && <p className="mt-2 text-xs text-ink-3">A concept appears under each of its Atria tags, so rows overlap and don't add up.</p>}
@@ -198,28 +240,25 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
           />
         </div>
 
-        <div className="grid gap-8 xl:grid-cols-2">
-          {(["angle", "format"] as const).map((d) => (
-            <Panel key={d} dimension={d} range={range} pod={pod} targets={t} open={open} onOpen={toggle(d)} />
-          ))}
-        </div>
-
-        {open && (
-          <ConceptsTable
-            key={`${open.dimension}:${open.value}:${pod}`}
-            range={range}
-            targets={t}
-            pods={meta.pods.map((p) => ({ podId: p.id, name: p.name }))}
-            filter={{ [open.dimension]: open.value ?? "none", pod }}
-            title={`${DIM_NAME[open.dimension].replace("By ", "")}: ${name(open.dimension, open.value)}`}
-          />
-        )}
-
-        <div className="grid gap-8 xl:grid-cols-2">
-          {(["atria_theme", "atria_desire"] as const).map((d) => (
-            <Panel key={d} dimension={d} range={range} pod={pod} targets={t} open={open} onOpen={toggle(d)} />
-          ))}
-        </div>
+        {GROUPS.map((group) => (
+          <Fragment key={group.join()}>
+            <div className="grid gap-8 xl:grid-cols-2">
+              {group.map((d) => (
+                <Panel key={d} dimension={d} range={range} pod={pod} targets={t} open={open} onOpen={toggle(d)} />
+              ))}
+            </div>
+            {open && group.includes(open.dimension) && (
+              <ConceptsTable
+                key={`${open.dimension}:${open.value}:${pod}`}
+                range={range}
+                targets={t}
+                pods={meta.pods.map((p) => ({ podId: p.id, name: p.name }))}
+                filter={{ [open.dimension]: open.value ?? "none", pod }}
+                title={`${DIM_NAME[open.dimension].replace("By ", "")}: ${name(open.dimension, open.value)}`}
+              />
+            )}
+          </Fragment>
+        ))}
       </div>
     </div>
   );

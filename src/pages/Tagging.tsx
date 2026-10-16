@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AssignmentPatch, MetaResponse, PodsResponse, PostSummary, RankingsResponse, SuggestionsResponse } from "../../shared/api.ts";
-import { podById, ANGLES, FORMATS, HOOKS, LANDING_PAGES } from "../../shared/taxonomy.ts";
+import { podById, ANGLES, AWARENESS, FORMATS, HOOKS, LANDING_PAGES } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
 import { Empty, PageHeader, PodChip, Segmented, Thumb } from "../components/ui.tsx";
@@ -82,6 +82,8 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
             if (patch.editorId !== undefined)
               Object.assign(a, { editorId: patch.editorId, editorName: meta.editors.find((e) => e.id === patch.editorId)?.name ?? null });
             for (const t of TAGS) if (patch[t.key] !== undefined) Object.assign(a, { [t.key]: patch[t.key], tagsSource: "manual" });
+            if (patch.awareness !== undefined) a.awareness = patch.awareness;
+            if (patch.beliefGroup !== undefined) a.beliefGroup = patch.beliefGroup;
             return { ...r, assignment: a };
           }),
         );
@@ -252,6 +254,12 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                       {t.label}
                     </th>
                   ))}
+                  <th className="py-2 pr-2 font-normal" title="Empty = Claude's label from Atria's tags">
+                    Awareness
+                  </th>
+                  <th className="py-2 pr-2 font-normal" title="Empty = Claude's grouping">
+                    Belief shifted
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -358,6 +366,36 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                           </select>
                         </td>
                       ))}
+                      <td className="py-2.5 pr-2">
+                        <select
+                          aria-label="Awareness"
+                          className={selectCls}
+                          value={a.awareness ?? ""}
+                          disabled={disabled}
+                          onChange={(e) => patchRow(r, { awareness: e.target.value || null })}
+                        >
+                          <option value="">Claude's label</option>
+                          {Object.entries(AWARENESS).map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="py-2.5 pr-2">
+                        <input
+                          aria-label="Belief shifted"
+                          className={`${selectCls} min-w-40`}
+                          defaultValue={a.beliefGroup ?? ""}
+                          placeholder="Claude's label"
+                          maxLength={60}
+                          disabled={disabled}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim() || null;
+                            if (v !== (a.beliefGroup ?? null)) void patchRow(r, { beliefGroup: v });
+                          }}
+                        />
+                      </td>
                     </tr>
                   );
                 })}

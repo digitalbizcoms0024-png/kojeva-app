@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import type { AssignmentPatch, Editor } from "../shared/api.ts";
 import type { AttributionSettings } from "../shared/attribution.ts";
 import type { Targets } from "../shared/metrics.ts";
-import { ANGLES, FORMATS, GROUPS, HOOKS, LANDING_PAGES } from "../shared/taxonomy.ts";
+import { ANGLES, FORMATS, GROUPS, HOOKS, LANDING_PAGES, AWARENESS } from "../shared/taxonomy.ts";
 import { requireAccess } from "./access.ts";
 import { randomToken } from "./crypto.ts";
 import type { AppEnv } from "./env.ts";
@@ -30,6 +30,9 @@ async function checkPatch(db: D1Database, p: AssignmentPatch): Promise<Problem> 
     const val = p[k];
     if (val != null && (typeof val !== "string" || !(val in v))) return `Unknown ${k} "${String(val)}".`;
   }
+  if (p.awareness != null && !(p.awareness in AWARENESS)) return `Unknown awareness "${String(p.awareness)}".`;
+  if (p.beliefGroup != null && (typeof p.beliefGroup !== "string" || !p.beliefGroup.trim() || p.beliefGroup.length > 60))
+    return "Belief group must be 1–60 characters.";
   if (p.editorId != null) {
     const e = await db.prepare("SELECT 1 FROM editors WHERE id = ?1").bind(p.editorId).first();
     if (!e) return "Unknown editor.";
@@ -68,6 +71,9 @@ function patchStatements(db: D1Database, postIds: string[], p: AssignmentPatch, 
       tags = true;
     }
   if (tags) sets.push("tags_source = 'manual'");
+  // Hand-set labels live in their own columns; null hands them back to Claude's labels.
+  if (p.awareness !== undefined) col("awareness = ?", p.awareness);
+  if (p.beliefGroup !== undefined) col("belief_group = ?", p.beliefGroup?.trim() ?? null);
   if (p.reset?.includes("pod")) sets.push("pod_source = NULL");
   if (p.reset?.includes("tags")) sets.push("tags_source = NULL");
   sets.push("updated_at = ?2", "updated_by = ?3");

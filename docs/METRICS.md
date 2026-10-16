@@ -95,3 +95,17 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 
 ## Date range
 - This week (last 7 synced days) · This month (last 30) · All time · Custom (any from–to). Every page follows it.
+
+## Creative Insights dimensions
+| Panel | Source |
+|---|---|
+| By angle / By format | Read from names (`shared/classify.ts`), hand-set wins |
+| By awareness level | Claude's label per creative (nightly Atria task), most common across the concept; hand-set wins |
+| By hook type | Atria `visual_hook` |
+| By avatar | Atria `persona` |
+| By mass desire | Atria `core_desire` |
+| By belief shifted | Claude's belief group per creative; hand-set wins |
+| By Atria theme | Atria `theme` |
+
+Atria and belief panels are multi-valued: a concept counts under each of its values, so rows overlap.
+All panels use the same concept test results (judging window, late hits) as the hit rate.

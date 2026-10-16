@@ -74,4 +74,13 @@ export const LANDING_PAGES: Record<string, string> = {
   HOME: "Homepage",
 };
 
+/** Eugene Schwartz's five awareness levels: how much the viewer knows when the ad starts. */
+export const AWARENESS: Record<string, string> = {
+  unaware: "Unaware",
+  problem: "Problem aware",
+  solution: "Solution aware",
+  product: "Product aware",
+  most: "Most aware",
+};
+
 export const CAMPAIGN_HINTS = ["CBO", "ABO"] as const;

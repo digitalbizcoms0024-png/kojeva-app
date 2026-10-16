@@ -6,7 +6,7 @@ import { PodSpend } from "../components/PodSpend.tsx";
 import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { addTotals, cpa, roas, twRoas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
-import { ANGLES, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
+import { ANGLES, AWARENESS, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
 import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
 
@@ -204,18 +204,13 @@ export function ConceptsTable({
   range: string;
   targets: Targets;
   pods: { podId: string | null; name: string }[];
-  filter?: {
-    angle?: string;
-    format?: string;
-    atria_theme?: string;
-    atria_desire?: string;
-    pod?: string;
-  };
+  /** Any /api/concepts filter: pod, angle, format, awareness, atria_theme, atria_desire, atria_hook, atria_persona, belief. */
+  filter?: Record<string, string | undefined>;
   title?: string;
 }) {
   const [pod, setPod] = useState(filter.pod ?? "");
   const { data, error } = useApi<ConceptsResponse>(
-    `/api/concepts?${qs({ range, pod, angle: filter.angle, format: filter.format, atria_theme: filter.atria_theme, atria_desire: filter.atria_desire })}`,
+    `/api/concepts?${qs({ ...filter, range, pod })}`,
   );
   return (
     <section>
@@ -267,6 +262,11 @@ export function ConceptsTable({
                     k.status,
                     k.angle ? (ANGLES[k.angle] ?? k.angle) : "",
                     k.format ? (FORMATS[k.format] ?? k.format) : "",
+                    k.awareness ? (AWARENESS[k.awareness] ?? k.awareness) : "",
+                    k.beliefGroups.join("; "),
+                    k.atriaHooks.join("; "),
+                    k.atriaPersonas.join("; "),
+                    k.atriaDesires.join("; "),
                     k.atriaThemes.join("; "),
                   ]),
                 )
@@ -302,15 +302,25 @@ export function ConceptsTable({
                     <div className="text-xs text-ink-3">
                       {k.adsetName} · {k.ads} {k.ads === 1 ? "ad" : "ads"} · {money(k.allTime.spendCents, { compact: true })} all-time
                     </div>
-                    {(k.angle || k.format || k.atriaThemes.length > 0) && (
+                    {(k.angle || k.format || k.awareness || k.atriaThemes.length > 0 || k.beliefGroups.length > 0) && (
                       <div className="mt-1 flex flex-wrap gap-1">
                         {k.angle && <span className="bg-accent-soft px-1.5 py-px text-[11px] text-accent-ink">{ANGLES[k.angle] ?? k.angle}</span>}
                         {k.format && <span className="bg-surface-2 px-1.5 py-px text-[11px] text-ink-2">{FORMATS[k.format] ?? k.format}</span>}
+                        {k.awareness && (
+                          <span className="bg-ink px-1.5 py-px text-[11px] text-page" title={k.awarenessSource === "manual" ? "Awareness, set by hand" : "Awareness, labelled by Claude"}>
+                            {AWARENESS[k.awareness] ?? k.awareness}
+                          </span>
+                        )}
                         {k.atriaThemes.slice(0, 3).map((t) => (
                           <span key={t} className="border border-divider px-1.5 py-px text-[11px] text-ink-3" title="Atria theme">
                             {t}
                           </span>
                         ))}
+                      </div>
+                    )}
+                    {k.beliefGroups.length > 0 && (
+                      <div className="mt-1 text-[11px] text-ink-2" title={k.beliefs.join("\n")}>
+                        Belief: <b className="text-ink">{k.beliefGroups.join(" · ")}</b>
                       </div>
                     )}
                   </td>

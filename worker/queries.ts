@@ -71,22 +71,31 @@ const POST_BASE_SQL = `
     (SELECT t.tags FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
        WHERE x.post_id = p.id AND t.status = 'tagged' ORDER BY x.created_time, x.id LIMIT 1) AS atria_tags,
     s.pod_id, s.pod_source, s.editor_id, e.name AS editor_name,
-    s.angle, s.format, s.hook, s.landing_page, s.tags_source
+    s.angle, s.format, s.hook, s.landing_page, s.tags_source, s.awareness, s.belief_group
   FROM posts p
   LEFT JOIN assignments s ON s.post_id = p.id
   LEFT JOIN editors e ON e.id = s.editor_id`;
 
 /** Themes and core desires across a concept's Atria-tagged assets (GROUP_CONCAT of JSON, \x1e-separated). */
-function atriaUnion(raw: unknown): { atriaThemes: string[]; atriaDesires: string[] } {
-  const themes = new Set<string>();
-  const desires = new Set<string>();
+function atriaUnion(raw: unknown): { atriaThemes: string[]; atriaDesires: string[]; atriaHooks: string[]; atriaPersonas: string[] } {
+  const sets = { theme: new Set<string>(), core_desire: new Set<string>(), visual_hook: new Set<string>(), persona: new Set<string>() };
   if (raw != null)
     for (const json of String(raw).split("\x1e")) {
       const t = JSON.parse(json) as Record<string, string[]>;
-      for (const v of t.theme ?? []) themes.add(v);
-      for (const v of t.core_desire ?? []) desires.add(v);
+      for (const k of Object.keys(sets) as (keyof typeof sets)[]) for (const v of t[k] ?? []) sets[k].add(v);
     }
-  return { atriaThemes: [...themes], atriaDesires: [...desires] };
+  return { atriaThemes: [...sets.theme], atriaDesires: [...sets.core_desire], atriaHooks: [...sets.visual_hook], atriaPersonas: [...sets.persona] };
+}
+
+const list = (raw: unknown) => (raw == null ? [] : String(raw).split("\x1e").filter(Boolean));
+
+/** The most common value (ties: first seen), or null. */
+function mode(values: string[]): string | null {
+  const n = new Map<string, number>();
+  for (const v of values) n.set(v, (n.get(v) ?? 0) + 1);
+  let best: string | null = null;
+  for (const [v, c] of n) if (best == null || c > n.get(best)!) best = v;
+  return best;
 }
 
 /** Every concept with its test-window totals and hit status. */
@@ -110,6 +119,16 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
               WHERE x.concept_id = c.id AND s.tags_source = 'manual' AND s.angle IS NOT NULL LIMIT 1) AS manual_angle,
            (SELECT s.format FROM ads x JOIN assignments s ON s.post_id = x.post_id
               WHERE x.concept_id = c.id AND s.tags_source = 'manual' AND s.format IS NOT NULL LIMIT 1) AS manual_format,
+           (SELECT GROUP_CONCAT(t.awareness, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
+              WHERE x.concept_id = c.id AND t.awareness IS NOT NULL) AS awareness_list,
+           (SELECT GROUP_CONCAT(t.belief_group, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
+              WHERE x.concept_id = c.id AND t.belief_group IS NOT NULL) AS belief_group_list,
+           (SELECT GROUP_CONCAT(t.belief, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
+              WHERE x.concept_id = c.id AND t.belief IS NOT NULL) AS belief_list,
+           (SELECT s.awareness FROM ads x JOIN assignments s ON s.post_id = x.post_id
+              WHERE x.concept_id = c.id AND s.awareness IS NOT NULL LIMIT 1) AS manual_awareness,
+           (SELECT s.belief_group FROM ads x JOIN assignments s ON s.post_id = x.post_id
+              WHERE x.concept_id = c.id AND s.belief_group IS NOT NULL LIMIT 1) AS manual_belief,
            MIN(CASE WHEN daily.spend_cents > 0 THEN daily.date END) AS first_date,
            MAX(CASE WHEN daily.spend_cents > 0 THEN daily.date END) AS last_date,
            MIN(CASE WHEN daily.running >= ?1 THEN daily.date END) AS qualified_on
@@ -183,6 +202,9 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
 
   return base.map(({ r, firstSpend, qualifiedOn, windowEnd, window, status }) => {
     const lateWindow = late.get(String(r.id)) ?? null;
+    const manualAwareness = r.manual_awareness == null ? null : String(r.manual_awareness);
+    const manualBelief = r.manual_belief == null ? null : String(r.manual_belief);
+    const awareness = manualAwareness ?? mode(list(r.awareness_list));
     const lastSpend = r.last_date == null ? null : String(r.last_date);
     const guess = classify({
       label: String(r.label),
@@ -196,6 +218,10 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
       format: manualFormat ?? guess.format,
       tagsSource: manualAngle || manualFormat ? ("manual" as const) : ("name" as const),
       ...atriaUnion(r.atria_tags),
+      awareness,
+      awarenessSource: manualAwareness ? ("manual" as const) : awareness ? ("claude" as const) : null,
+      beliefGroups: manualBelief ? [manualBelief] : [...new Set(list(r.belief_group_list))],
+      beliefs: [...new Set(list(r.belief_list))].slice(0, 3),
       conceptId: String(r.id),
       podId: String(r.pod_id),
       label: String(r.label),
@@ -248,6 +274,8 @@ function toAssignment(r: Row): Assignment {
     hook: s("hook"),
     landingPage: s("landing_page"),
     tagsSource: s("tags_source"),
+    awareness: s("awareness"),
+    beliefGroup: s("belief_group"),
   };
 }
 

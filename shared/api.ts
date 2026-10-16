@@ -37,6 +37,10 @@ export interface AssignmentPatch {
   format?: string | null;
   hook?: string | null;
   landingPage?: string | null;
+  /** Awareness level (AWARENESS keys); a hand-set value wins over Claude's label. */
+  awareness?: string | null;
+  /** Belief group, free text up to 60 characters; a hand-set value wins over Claude's. */
+  beliefGroup?: string | null;
   /** Hand the pod (or tags) back to automatic attribution. */
   reset?: ("pod" | "tags")[];
 }
@@ -72,6 +76,9 @@ export interface Assignment {
   hook: string | null;
   landingPage: string | null;
   tagsSource: string | null;
+  /** Hand-set awareness and belief group; null means use Claude's labels. */
+  awareness: string | null;
+  beliefGroup: string | null;
 }
 
 export interface PostSummary {
@@ -177,6 +184,15 @@ export interface ConceptResult {
   /** Union of Atria themes / core desires across the concept's ads; empty if none tagged. */
   atriaThemes: string[];
   atriaDesires: string[];
+  /** Atria visual hooks and personas (avatars) across the concept's assets. */
+  atriaHooks: string[];
+  atriaPersonas: string[];
+  /** Awareness level (AWARENESS keys): hand-set, else the most common label Claude gave its assets. */
+  awareness: string | null;
+  awarenessSource: "manual" | "claude" | null;
+  /** Belief groups it shifts (hand-set one wins), and up to 3 of Claude's belief wordings. */
+  beliefGroups: string[];
+  beliefs: string[];
 }
 
 export interface ConceptsResponse {
@@ -186,7 +202,7 @@ export interface ConceptsResponse {
 }
 
 /** Atria dimensions are multi-valued: a concept counts under each of its themes. */
-export type InsightDimension = "angle" | "format" | "atria_theme" | "atria_desire";
+export type InsightDimension = "angle" | "format" | "awareness" | "atria_hook" | "atria_persona" | "atria_desire" | "belief" | "atria_theme";
 
 export interface InsightRow {
   /** Tag key, or null for concepts with no tag on this dimension. */

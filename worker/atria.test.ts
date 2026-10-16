@@ -113,4 +113,86 @@ describe("Atria ingest", () => {
     for (const assets of [[{ assetId: "x:1", status: "tagged", tags: {} }], [{ assetId: "v:1", status: "tagged", tags: { theme: "Scarcity" } }], [{ assetId: "v:1", status: "maybe" }], []])
       expect((await call("/api/ingest/atria", service, post({ assets }))).status).toBe(400);
   });
+
+  describe("awareness and belief labels", () => {
+    const VIDEO = "v:1053927990294150";
+    const IMAGE = "i:b1679ce60dbda9e125c26e84d9f82e94";
+    const tagBoth = () =>
+      call(
+        "/api/ingest/atria",
+        service,
+        post({
+          assets: [
+            { assetId: VIDEO, status: "tagged", tags: VIDEO_TAGS },
+            { assetId: IMAGE, status: "tagged", tags: IMAGE_TAGS },
+          ],
+        }),
+      );
+    const LABELS = {
+      labels: [
+        { assetId: VIDEO, awareness: "problem", belief: "Puffiness isn't fat, it's fluid that can drain", beliefGroup: "Puffiness is fluid, not fat" },
+        { assetId: IMAGE, awareness: "most", belief: "This deal won't come back", beliefGroup: "Now is the time to buy" },
+      ],
+    };
+
+    it("lists tagged assets that need labels, with their tags and the groups already in use", async () => {
+      await tagBoth();
+      const res = (await (await call("/api/ingest/atria/unlabeled", service)).json()) as {
+        awarenessLevels: string[];
+        beliefGroups: unknown[];
+        assets: { assetId: string; tags: Record<string, string[]> }[];
+      };
+      expect(res.awarenessLevels).toEqual(["unaware", "problem", "solution", "product", "most"]);
+      expect(res.beliefGroups).toEqual([]);
+      expect(res.assets.map((a) => a.assetId).sort()).toEqual([IMAGE, VIDEO].sort());
+      expect(res.assets.find((a) => a.assetId === VIDEO)!.tags.visual_hook).toEqual(VIDEO_TAGS.visual_hook);
+      expect((await call("/api/ingest/atria/unlabeled", person)).status).toBe(403);
+    });
+
+    it("stores labels, writes nothing on an unchanged re-send, and groups Insights by them", async () => {
+      await tagBoth();
+      expect(await (await call("/api/ingest/atria/labels", service, post(LABELS))).json()).toEqual({ ok: true, received: 2, written: 2, unknown: 0 });
+      expect(await (await call("/api/ingest/atria/labels", service, post(LABELS))).json()).toMatchObject({ written: 0 });
+      const left = (await (await call("/api/ingest/atria/unlabeled", service)).json()) as { assets: unknown[]; beliefGroups: { name: string }[] };
+      expect(left.assets).toEqual([]);
+      expect(left.beliefGroups.map((g) => g.name).sort()).toEqual(["Now is the time to buy", "Puffiness is fluid, not fat"]);
+
+      const rows = async (dimension: string) =>
+        Object.fromEntries(
+          ((await (await call(`/api/insights?range=all&dimension=${dimension}`, person)).json()) as { rows: { value: string | null; concepts: number }[] }).rows.map((r) => [
+            r.value ?? "none",
+            r.concepts,
+          ]),
+        );
+      expect(await rows("awareness")).toMatchObject({ problem: 1, most: 1, none: 1 });
+      expect(await rows("belief")).toMatchObject({ "Puffiness is fluid, not fat": 1, "Now is the time to buy": 1, none: 1 });
+      expect(await rows("atria_hook")).toMatchObject({ "Transformation Start": 1, none: 2 });
+      const drill = (await (await call("/api/concepts?range=all&awareness=problem", person)).json()) as { rows: { beliefs: string[] }[] };
+      expect(drill.rows).toHaveLength(1);
+      expect(drill.rows[0]!.beliefs).toEqual(["Puffiness isn't fat, it's fluid that can drain"]);
+    });
+
+    it("lets a hand-set awareness and belief group win over Claude's", async () => {
+      await tagBoth();
+      await call("/api/ingest/atria/labels", service, post(LABELS));
+      const res = await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ awareness: "solution", beliefGroup: "Real gua sha beats fakes" }) });
+      expect(res.status).toBe(200);
+      const concepts = (await (await call("/api/concepts?range=all&awareness=solution", person)).json()) as {
+        rows: { awareness: string; awarenessSource: string; beliefGroups: string[] }[];
+      };
+      expect(concepts.rows).toEqual([expect.objectContaining({ awareness: "solution", awarenessSource: "manual", beliefGroups: ["Real gua sha beats fakes"] })]);
+      expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ awareness: "very" }) })).status).toBe(400);
+    });
+
+    it("rejects malformed labels", async () => {
+      await tagBoth();
+      for (const labels of [
+        [{ assetId: VIDEO, awareness: "kinda", belief: "x", beliefGroup: "y" }],
+        [{ assetId: VIDEO, awareness: "most", belief: "", beliefGroup: "y" }],
+        [{ assetId: "x:1", awareness: "most", belief: "x", beliefGroup: "y" }],
+        [],
+      ])
+        expect((await call("/api/ingest/atria/labels", service, post({ labels }))).status).toBe(400);
+    });
+  });
 });

@@ -305,12 +305,17 @@ app.get("/pods", async (c) => {
   return c.json(body);
 });
 
+/** A concept's values on a multi-valued dimension (it counts under each). */
+function conceptValues(k: ConceptsResponse["rows"][number], d: "atria_theme" | "atria_desire" | "atria_hook" | "atria_persona" | "belief"): string[] {
+  return { atria_theme: k.atriaThemes, atria_desire: k.atriaDesires, atria_hook: k.atriaHooks, atria_persona: k.atriaPersonas, belief: k.beliefGroups }[d];
+}
+
 /** Concept results grouped by angle or format. Same period rule as the Pods tab. */
 app.get("/insights", async (c) => {
   const db = c.env.DB;
   const range = await resolveRange(db, (k) => c.req.query(k));
   if (!range) return c.json({ error: "Invalid custom date range" }, 400);
-  const dims: InsightDimension[] = ["angle", "format", "atria_theme", "atria_desire"];
+  const dims: InsightDimension[] = ["angle", "format", "awareness", "atria_hook", "atria_persona", "atria_desire", "belief", "atria_theme"];
   const dimension = (dims.find((d) => d === c.req.query("dimension")) ?? "angle") as InsightDimension;
   const pod = c.req.query("pod");
   const concepts = (await loadConcepts(db)).filter(
@@ -318,8 +323,8 @@ app.get("/insights", async (c) => {
   );
   // Angle/format: one value per concept. Atria: every theme/desire the concept carries.
   const valuesOf = (k: (typeof concepts)[number]): (string | null)[] => {
-    if (dimension === "angle" || dimension === "format") return [k[dimension]];
-    const v = dimension === "atria_theme" ? k.atriaThemes : k.atriaDesires;
+    if (dimension === "angle" || dimension === "format" || dimension === "awareness") return [k[dimension]];
+    const v = conceptValues(k, dimension);
     return v.length ? v : [null];
   };
   const groups = new Map<string | null, typeof concepts>();
@@ -435,8 +440,8 @@ app.get("/concepts", async (c) => {
   const angle = c.req.query("angle");
   const format = c.req.query("format");
   const many = (q: string | undefined, vs: string[]) => q === undefined || (q === "none" ? vs.length === 0 : vs.includes(q));
-  const theme = c.req.query("atria_theme");
-  const desire = c.req.query("atria_desire");
+  const multi = (["atria_theme", "atria_desire", "atria_hook", "atria_persona", "belief"] as const).map((d) => [d, c.req.query(d)] as const);
+  const awareness = c.req.query("awareness");
   const rows = (await loadConcepts(db))
     .filter(
       (k) =>
@@ -445,8 +450,8 @@ app.get("/concepts", async (c) => {
         (!pod || k.podId === pod) &&
         tag(angle, k.angle) &&
         tag(format, k.format) &&
-        many(theme, k.atriaThemes) &&
-        many(desire, k.atriaDesires),
+        tag(awareness, k.awareness) &&
+        multi.every(([d, q]) => many(q, conceptValues(k, d))),
     )
     .sort((a, b) => b.firstSpend.localeCompare(a.firstSpend) || b.window.spendCents - a.window.spendCents);
   const body: ConceptsResponse = { ...range, rows };
