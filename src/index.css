@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/* Design tokens. Pod colors follow the validated categorical order (see docs/DESIGN.md);
+   status colors are reserved for good/warn/bad and never used for pods. */
+:root {
+  color-scheme: light;
+  --page: #f6f4f1;
+  --surface: #fcfcfb;
+  --surface-2: #f1eee9;
+  --ink: #1c1917;
+  --ink-2: #57534e;
+  --ink-3: #8a847c;
+  --line: #e4dfd8;
+  --accent: #9b4a6b;
+  --accent-soft: #f4e6ec;
+  --good: #0a8a0a;
+  --good-soft: #e3f4e3;
+  --warn: #9a6700;
+  --warn-soft: #fdf1d6;
+  --bad: #c43535;
+  --bad-soft: #fbe5e5;
+  --pod-harris: #2a78d6;
+  --pod-dhia: #eb6834;
+  --pod-shameer: #1baf7a;
+  --pod-ali: #eda100;
+  --chart-bar: #78716c;
+  --chart-line: #1c1917;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0f0e0d;
+    --surface: #1a1a19;
+    --surface-2: #252422;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --ink-3: #8f8d85;
+    --line: #34322f;
+    --accent: #d58aa8;
+    --accent-soft: #3a2630;
+    --good: #3cc23c;
+    --good-soft: #15301a;
+    --warn: #fab219;
+    --warn-soft: #3a2d0e;
+    --bad: #ec6b6b;
+    --bad-soft: #3d1b1b;
+    --pod-harris: #3987e5;
+    --pod-dhia: #d95926;
+    --pod-shameer: #199e70;
+    --pod-ali: #c98500;
+    --chart-bar: #a8a29e;
+    --chart-line: #f0efec;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0f0e0d;
+  --surface: #1a1a19;
+  --surface-2: #252422;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --ink-3: #8f8d85;
+  --line: #34322f;
+  --accent: #d58aa8;
+  --accent-soft: #3a2630;
+  --good: #3cc23c;
+  --good-soft: #15301a;
+  --warn: #fab219;
+  --warn-soft: #3a2d0e;
+  --bad: #ec6b6b;
+  --bad-soft: #3d1b1b;
+  --pod-harris: #3987e5;
+  --pod-dhia: #d95926;
+  --pod-shameer: #199e70;
+  --pod-ali: #c98500;
+  --chart-bar: #a8a29e;
+  --chart-line: #f0efec;
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

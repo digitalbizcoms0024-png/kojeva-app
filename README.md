@@ -1,1 +1,21 @@
-# kojeva-app
+# Kojeva Hub
+
+Internal tool that ranks Kojeva's Meta ads and scores the 4 creative pods (Harris, Dhia, Shameer, Ali) on spend, CPA, ROAS and hit rate.
+
+**Status:** Phase 0. The app runs on sample data; the live Meta sync is Phase 1. See [docs/ROADMAP.md](docs/ROADMAP.md).
+
+## Run it locally
+
+```bash
+npm install
+npm run db:reset:local   # create local DB + load sample data
+npm run dev              # http://localhost:5173
+```
+
+## Docs
+- [PRD](docs/PRD.md): what we're building and why
+- [Roadmap](docs/ROADMAP.md): phases and acceptance criteria
+- [Architecture](docs/ARCHITECTURE.md): Cloudflare setup, data model, integrations
+- [Naming](docs/NAMING.md): the ad-naming convention and how legacy names are parsed
+- [Metrics](docs/METRICS.md): exact definitions of CPA, ROAS, hit rate, etc.
+- [Design](docs/DESIGN.md): visual rules, colors, charts
