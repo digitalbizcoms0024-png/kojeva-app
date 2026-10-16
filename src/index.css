@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source "../src";
 
 /* Design tokens. Pod colors follow the validated categorical order (see docs/DESIGN.md);
    status colors are reserved for good/warn/bad and never used for pods. */

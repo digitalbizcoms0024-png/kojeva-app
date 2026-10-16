@@ -87,7 +87,7 @@ export function NamingToolPage() {
         </div>
         <button
           disabled={!name}
-          onClick={() => name && navigator.clipboard.writeText(name).then(() => setCopied(true))}
+          onClick={() => name && navigator.clipboard.writeText(name).then(() => setCopied(true), () => setCopied(false))}
           className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-surface disabled:opacity-40"
         >
           {copied ? "Copied ✓" : "Copy"}

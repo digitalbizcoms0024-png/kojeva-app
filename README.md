@@ -12,6 +12,12 @@ npm run db:reset:local   # create local DB + load sample data
 npm run dev              # http://localhost:5173
 ```
 
+## Preview without a server
+
+`npm run build:preview` writes `dist-demo/kojeva-hub-preview.html`: one self-contained page that runs
+the real API code in the browser against SQLite (sql.js) loaded with the sample data. That's what the
+claude.ai preview link is built from.
+
 ## Docs
 - [PRD](docs/PRD.md): what we're building and why
 - [Roadmap](docs/ROADMAP.md): phases and acceptance criteria
