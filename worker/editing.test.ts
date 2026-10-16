@@ -113,8 +113,17 @@ describe("settings", () => {
     expect(meta.canEdit).toBe(true);
   });
 
+  it("saves and clears the amber CPA limit", async () => {
+    expect((await call("/api/settings", json("PUT", { targets: { cpaWarnMax: 18 } }))).status).toBe(200);
+    let meta = (await (await call("/api/meta")).json()) as { targets: Record<string, unknown> };
+    expect(meta.targets.cpaWarnMax).toBe(18);
+    expect((await call("/api/settings", json("PUT", { targets: { cpaWarnMax: null } }))).status).toBe(200);
+    meta = (await (await call("/api/meta")).json()) as { targets: Record<string, unknown> };
+    expect(meta.targets.cpaWarnMax).toBeNull();
+  });
+
   it("validates targets", async () => {
-    for (const targets of [{ targetCpa: -1 }, { testWindowDays: 2.5 }, { hitRule: "sometimes" }])
+    for (const targets of [{ targetCpa: -1 }, { testWindowDays: 2.5 }, { hitRule: "sometimes" }, { targetCpa: 14, cpaWarnMax: 12 }])
       expect((await call("/api/settings", json("PUT", { targets }))).status).toBe(400);
   });
 

@@ -80,18 +80,19 @@ export function DailyCharts({ daily, targetCpa }: { daily: Day[]; targetCpa: num
 
   return (
     <div className="relative">
-      <div className="text-xs font-medium text-ink-2">Daily spend</div>
+      <div className="kicker">Daily spend · Meta</div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Daily spend bar chart">
         {axis(spendMax, (v) => `$${v >= 1000 ? `${(v / 1000).toFixed(v % 1000 ? 1 : 0)}K` : v.toFixed(0)}`)}
         {daily.map((d, i) => {
           const y = ySpend(d.spendCents / 100);
-          const h = PAD.t + innerH - y;
-          const r = Math.min(4, barW / 2, h);
-          // Rounded data-end, square at the baseline.
+          // Square bars, per the design system (no rounded corners).
           return (
-            <path
+            <rect
               key={d.date}
-              d={`M${x(i) - barW / 2},${PAD.t + innerH}V${y + r}q0,-${r} ${r},-${r}H${x(i) + barW / 2 - r}q${r},0 ${r},${r}V${PAD.t + innerH}Z`}
+              x={x(i) - barW / 2}
+              y={y}
+              width={barW}
+              height={PAD.t + innerH - y}
               fill="var(--chart-bar)"
               opacity={hover == null || hover === i ? 1 : 0.45}
             />
@@ -99,12 +100,15 @@ export function DailyCharts({ daily, targetCpa }: { daily: Day[]; targetCpa: num
         })}
       </svg>
 
-      <div className="mt-3 text-xs font-medium text-ink-2">
-        Daily CPA <span className="font-normal text-ink-3">· dashed line = ${targetCpa} target</span>
+      <div className="kicker mt-4">
+        Daily CPA · Meta <span className="normal-case">· dashed line = ${targetCpa} target</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" onMouseMove={onMove} onMouseLeave={() => setHover(null)} role="img" aria-label="Daily CPA line chart">
         {axis(cpaMax, (v) => `$${v.toFixed(0)}`)}
-        <line x1={PAD.l} x2={W - PAD.r} y1={yCpa(targetCpa)} y2={yCpa(targetCpa)} stroke="var(--good)" strokeWidth={1.5} strokeDasharray="4 4" />
+        <line x1={PAD.l} x2={W - PAD.r} y1={yCpa(targetCpa)} y2={yCpa(targetCpa)} stroke="var(--accent)" strokeWidth={1.5} strokeDasharray="4 4" />
+        <text x={W - PAD.r} y={yCpa(targetCpa) - 4} textAnchor="end" fontSize={10} fontWeight={700} fill="var(--accent-ink)">
+          Target ${targetCpa}
+        </text>
         {segments.map((d) => (
           <path key={d} d={d} fill="none" stroke="var(--chart-line)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
         ))}
@@ -115,7 +119,7 @@ export function DailyCharts({ daily, targetCpa }: { daily: Day[]; targetCpa: num
 
       {hovered && (
         <div
-          className="pointer-events-none absolute top-6 z-10 rounded-lg border border-line bg-surface px-3 py-2 text-xs shadow-lg"
+          className="pointer-events-none absolute top-6 z-10 border border-divider bg-page px-3 py-2 text-xs"
           style={{ left: `${(x(hover!) / W) * 100}%`, transform: `translateX(${hover! > n / 2 ? "-105%" : "5%"})` }}
         >
           <div className="font-medium text-ink">{shortDate(hovered.date)}</div>

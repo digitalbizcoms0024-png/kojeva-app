@@ -13,7 +13,7 @@ Code: `shared/metrics.ts` (tested in `shared/metrics.test.ts`). Source for all o
 Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 
 ## Color bands
-- CPA: ✓ ≤ $14 · ! ≤ $17.50 (125%) · ✕ above
+- CPA: ✓ ≤ $14 · ! up to the amber limit (Settings → "Amber up to"; empty = 125% of target, $17.50) · ✕ above
 - ROAS: ✓ ≥ 1.7 · ! ≥ 1.36 (80%) · ✕ below
 
 ## Hit rate
@@ -40,3 +40,15 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - Hit rule: both targets, or either? (default: both)
 - Minimum test spend (default: $100)
 - Should the test window only count the testing campaign (ABO)? (default: all copies)
+
+## Dashboard alerts (`worker/alerts.ts`)
+- **Fatigue** (✕): a post with ≥ $150 spend in the last 3 synced days whose CPA there is above the amber limit and ≥ 30% above
+  its CPA in the 7 days before (which needs ≥ 3 purchases). Also flagged: no purchases in 3 days on ≥ 2× the amber limit in spend.
+- **Hit** (✓): a concept whose judging window closed in the last 7 days as a hit.
+- **Needs a pod** (!): posts with spend in the last 7 days that no pod or the agency is credited with.
+- Computed on read from stored data; no D1 writes.
+
+## Pod suggestions (Needs Tagging)
+- **High:** the same video/image (`ads.asset_id`) runs in a post credited to exactly one pod.
+- **Medium:** the ad name contains exactly one roster editor's name (as a whole word), and that editor has a pod.
+- Never applied automatically; accepting one sets the pod by hand (`manual`).

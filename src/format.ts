@@ -3,6 +3,7 @@ const DASH = "—";
 export function money(cents: number | null | undefined, opts: { compact?: boolean } = {}): string {
   if (cents == null) return DASH;
   const dollars = cents / 100;
+  if (opts.compact && Math.abs(dollars) >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(2)}M`;
   if (opts.compact && Math.abs(dollars) >= 1000) {
     const k = dollars / 1000;
     return `$${k >= 100 ? k.toFixed(0) : k.toFixed(1)}K`;

@@ -39,6 +39,11 @@ describe("bands", () => {
     expect(cpaBand(17.5, 14)).toBe("warn");
     expect(cpaBand(17.51, 14)).toBe("bad");
     expect(cpaBand(null, 14)).toBe("none");
+    // A configured amber limit replaces the 25% default.
+    expect(cpaBand(17.9, 14, 18)).toBe("warn");
+    expect(cpaBand(18.01, 14, 18)).toBe("bad");
+    // An amber limit at or below target is ignored.
+    expect(cpaBand(17.5, 14, 12)).toBe("warn");
   });
 
   it("colours ROAS against the 1.7 target", () => {

@@ -1,84 +1,100 @@
 @import "tailwindcss";
 @source "../src";
 
-/* Design tokens. Pod colors follow the validated categorical order (see docs/DESIGN.md);
+/* Design tokens, following the "Modernist" design (docs/DESIGN.md): a light ground, one red
+   accent, square corners and strong 2px dividers. Pod colors are a validated categorical set;
    status colors are reserved for good/warn/bad and never used for pods. */
 :root {
   color-scheme: light;
-  --page: #f6f4f1;
-  --surface: #fcfcfb;
-  --surface-2: #f1eee9;
-  --ink: #1c1917;
-  --ink-2: #57534e;
-  --ink-3: #8a847c;
-  --line: #e4dfd8;
-  --accent: #9b4a6b;
-  --accent-soft: #f4e6ec;
-  --good: #0a8a0a;
-  --good-soft: #e3f4e3;
-  --warn: #9a6700;
-  --warn-soft: #fdf1d6;
-  --bad: #c43535;
-  --bad-soft: #fbe5e5;
+  --page: #f3f2f2;
+  --surface: #eae9e9;
+  --surface-2: #dfdcdc;
+  --ink: #201e1d;
+  --ink-2: #4f4c4b;
+  --ink-3: #6b6767;
+  --line: #d7d3d3;
+  --divider: color-mix(in srgb, #201e1d 40%, transparent);
+  --accent: #ec3013;
+  --accent-strong: #dd2b0f;
+  --accent-ink: #ae1800;
+  --accent-soft: #ffe0d9;
+  --on-accent: #ffffff;
+  --good: #1f7a3a;
+  --good-soft: #dcefe1;
+  --warn: #9a5c00;
+  --warn-soft: #f1e2c2;
+  --warn-line: #c9850a;
+  --bad: #ae1800;
+  --bad-soft: #f8dcd6;
   --pod-harris: #2a78d6;
-  --pod-dhia: #eb6834;
-  --pod-shameer: #1baf7a;
-  --pod-ali: #eda100;
-  --pod-agency: #8a847c;
-  --chart-bar: #78716c;
-  --chart-line: #1c1917;
+  --pod-dhia: #854494;
+  --pod-shameer: #25afd2;
+  --pod-ali: #d6809c;
+  --pod-agency: #7d7979;
+  --chart-bar: #bab6b6;
+  --chart-line: #201e1d;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --page: #0f0e0d;
-    --surface: #1a1a19;
-    --surface-2: #252422;
-    --ink: #f0efec;
-    --ink-2: #c3c2b7;
-    --ink-3: #8f8d85;
-    --line: #34322f;
-    --accent: #d58aa8;
-    --accent-soft: #3a2630;
-    --good: #3cc23c;
-    --good-soft: #15301a;
-    --warn: #fab219;
-    --warn-soft: #3a2d0e;
-    --bad: #ec6b6b;
-    --bad-soft: #3d1b1b;
+    --page: #161514;
+    --surface: #211f1e;
+    --surface-2: #2c2a29;
+    --ink: #efedec;
+    --ink-2: #c9c6c5;
+    --ink-3: #9b9797;
+    --line: #3c3939;
+    --divider: color-mix(in srgb, #efedec 30%, transparent);
+    --accent: #ff563c;
+    --accent-strong: #ff9783;
+    --accent-ink: #ff9783;
+    --accent-soft: #3a1610;
+    --on-accent: #161514;
+    --good: #4cc27a;
+    --good-soft: #16301f;
+    --warn: #f0b03a;
+    --warn-soft: #3a2d10;
+    --warn-line: #f0b03a;
+    --bad: #ff7a5c;
+    --bad-soft: #3d1b14;
     --pod-harris: #3987e5;
-    --pod-dhia: #d95926;
-    --pod-shameer: #199e70;
-    --pod-ali: #c98500;
-    --pod-agency: #8f8d85;
-    --chart-bar: #a8a29e;
-    --chart-line: #f0efec;
+    --pod-dhia: #8632b6;
+    --pod-shameer: #028a9b;
+    --pod-ali: #a13958;
+    --pod-agency: #9b9797;
+    --chart-bar: #605d5d;
+    --chart-line: #efedec;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #0f0e0d;
-  --surface: #1a1a19;
-  --surface-2: #252422;
-  --ink: #f0efec;
-  --ink-2: #c3c2b7;
-  --ink-3: #8f8d85;
-  --line: #34322f;
-  --accent: #d58aa8;
-  --accent-soft: #3a2630;
-  --good: #3cc23c;
-  --good-soft: #15301a;
-  --warn: #fab219;
-  --warn-soft: #3a2d0e;
-  --bad: #ec6b6b;
-  --bad-soft: #3d1b1b;
+  --page: #161514;
+  --surface: #211f1e;
+  --surface-2: #2c2a29;
+  --ink: #efedec;
+  --ink-2: #c9c6c5;
+  --ink-3: #9b9797;
+  --line: #3c3939;
+  --divider: color-mix(in srgb, #efedec 30%, transparent);
+  --accent: #ff563c;
+  --accent-strong: #ff9783;
+  --accent-ink: #ff9783;
+  --accent-soft: #3a1610;
+  --on-accent: #161514;
+  --good: #4cc27a;
+  --good-soft: #16301f;
+  --warn: #f0b03a;
+  --warn-soft: #3a2d10;
+  --warn-line: #f0b03a;
+  --bad: #ff7a5c;
+  --bad-soft: #3d1b14;
   --pod-harris: #3987e5;
-  --pod-dhia: #d95926;
-  --pod-shameer: #199e70;
-  --pod-ali: #c98500;
-  --pod-agency: #8f8d85;
-  --chart-bar: #a8a29e;
-  --chart-line: #f0efec;
+  --pod-dhia: #8632b6;
+  --pod-shameer: #028a9b;
+  --pod-ali: #a13958;
+  --pod-agency: #9b9797;
+  --chart-bar: #605d5d;
+  --chart-line: #efedec;
 }
 
 @theme inline {
@@ -89,26 +105,133 @@
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
   --color-line: var(--line);
+  --color-divider: var(--divider);
   --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-ink: var(--accent-ink);
   --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
   --color-good: var(--good);
   --color-good-soft: var(--good-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
+  --color-warn-line: var(--warn-line);
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  /* No rounded corners anywhere (dots and swatches are square too). */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
 }
 
 body {
+  margin: 0;
   background: var(--page);
   color: var(--ink);
   font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }
 
+::selection {
+  background: var(--accent-soft);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+
 .num {
-  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+/* Component classes live in a layer so Tailwind utilities (md:hidden, w-full…) can override them. */
+@layer components {
+  /* Small uppercase label above a value or column ("SPEND", "HIT RATE"). */
+  .kicker {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* Buttons: labels sit flush left, corners are square. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--on-accent);
+  }
+  .btn-primary:not(:disabled):hover {
+    background: var(--accent-strong);
+  }
+  .btn-secondary {
+    background: transparent;
+    color: var(--ink);
+    border-color: var(--ink);
+  }
+  .btn-secondary:not(:disabled):hover {
+    background: var(--surface);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--accent-ink);
+    padding-inline: 0;
+  }
+  .btn-ghost:not(:disabled):hover {
+    color: var(--accent);
+  }
+
+  /* Form controls. */
+  .field {
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--divider);
+    padding: 7px 10px;
+    font: inherit;
+    font-size: 14px;
+  }
+  .field:disabled {
+    opacity: 0.45;
+  }
+  .field::placeholder {
+    color: var(--ink-3);
+  }
+
+  a.link {
+    color: var(--accent-ink);
+    font-weight: 700;
+  }
+  a.link:hover {
+    color: var(--accent);
+  }
 }

@@ -47,6 +47,11 @@ attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ 
 - ⏸ Parked (remind the user): "Why it works" AI notes per winning concept, citing its numbers. Needs a
   Claude API key as a Worker secret; a few dollars a month.
 
+## Design pass ✅
+- New look from Claude Design (see `docs/DESIGN.md`), separate Pods page, dashboard alerts (fatigue, new hits,
+  untagged spend), suggested pods with Accept in Needs Tagging, configurable amber CPA band, recently
+  generated names in the Naming Tool (per browser).
+
 ## Phase 4: Triple Whale + analytics
 - Triple Whale attributed revenue/ROAS per ad as separate columns.
 - Fatigue signals (frequency ↑, CTR ↓, CPA drift), trend charts, CSV export.

@@ -3,13 +3,13 @@
 
 export const PODS = [
   { id: "harris", code: "HAR", name: "Harris", color: "#2a78d6" },
-  { id: "dhia", code: "DHI", name: "Dhia", color: "#eb6834" },
-  { id: "shameer", code: "SHA", name: "Shameer", color: "#1baf7a" },
-  { id: "ali", code: "ALI", name: "Ali", color: "#eda100" },
+  { id: "dhia", code: "DHI", name: "Dhia", color: "#854494" },
+  { id: "shameer", code: "SHA", name: "Shameer", color: "#25afd2" },
+  { id: "ali", code: "ALI", name: "Ali", color: "#d6809c" },
 ] as const;
 
 /** The agency that produced ads before the in-house pods started. Not a pod, but ranked beside them. */
-export const AGENCY = { id: "agency", code: "AGY", name: "Agency", color: "#8a847c" } as const;
+export const AGENCY = { id: "agency", code: "AGY", name: "Agency", color: "#7d7979" } as const;
 
 /** Everyone ads can be credited to: the 4 pods, then the agency. */
 export const GROUPS = [...PODS, AGENCY] as const;

@@ -53,6 +53,10 @@ export interface MetaResponse {
   editors: Editor[];
   /** Whether the signed-in viewer can make changes (Cloudflare Access is on). */
   canEdit: boolean;
+  /** Who is signed in through Cloudflare Access, if anyone. */
+  viewer: string | null;
+  /** Posts with spend in the last 30 days that no pod or the agency is credited with. */
+  needsTagging: number;
 }
 
 export interface Assignment {
@@ -121,6 +125,8 @@ export interface PodRow {
   testing: number;
   hitRate: number | null;
   editors: { editorId: string | null; name: string; totals: Totals; concepts: number }[];
+  /** Daily spend in cents for the last 7 synced days, oldest first (0 on days without spend). */
+  spark: number[];
 }
 
 export interface ConceptResult {
@@ -181,4 +187,32 @@ export interface PodsResponse {
   from: string;
   to: string;
   rows: PodRow[];
+}
+
+/** Something on the dashboard worth a look. Tone follows the status colors (always shown with an icon). */
+export interface Alert {
+  id: string;
+  tone: "bad" | "warn" | "good";
+  title: string;
+  detail: string;
+  /** In-app link, e.g. "#/rankings?post=…" or "#/tagging". */
+  href: string;
+  action: string;
+}
+
+export interface AlertsResponse {
+  asOf: string | null;
+  alerts: Alert[];
+}
+
+/** A likely pod for an ad nobody is credited with, for a person to accept or ignore. */
+export interface PodSuggestion {
+  podId: string;
+  confidence: "high" | "medium";
+  reason: string;
+}
+
+export interface SuggestionsResponse {
+  /** Keyed by post ID; posts without a suggestion are left out. */
+  suggestions: Record<string, PodSuggestion>;
 }

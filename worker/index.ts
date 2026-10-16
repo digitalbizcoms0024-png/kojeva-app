@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type {
+  AlertsResponse,
   ConceptsResponse,
   Editor,
   InsightDimension,
@@ -12,11 +13,14 @@ import type {
   PostDetail,
   RankingsResponse,
   SortKey,
+  SuggestionsResponse,
 } from "../shared/api.ts";
 import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, roas, type Totals } from "../shared/metrics.ts";
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
+import { GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware } from "./access.ts";
 import type { AppEnv, Env } from "./env.ts";
+import { loadAlerts, loadSuggestions } from "./alerts.ts";
 import { atria } from "./atria.ts";
 import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
@@ -31,6 +35,11 @@ app.route("/sync", sync);
 app.route("/ingest/atria", atria);
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+const groupOrder = (id: string) => {
+  const i = GROUPS.findIndex((g) => g.id === id);
+  return i < 0 ? GROUPS.length : i;
+};
 
 /** Resolves ?range=week|month|all|custom&from=&to= against the latest synced day. */
 async function resolveRange(db: D1Database, q: (k: string) => string | undefined) {
@@ -61,7 +70,7 @@ const SORTERS: Record<SortKey, (t: Totals) => number | null> = {
 
 app.get("/meta", async (c) => {
   const db = c.env.DB;
-  const [targets, latestDate, lastRun, pods, live, conn, attr, detected, editors] = await Promise.all([
+  const [targets, latestDate, lastRun, pods, live, conn, attr, detected, editors, untagged] = await Promise.all([
     getTargets(db),
     getLatestDate(db),
     db
@@ -75,6 +84,14 @@ app.get("/meta", async (c) => {
     db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'pods_start_detected'").first<{ value: string }>(),
     db.prepare("SELECT id, name, pod_id AS podId FROM editors ORDER BY name").all<Editor>(),
+    db
+      .prepare(
+        `SELECT COUNT(DISTINCT a.post_id) AS n
+         FROM ad_daily d JOIN ads a ON a.id = d.ad_id
+         LEFT JOIN assignments s ON s.post_id = a.post_id
+         WHERE d.date >= date((SELECT MAX(date) FROM ad_daily), '-29 days') AND d.spend_cents > 0 AND s.pod_id IS NULL`,
+      )
+      .first<{ n: number }>(),
   ]);
   const attribution = { ...DEFAULT_ATTRIBUTION, ...(attr ? (JSON.parse(attr.value) as Partial<AttributionSettings>) : {}) };
   const body: MetaResponse = {
@@ -87,7 +104,8 @@ app.get("/meta", async (c) => {
       : null,
     latestDate,
     targets,
-    pods: pods.results,
+    // Always Harris, Dhia, Shameer, Ali, then the agency.
+    pods: [...pods.results].sort((a, b) => groupOrder(a.id) - groupOrder(b.id)),
     attribution: {
       agencyPrefixes: attribution.agencyPrefixes,
       podsStartDate: attribution.podsStartDate ?? (detected ? (JSON.parse(detected.value) as string | null) : null),
@@ -95,7 +113,21 @@ app.get("/meta", async (c) => {
     },
     editors: editors.results,
     canEdit: accessConfigured(c.env),
+    viewer: c.get("userEmail"),
+    needsTagging: Number(untagged?.n ?? 0),
   };
+  return c.json(body);
+});
+
+app.get("/alerts", async (c) => {
+  const body: AlertsResponse = await loadAlerts(c.env.DB);
+  return c.json(body);
+});
+
+/** Likely pods for unassigned posts. Never applied automatically. */
+app.get("/suggestions", async (c) => {
+  const editors = await c.env.DB.prepare("SELECT id, name, pod_id AS podId FROM editors ORDER BY name").all<Editor>();
+  const body: SuggestionsResponse = { suggestions: await loadSuggestions(c.env.DB, editors.results) };
   return c.json(body);
 });
 
@@ -112,6 +144,10 @@ app.get("/rankings", async (c) => {
   let items = (await loadPosts(c.env.DB, range.from, range.to)).filter((p) => p.totals.spendCents > 0);
   if (pod === "unassigned") items = items.filter((p) => !p.assignment.podId);
   else if (pod !== "all") items = items.filter((p) => p.assignment.podId === pod);
+  const format = c.req.query("format");
+  const angle = c.req.query("angle");
+  if (format) items = items.filter((p) => p.assignment.format === format);
+  if (angle) items = items.filter((p) => p.assignment.angle === angle);
   if (status === "active") items = items.filter((p) => p.active);
   if (status === "paused") items = items.filter((p) => !p.active);
   if (search)
@@ -194,13 +230,24 @@ app.get("/pods", async (c) => {
   const db = c.env.DB;
   const range = await resolveRange(db, (k) => c.req.query(k));
   if (!range) return c.json({ error: "Invalid custom date range" }, 400);
-  const [posts, concepts, pods] = await Promise.all([
+  const latest = await getLatestDate(db);
+  const sparkDays = latest ? Array.from({ length: 7 }, (_, i) => shiftDay(latest, i - 6)) : [];
+  const [posts, concepts, pods, daily] = await Promise.all([
     loadPosts(db, range.from, range.to),
     loadConcepts(db),
     db
       .prepare("SELECT id, name, color, kind FROM pods ORDER BY kind DESC, name")
       .all<{ id: string; name: string; color: string; kind: "pod" | "agency" }>(),
+    db
+      .prepare(
+        `SELECT s.pod_id, d.date, SUM(d.spend_cents) AS spend_cents
+         FROM ad_daily d JOIN ads a ON a.id = d.ad_id LEFT JOIN assignments s ON s.post_id = a.post_id
+         WHERE d.date >= ?1 GROUP BY s.pod_id, d.date`,
+      )
+      .bind(sparkDays[0] ?? "9999-12-31")
+      .all<{ pod_id: string | null; date: string; spend_cents: number }>(),
   ]);
+  const spendOn = new Map(daily.results.map((r) => [`${r.pod_id ?? ""}|${r.date}`, Number(r.spend_cents)]));
 
   const groups: { podId: string | null; name: string; color: string | null; kind: PodRow["kind"] }[] = [
     ...pods.results.map((p) => ({ podId: p.id, name: p.name, color: p.color, kind: p.kind })),
@@ -236,6 +283,7 @@ app.get("/pods", async (c) => {
       testing: statuses.filter((s) => s === "testing").length,
       hitRate: hitRate(statuses),
       editors: [...editors.values()].sort((a, b) => b.totals.spendCents - a.totals.spendCents),
+      spark: sparkDays.map((d) => spendOn.get(`${g.podId ?? ""}|${d}`) ?? 0),
     };
   });
 

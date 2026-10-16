@@ -47,6 +47,8 @@ export interface Targets {
   testWindowDays: number;
   minTestSpend: number;
   hitRule: "both" | "either";
+  /** CPA up to this shows amber ("near target"); null means 25% over target. */
+  cpaWarnMax: number | null;
 }
 
 export const DEFAULT_TARGETS: Targets = {
@@ -55,15 +57,21 @@ export const DEFAULT_TARGETS: Targets = {
   testWindowDays: 3,
   minTestSpend: 100,
   hitRule: "both",
+  cpaWarnMax: null,
 };
 
 export type Band = "good" | "warn" | "bad" | "none";
 
-/** good at or under target, warn up to 25% over, bad beyond. */
-export function cpaBand(value: number | null, target: number): Band {
+/** Top of the amber CPA band: the configured value, or 25% over target. */
+export function cpaWarnLimit(target: number, warnMax?: number | null): number {
+  return warnMax != null && warnMax > target ? warnMax : target * 1.25;
+}
+
+/** good at or under target, warn up to the amber limit (default 25% over), bad beyond. */
+export function cpaBand(value: number | null, target: number, warnMax?: number | null): Band {
   if (value == null) return "none";
   if (value <= target) return "good";
-  return value <= target * 1.25 ? "warn" : "bad";
+  return value <= cpaWarnLimit(target, warnMax) ? "warn" : "bad";
 }
 
 /** good at or over target, warn down to 80% of target, bad below. */
