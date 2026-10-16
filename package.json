@@ -10,10 +10,10 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "test": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply kojeva-hub --local",
-    "db:seed:local": "node scripts/gen-sample.ts > seed/sample.sql && wrangler d1 execute kojeva-hub --local --file seed/sample.sql",
+    "db:seed:local": "node --experimental-strip-types scripts/gen-sample.ts > seed/sample.sql && wrangler d1 execute kojeva-hub --local --file seed/sample.sql",
     "db:reset:local": "rm -rf .wrangler/state/v3/d1 && npm run db:migrate:local && npm run db:seed:local",
-    "build:preview": "node scripts/gen-sample.ts > seed/sample.sql && vite build -c vite.demo.config.ts && node scripts/inline-demo.ts",
-    "deploy:sample": "npm run build && wrangler d1 migrations apply kojeva-hub --remote && node scripts/gen-sample.ts > seed/sample.sql && wrangler d1 execute kojeva-hub --remote --file seed/sample.sql --yes && wrangler deploy"
+    "build:preview": "node --experimental-strip-types scripts/gen-sample.ts > seed/sample.sql && vite build -c vite.demo.config.ts && node --experimental-strip-types scripts/inline-demo.ts",
+    "deploy:sample": "wrangler d1 migrations apply kojeva-hub --remote && node --experimental-strip-types scripts/gen-sample.ts > seed/sample.sql && wrangler d1 execute kojeva-hub --remote --file seed/sample.sql --yes && npm run build && wrangler deploy"
   },
   "dependencies": {
     "hono": "^4.13.13",
