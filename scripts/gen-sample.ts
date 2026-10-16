@@ -1,6 +1,7 @@
 // Generates deterministic SAMPLE data (not real Kojeva numbers) as SQL on stdout.
 // Usage: node scripts/gen-sample.ts > seed/sample.sql
 import { attributePod, type AttributionAd } from "../shared/attribution.ts";
+import { buildConcepts, type ConceptAd } from "../shared/concepts.ts";
 import { parseAdName } from "../shared/naming.ts";
 import { GROUPS, PODS } from "../shared/taxonomy.ts";
 
@@ -59,6 +60,8 @@ const out: string[] = [
 for (const e of editors)
   out.push(`INSERT INTO editors (id, name, pod_id) VALUES (${q(e.id)}, ${q(e.name)}, ${q(e.pod)});`);
 
+const conceptAds: ConceptAd[] = [];
+
 interface PostPlan { id: string; name: string; launch: number; life: number; cpa: number; scale: number }
 const posts: PostPlan[] = [];
 
@@ -100,13 +103,15 @@ for (let i = 0; i < 64; i++) {
     const adId = `${plan.id.replace("post", "ad")}_${c}`;
     const adName = c === 0 ? name : `${name} - Copy${c > 1 ? ` ${c}` : ""}`;
     const adsetName = c === 0 ? testAdSet : `${camp.name.split(" |")[0]} | Scale ${c}`;
+    const adsetId = `as_${adsetName.replace(/[^A-Za-z0-9]+/g, "_")}`;
+    conceptAds.push({ id: `${plan.id.replace("post", "ad")}_${c}`, name: c === 0 ? name : `${name} - Copy`, adsetId, adsetName });
     const createdDay = plan.launch - (c === 0 ? 0 : Math.min(plan.launch, Math.floor(between(3, 8))));
     adsForAttribution.push({ name: adName, adsetName, createdTime: isoDay(createdDay) });
     const alive = plan.launch - plan.life;
     const status = alive <= 0 && (winner || rand() < 0.5) ? "ACTIVE" : "PAUSED";
     out.push(
       `INSERT INTO ads (id, post_id, name, campaign_id, campaign_name, adset_id, adset_name, status, created_time) VALUES (` +
-        [q(adId), q(plan.id), q(adName), q(camp.id), q(camp.name), q(`${camp.id}_as${c}`), q(adsetName), q(status), q(isoDay(createdDay))].join(", ") + ");",
+        [q(adId), q(plan.id), q(adName), q(camp.id), q(camp.name), q(adsetId), q(adsetName), q(status), q(isoDay(createdDay))].join(", ") + ");",
     );
 
     const rows: string[] = [];
@@ -139,6 +144,13 @@ for (let i = 0; i < 64; i++) {
          q(parsed.angle), q(parsed.format), q(parsed.hook), q(parsed.landingPage), q("name"), q(isoDay(0)), q("sample")].join(", ") + ");",
     );
   }
+}
+
+for (const c of buildConcepts(conceptAds)) {
+  out.push(
+    `INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES (${[c.id, c.adsetId, c.adsetName, c.label].map(q).join(", ")}, ${q(GROUPS.find((g) => g.code === c.podCode)!.id)});`,
+    `UPDATE ads SET concept_id = ${q(c.id)} WHERE id IN (${c.adIds.map(q).join(", ")});`,
+  );
 }
 
 const now = new Date().toISOString();

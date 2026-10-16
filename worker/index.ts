@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type {
+  ConceptsResponse,
   CopyRow,
   MetaResponse,
   PodRow,
@@ -14,7 +15,7 @@ import { accessConfigured, accessMiddleware } from "./access.ts";
 import type { AppEnv, Env } from "./env.ts";
 import { connection, sync } from "./meta/routes.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
-import { getLatestDate, getTargets, loadPosts, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
+import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 
 const app = new Hono<AppEnv>().basePath("/api");
 
@@ -183,8 +184,9 @@ app.get("/pods", async (c) => {
   const db = c.env.DB;
   const range = await resolveRange(db, (k) => c.req.query(k));
   if (!range) return c.json({ error: "Invalid custom date range" }, 400);
-  const [posts, pods] = await Promise.all([
+  const [posts, concepts, pods] = await Promise.all([
     loadPosts(db, range.from, range.to),
+    loadConcepts(db),
     db
       .prepare("SELECT id, name, color, kind FROM pods ORDER BY kind DESC, name")
       .all<{ id: string; name: string; color: string; kind: "pod" | "agency" }>(),
@@ -195,11 +197,13 @@ app.get("/pods", async (c) => {
     { podId: null, name: "Unassigned", color: null, kind: "unassigned" },
   ];
 
+  // Concepts count toward the period in which they first spent.
+  const inRange = concepts.filter((k) => k.firstSpend >= range.from && k.firstSpend <= range.to);
+
   const rows: PodRow[] = groups.map((g) => {
     const mine = posts.filter((p) => p.assignment.podId === g.podId);
-    // Concepts count toward a period when their first spend falls inside it.
     const launched = mine.filter((p) => p.firstSpend && p.firstSpend >= range.from && p.firstSpend <= range.to);
-    const statuses = launched.map((p) => p.hit).filter((s) => s != null);
+    const statuses = inRange.filter((k) => k.podId === g.podId).map((k) => k.status);
     const editors = new Map<string, PodRow["editors"][number]>();
     for (const p of mine) {
       const key = p.assignment.editorId ?? "";
@@ -216,7 +220,7 @@ app.get("/pods", async (c) => {
     return {
       ...g,
       totals: mine.reduce((acc, p) => addTotals(acc, p.totals), ZERO_TOTALS),
-      concepts: launched.length,
+      concepts: statuses.length,
       hits: statuses.filter((s) => s === "hit").length,
       misses: statuses.filter((s) => s === "miss").length,
       testing: statuses.filter((s) => s === "testing").length,
@@ -226,6 +230,19 @@ app.get("/pods", async (c) => {
   });
 
   const body: PodsResponse = { ...range, rows };
+  return c.json(body);
+});
+
+/** Concepts that first spent in the range, newest first. ?pod=<id> narrows to one pod. */
+app.get("/concepts", async (c) => {
+  const db = c.env.DB;
+  const range = await resolveRange(db, (k) => c.req.query(k));
+  if (!range) return c.json({ error: "Invalid custom date range" }, 400);
+  const pod = c.req.query("pod");
+  const rows = (await loadConcepts(db))
+    .filter((k) => k.firstSpend >= range.from && k.firstSpend <= range.to && (!pod || k.podId === pod))
+    .sort((a, b) => b.firstSpend.localeCompare(a.firstSpend) || b.window.spendCents - a.window.spendCents);
+  const body: ConceptsResponse = { ...range, rows };
   return c.json(body);
 });
 

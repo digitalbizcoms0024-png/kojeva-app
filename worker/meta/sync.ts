@@ -1,5 +1,6 @@
 // Pulls ads and daily insights from Meta into D1. See docs/ROADMAP.md → Phase 1.
 import { attributePod, DEFAULT_ATTRIBUTION, detectPodsStart, type AttributionSettings } from "../../shared/attribution.ts";
+import { buildConcepts } from "../../shared/concepts.ts";
 import { parseAdName } from "../../shared/naming.ts";
 import { podByCode, type PodCode } from "../../shared/taxonomy.ts";
 import { decrypt } from "../crypto.ts";
@@ -114,9 +115,11 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
 /** Recomputes pod and tags for every post, never touching manual values. */
 export async function attribute(db: D1Database) {
   const [{ results: ads }, prefix, attr] = await Promise.all([
-    db.prepare("SELECT post_id, name, adset_name, created_time FROM ads").all<{
+    db.prepare("SELECT id, post_id, name, adset_id, adset_name, created_time FROM ads").all<{
+      id: string;
       post_id: string;
       name: string;
+      adset_id: string | null;
       adset_name: string | null;
       created_time: string | null;
     }>(),
@@ -168,6 +171,29 @@ export async function attribute(db: D1Database) {
           tags.angle, tags.format, tags.hook, tags.landingPage, now,
         ),
     );
+  }
+  await runBatched(db, stmts);
+  await saveConcepts(db, ads.map((a) => ({ id: a.id, name: a.name, adsetId: a.adset_id, adsetName: a.adset_name })), settings);
+}
+
+/** Rebuilds the concepts table and each ad's concept_id. */
+async function saveConcepts(db: D1Database, ads: Parameters<typeof buildConcepts>[0], settings: AttributionSettings) {
+  const concepts = buildConcepts(ads, settings);
+  const stmts: D1PreparedStatement[] = [db.prepare("UPDATE ads SET concept_id = NULL"), db.prepare("DELETE FROM concepts")];
+  for (const c of concepts) {
+    stmts.push(
+      db
+        .prepare("INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES (?1, ?2, ?3, ?4, ?5)")
+        .bind(c.id, c.adsetId, c.adsetName, c.label, podByCode(c.podCode)!.id),
+    );
+    for (let i = 0; i < c.adIds.length; i += 50) {
+      const ids = c.adIds.slice(i, i + 50);
+      stmts.push(
+        db
+          .prepare(`UPDATE ads SET concept_id = ?1 WHERE id IN (${ids.map((_, j) => `?${j + 2}`).join(", ")})`)
+          .bind(c.id, ...ids),
+      );
+    }
   }
   await runBatched(db, stmts);
 }

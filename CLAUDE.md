@@ -28,6 +28,7 @@ Before pushing: `npm run typecheck && npm test && npm run build` must all pass.
 - **Money is integer cents** in the DB and API; convert only in `src/format.ts`.
 - **Rank by post, not by ad.** Copies of an ad share a post (`effective_object_story_id`) and are grouped.
 - **Pods come from ad set names** ("IH | Harris | …"), via `shared/attribution.ts`. Agency ad sets (ME/QW/TV/YD) and anything launched before the pods started go to the **Agency** group, shown beside the pods but never counted in them. Ad names are mostly random. See `docs/NAMING.md`.
+- **Hit rate is per concept, not per ad.** A concept is one testing ad set (`shared/concepts.ts`), split when older ad sets combined several ("Batch 3 & 5"). Scaling ad sets are never concepts. Concepts are rebuilt on every sync.
 - **Never overwrite manual tags.** `assignments.pod_source` is `manual | name | adset | era` (tags: `manual | name | atria`); a sync may only fill fields whose source isn't `manual`.
 - **Metric definitions live in `shared/metrics.ts`** and are documented in `docs/METRICS.md`. Change both together, with tests.
 - **New ad-name patterns** go in `shared/naming.ts` with a test case in `shared/naming.test.ts` using the real name. See `docs/NAMING.md`.

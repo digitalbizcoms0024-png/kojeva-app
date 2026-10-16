@@ -149,6 +149,16 @@ describe("runSync", () => {
     expect(pods).toContainEqual({ post_id: "776862388850901_222", pod_id: "agency", pod_source: "adset" });
     expect(pods).toContainEqual({ post_id: "776862388850901_111", pod_id: "agency", pod_source: "era" });
 
+    // Testing ad sets become concepts; scaling ad sets don't.
+    const concepts = await q<{ id: string; pod_id: string; label: string }>("SELECT id, pod_id, label FROM concepts ORDER BY id");
+    expect(concepts).toEqual([
+      { id: "as1", pod_id: "harris", label: "ABO | Harris | Sept 20" },
+      { id: "as3", pod_id: "dhia", label: "ABO - Dhia - Batch 22" },
+      { id: "as6", pod_id: "agency", label: "R2-S12 | Statics" },
+    ]);
+    const [copy] = await q<{ concept_id: string | null }>("SELECT concept_id FROM ads WHERE id = '120250321798060999'");
+    expect(copy!.concept_id).toBeNull();
+
     const [post] = await q<{ media_type: string; thumbnail_url: string }>("SELECT media_type, thumbnail_url FROM posts WHERE id = ?1", POST_HXM);
     expect(post).toEqual({ media_type: "video", thumbnail_url: "https://scontent.example/t1.jpg" });
 

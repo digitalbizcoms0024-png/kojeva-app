@@ -5,6 +5,7 @@ import wasmBase64 from "virtual:sql-wasm";
 import schema from "../migrations/0001_init.sql?raw";
 import metaSchema from "../migrations/0002_meta.sql?raw";
 import agencySchema from "../migrations/0003_agency.sql?raw";
+import conceptSchema from "../migrations/0004_concepts.sql?raw";
 import seed from "../seed/sample.sql?raw";
 import api from "../worker/index.ts";
 import { d1FromSqlJs } from "../worker/testing/sqljs-d1.ts";
@@ -21,6 +22,7 @@ const db = new SQL.Database();
 db.exec(schema);
 db.exec(metaSchema);
 db.exec(agencySchema);
+db.exec(conceptSchema);
 db.exec(seed);
 const env = {
   DB: d1FromSqlJs(db),

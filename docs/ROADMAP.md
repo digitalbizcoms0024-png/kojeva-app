@@ -18,6 +18,8 @@ Each phase is one branch + PR. A phase is done when its acceptance criteria pass
 - Thumbnails: Meta's URLs, refreshed every sync (they expire). Copying to R2 is deferred.
 - Pods attributed on every sync with `shared/attribution.ts` (ad set name first); manual values kept.
   Agency group (migration 0003) for ME/QW/TV/YD ad sets and anything launched before the pods.
+- Hit rate per concept (migration 0004): one testing ad set = one concept, combined ad sets split by
+  ad name. Concepts table on the Pods tab.
 - Sample data is wiped on first connection. Banners: sync failure, token expiry, not locked.
 - Cloudflare Access JWT verified on every API call; Meta can't be connected until Access is configured.
 

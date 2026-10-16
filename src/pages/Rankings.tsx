@@ -132,7 +132,7 @@ export function RankingsPage({ meta, range, setRange }: { meta: MetaResponse; ra
           </div>
         )}
 
-        {tab === "pods" && <PodsTab data={pods.data} error={pods.error} targets={meta.targets} />}
+        {tab === "pods" && <PodsTab data={pods.data} error={pods.error} targets={meta.targets} range={range} />}
         {tab === "editors" && <EditorsTab data={pods.data} error={pods.error} targets={meta.targets} />}
       </Card>
     </div>

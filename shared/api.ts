@@ -97,6 +97,25 @@ export interface PodRow {
   editors: { editorId: string | null; name: string; totals: Totals; concepts: number }[];
 }
 
+export interface ConceptResult {
+  conceptId: string;
+  podId: string;
+  label: string;
+  adsetName: string;
+  ads: number;
+  firstSpend: string;
+  /** Totals over the test window (first N days from first spend). */
+  window: Totals;
+  allTime: Totals;
+  status: HitStatus;
+}
+
+export interface ConceptsResponse {
+  from: string;
+  to: string;
+  rows: ConceptResult[];
+}
+
 export interface PodsResponse {
   from: string;
   to: string;

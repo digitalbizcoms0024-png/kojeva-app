@@ -2,8 +2,9 @@
 
 ## How a post gets its pod (`shared/attribution.ts`)
 
-Kojeva separates pods by **ad set**. In-house ad sets are named `IH | <Strategist> | …`
-("IH | Harris | KOJEVA 3 | STATIC | Scarcity"). Before the pods, an **agency** made the ads; its ad
+Kojeva separates pods by **ad set**. In-house ABO testing ad sets were named `IH | <Strategist> | …`
+("IH | Harris | KOJEVA 3 | STATIC | Scarcity"); CBO testing ad sets (campaign "CBO | Internal Pod |
+Testing") just lead with the name ("Shameer | Static 3 | Negative Marketing #2"). Before the pods, an **agency** made the ads; its ad
 sets start with `ME`, `QW`, `TV` or `YD` ("ME | R2-S12 | Statics"). Ad names are mostly free-form
 and carry no meaning (e.g. "HxM").
 

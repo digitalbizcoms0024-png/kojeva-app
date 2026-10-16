@@ -1,7 +1,9 @@
-import type { PodRow, PodsResponse } from "../../shared/api.ts";
+import { useState } from "react";
+import type { ConceptsResponse, PodRow, PodsResponse } from "../../shared/api.ts";
+import { qs, useApi } from "../api.ts";
 import { cpa, roas, type Targets } from "../../shared/metrics.ts";
-import { Card, CpaValue, Empty, PodChip, RoasValue } from "../components/ui.tsx";
-import { int, money, pct } from "../format.ts";
+import { Card, CpaValue, Empty, HitBadge, PodChip, RoasValue, Select } from "../components/ui.tsx";
+import { int, money, pct, shortDate } from "../format.ts";
 
 type Props = { data: PodsResponse | null; error: Error | null; targets: Targets };
 
@@ -37,7 +39,72 @@ function PodCard({ r, targets }: { r: PodRow; targets: Targets }) {
   );
 }
 
-export function PodsTab({ data, error, targets }: Props) {
+function ConceptsTable({ range, targets, pods }: { range: string; targets: Targets; pods: PodRow[] }) {
+  const [pod, setPod] = useState("");
+  const { data, error } = useApi<ConceptsResponse>(`/api/concepts?${qs({ range, pod })}`);
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-medium tracking-wide text-ink-3 uppercase">
+          Concepts tested{data ? ` · ${data.rows.length}` : ""}
+        </h3>
+        <Select
+          label="Pod"
+          value={pod}
+          onChange={setPod}
+          options={[{ value: "", label: "All" }, ...pods.filter((p) => p.podId).map((p) => ({ value: p.podId!, label: p.name }))]}
+        />
+      </div>
+      {error && <Empty>Couldn't load concepts: {error.message}</Empty>}
+      {data && data.rows.length === 0 && <Empty>No concepts started testing in this period.</Empty>}
+      {data && data.rows.length > 0 && (
+        <div className="max-h-[32rem] overflow-auto rounded-xl border border-line">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-surface-2 text-left text-xs text-ink-3">
+              <tr>
+                <th className="px-3 py-2 font-medium">Pod</th>
+                <th className="px-3 py-2 font-medium">Concept</th>
+                <th className="px-3 py-2 font-medium">Started</th>
+                <th className="px-3 py-2 text-right font-medium">{targets.testWindowDays}-day spend</th>
+                <th className="px-3 py-2 text-right font-medium">CPA</th>
+                <th className="px-3 py-2 text-right font-medium">ROAS</th>
+                <th className="px-3 py-2 font-medium">Result</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {data.rows.map((k) => (
+                <tr key={k.conceptId}>
+                  <td className="px-3 py-2">
+                    <PodChip podId={k.podId} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="text-ink">{k.label}</div>
+                    <div className="text-xs text-ink-3">
+                      {k.adsetName} · {k.ads} {k.ads === 1 ? "ad" : "ads"} · {money(k.allTime.spendCents, { compact: true })} all-time
+                    </div>
+                  </td>
+                  <td className="num px-3 py-2 text-ink-2">{shortDate(k.firstSpend)}</td>
+                  <td className="num px-3 py-2 text-right text-ink">{money(k.window.spendCents)}</td>
+                  <td className="px-3 py-2 text-right">
+                    <CpaValue value={cpa(k.window)} target={targets.targetCpa} />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <RoasValue value={roas(k.window)} target={targets.targetRoas} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <HitBadge status={k.status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function PodsTab({ data, error, targets, range }: Props & { range: string }) {
   if (error) return <Empty>Couldn't load pods: {error.message}</Empty>;
   if (!data) return <Empty>Loading…</Empty>;
   const pods = data.rows.filter((r) => r.kind === "pod").sort((a, b) => b.totals.spendCents - a.totals.spendCents);
@@ -68,8 +135,9 @@ export function PodsTab({ data, error, targets }: Props) {
           .
         </p>
       )}
+      <ConceptsTable range={range} targets={targets} pods={data.rows} />
       <p className="text-xs text-ink-3">
-        Hit = a new concept reaches CPA ≤ ${targets.targetCpa} {targets.hitRule === "both" ? "and" : "or"} ROAS ≥ {targets.targetRoas} over its first{" "}
+        A concept is one testing ad set (combined ones like "Batch 3 & 5" are split by ad name). Hit = a new concept reaches CPA ≤ ${targets.targetCpa} {targets.hitRule === "both" ? "and" : "or"} ROAS ≥ {targets.targetRoas} over its first{" "}
         {targets.testWindowDays} days, with at least ${targets.minTestSpend} spend. Concepts count toward the period in which they first spent.
       </p>
     </div>

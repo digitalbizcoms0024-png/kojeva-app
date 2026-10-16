@@ -1,4 +1,4 @@
-import type { Assignment, PostSummary } from "../shared/api.ts";
+import type { Assignment, ConceptResult, PostSummary } from "../shared/api.ts";
 import { DEFAULT_TARGETS, hitStatus, type HitStatus, type Targets, type Totals } from "../shared/metrics.ts";
 
 type Row = Record<string, unknown>;
@@ -47,11 +47,59 @@ const POST_BASE_SQL = `
     (SELECT COUNT(*) FROM ads x WHERE x.post_id = p.id) AS copies,
     (SELECT MAX(x.status = 'ACTIVE') FROM ads x WHERE x.post_id = p.id) AS active,
     (SELECT MIN(x.created_time) FROM ads x WHERE x.post_id = p.id) AS launched,
+    (SELECT x.concept_id FROM ads x WHERE x.post_id = p.id ORDER BY x.created_time, x.id LIMIT 1) AS concept_id,
     s.pod_id, s.pod_source, s.editor_id, e.name AS editor_name,
     s.angle, s.format, s.hook, s.landing_page
   FROM posts p
   LEFT JOIN assignments s ON s.post_id = p.id
   LEFT JOIN editors e ON e.id = s.editor_id`;
+
+/** Every concept with its test-window totals and hit status. */
+export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
+  const [targets, latest] = await Promise.all([getTargets(db), getLatestDate(db)]);
+  const [win, all] = await Promise.all([
+    db
+      .prepare(
+        `WITH first AS (
+           SELECT a.concept_id, MIN(d.date) AS first_date
+           FROM ad_daily d JOIN ads a ON a.id = d.ad_id
+           WHERE a.concept_id IS NOT NULL AND d.spend_cents > 0
+           GROUP BY a.concept_id)
+         SELECT c.id, c.pod_id, c.label, c.adset_name, f.first_date,
+           (SELECT COUNT(*) FROM ads x WHERE x.concept_id = c.id) AS ads, ${TOTALS_SQL}
+         FROM concepts c
+         JOIN first f ON f.concept_id = c.id
+         JOIN ads a ON a.concept_id = c.id
+         JOIN ad_daily d ON d.ad_id = a.id
+           AND d.date >= f.first_date AND d.date < date(f.first_date, '+' || ?1 || ' days')
+         GROUP BY c.id`,
+      )
+      .bind(targets.testWindowDays)
+      .all<Row>(),
+    db
+      .prepare(
+        `SELECT a.concept_id, ${TOTALS_SQL} FROM ad_daily d JOIN ads a ON a.id = d.ad_id
+         WHERE a.concept_id IS NOT NULL GROUP BY a.concept_id`,
+      )
+      .all<Row>(),
+  ]);
+  const allTime = new Map(all.results.map((r) => [String(r.concept_id), toTotals(r)]));
+  return win.results.map((r) => {
+    const firstSpend = String(r.first_date);
+    const window = toTotals(r);
+    return {
+      conceptId: String(r.id),
+      podId: String(r.pod_id),
+      label: String(r.label),
+      adsetName: String(r.adset_name),
+      ads: Number(r.ads),
+      firstSpend,
+      window,
+      allTime: allTime.get(String(r.id)) ?? window,
+      status: hitStatus(window, latest ? daysBetween(firstSpend, latest) + 1 : 0, targets),
+    };
+  });
+}
 
 /** Totals over each post's first `windowDays` days of spend, plus how many days have been observed. */
 async function testWindows(db: D1Database, windowDays: number, postId?: string) {
@@ -95,7 +143,8 @@ export async function loadPosts(
   to: string,
   opts: { postId?: string } = {},
 ): Promise<PostSummary[]> {
-  const [targets, latest] = await Promise.all([getTargets(db), getLatestDate(db)]);
+  const [targets, latest, concepts] = await Promise.all([getTargets(db), getLatestDate(db), loadConcepts(db)]);
+  const conceptStatus = new Map(concepts.map((c) => [c.conceptId, c.status]));
   const where = opts.postId ? "WHERE p.id = ?1" : "";
   const [base, ranged, windows] = await Promise.all([
     db.prepare(`${POST_BASE_SQL} ${where}`).bind(...(opts.postId ? [opts.postId] : [])).all<Row>(),
@@ -115,8 +164,8 @@ export async function loadPosts(
   return base.results.map((r) => {
     const postId = String(r.post_id);
     const w = windows.get(postId);
-    let hit: HitStatus | null = null;
-    if (w && latest) hit = hitStatus(w.totals, daysBetween(w.firstDate, latest) + 1, targets);
+    // A post's badge shows how the concept it was tested in did.
+    const hit: HitStatus | null = r.concept_id == null ? null : (conceptStatus.get(String(r.concept_id)) ?? null);
     const launched = r.launched == null ? null : String(r.launched).slice(0, 10);
     return {
       postId,
