@@ -45,7 +45,7 @@ const BAND_STYLE: Record<Band, { cls: string; icon: string; label: string }> = {
 function Banded({ band, children }: { band: Band; children: ReactNode }) {
   const s = BAND_STYLE[band];
   return (
-    <span className={`num inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ${s.cls}`} title={s.label}>
+    <span className={`num relative inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 ${s.cls}`} title={s.label}>
       {s.icon && <span aria-hidden className="text-[10px] font-bold">{s.icon}</span>}
       <span className="sr-only">{s.label}: </span>
       {children}

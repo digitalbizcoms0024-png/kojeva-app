@@ -59,6 +59,13 @@ stripped before parsing, and copies are grouped by post anyway.
 
 Prefixes like `HxM` are random and don't identify a pod; the ad set does (see above).
 
+## Angle and format from names (`shared/classify.ts`)
+
+Ad names rarely carry tags, but concept and ad set names usually do: "KOJEVA 3 | STATIC | Scarcity",
+"Shameer | Native Ad | …", "KOJEVA 15 | DOUBLE CHIN", "ST _ Depuffing _ …". Keyword rules, most specific
+first, read the concept label, then the ad set name, then ad names. Add keywords there (with a test
+using the real name) as naming evolves. Hand-set tags always win.
+
 ## Open questions
 - Do older ad sets (before the naming habit started) also carry strategist names? If not, a tracker
   mapping creative numbers to strategists would tag those in one import.

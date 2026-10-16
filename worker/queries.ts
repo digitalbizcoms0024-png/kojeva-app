@@ -1,4 +1,5 @@
 import type { Assignment, ConceptResult, PostSummary } from "../shared/api.ts";
+import { classify } from "../shared/classify.ts";
 import { DEFAULT_TARGETS, hitStatus, judgingWindowEnd, type HitStatus, type Targets, type Totals } from "../shared/metrics.ts";
 
 type Row = Record<string, unknown>;
@@ -69,6 +70,11 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
            WHERE a.concept_id IS NOT NULL)
          SELECT c.id, c.pod_id, c.label, c.adset_name,
            (SELECT COUNT(*) FROM ads x WHERE x.concept_id = c.id) AS ads,
+           (SELECT GROUP_CONCAT(x.name, char(10)) FROM ads x WHERE x.concept_id = c.id) AS ad_names,
+           (SELECT s.angle FROM ads x JOIN assignments s ON s.post_id = x.post_id
+              WHERE x.concept_id = c.id AND s.tags_source = 'manual' AND s.angle IS NOT NULL LIMIT 1) AS manual_angle,
+           (SELECT s.format FROM ads x JOIN assignments s ON s.post_id = x.post_id
+              WHERE x.concept_id = c.id AND s.tags_source = 'manual' AND s.format IS NOT NULL LIMIT 1) AS manual_format,
            MIN(CASE WHEN daily.spend_cents > 0 THEN daily.date END) AS first_date,
            MIN(CASE WHEN daily.running >= ?1 THEN daily.date END) AS qualified_on
          FROM concepts c JOIN daily ON daily.concept_id = c.id
@@ -112,7 +118,17 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
 
   return ends.map(({ r, firstSpend, qualifiedOn, windowEnd }) => {
     const window = windows.get(String(r.id)) ?? toTotals(undefined);
+    const guess = classify({
+      label: String(r.label),
+      adset: String(r.adset_name),
+      ads: r.ad_names == null ? [] : String(r.ad_names).split("\n"),
+    });
+    const manualAngle = r.manual_angle == null ? null : String(r.manual_angle);
+    const manualFormat = r.manual_format == null ? null : String(r.manual_format);
     return {
+      angle: manualAngle ?? guess.angle,
+      format: manualFormat ?? guess.format,
+      tagsSource: manualAngle || manualFormat ? ("manual" as const) : ("name" as const),
       conceptId: String(r.id),
       podId: String(r.pod_id),
       label: String(r.label),

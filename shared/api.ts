@@ -136,12 +136,39 @@ export interface ConceptResult {
   window: Totals;
   allTime: Totals;
   status: HitStatus;
+  angle: string | null;
+  format: string | null;
+  /** "manual" when someone tagged one of its ads by hand, else read from names. */
+  tagsSource: "manual" | "name";
 }
 
 export interface ConceptsResponse {
   from: string;
   to: string;
   rows: ConceptResult[];
+}
+
+export type InsightDimension = "angle" | "format";
+
+export interface InsightRow {
+  /** Tag key, or null for concepts with no tag on this dimension. */
+  value: string | null;
+  concepts: number;
+  hits: number;
+  misses: number;
+  testing: number;
+  hitRate: number | null;
+  /** Summed judging-window totals of the concepts. */
+  window: Totals;
+  /** Pods contributing concepts, with counts. */
+  pods: { podId: string; concepts: number }[];
+}
+
+export interface InsightsResponse {
+  from: string;
+  to: string;
+  dimension: InsightDimension;
+  rows: InsightRow[];
 }
 
 export interface PodsResponse {

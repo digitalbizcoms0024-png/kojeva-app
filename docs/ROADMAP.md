@@ -36,10 +36,15 @@ attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ 
 
 **Done when:** ≥ 90% of last-30-day spend is credited to a pod or the agency.
 
-## Phase 3: Creative intelligence
-- Atria tags + transcripts via a nightly scheduled Claude task that posts to `/api/ingest/atria`.
-- Creative Insights: CPA / ROAS / hit rate by angle, format, hook. Concept grouping.
-- "Why it works" AI notes, always citing the numbers they're based on.
+## Phase 3: Creative intelligence (in progress)
+- ✅ Angle and format read from concept, ad set and ad names (`shared/classify.ts`), tested on real
+  names; hand-set tags win. Synced posts get these as their automatic tags.
+- ✅ Creative Insights page: hit rate, test CPA / ROAS / spend per angle or format, by pod and period,
+  with a drill-down to the concepts behind each row. Thin samples (< 3 decided) are flagged.
+- Next: Atria tags + transcripts. Blocked on reachability: a scheduled Claude task can't reach
+  workers.dev, and the app sits behind Access. Needs an Access service token plus the domain allowed
+  in the Claude environment's network settings.
+- Next: "Why it works" AI notes, always citing the numbers they're based on (needs an LLM API key).
 
 ## Phase 4: Triple Whale + analytics
 - Triple Whale attributed revenue/ROAS per ad as separate columns.

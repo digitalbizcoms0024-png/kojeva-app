@@ -27,18 +27,33 @@ export function podById(id: string) {
 
 export const ANGLES: Record<string, string> = {
   Depuff: "Depuffing",
-  MatureFace: "Mature face",
+  MatureFace: "Mature skin",
+  Jawline: "Jawline & double chin",
   Comparison: "Comparison",
-  SocialProof: "Social proof",
-  Husband: "Husband reaction",
-  Jawline: "Jawline",
+  FakeBrush: "Real vs fake brush",
+  SocialProof: "Social proof & reviews",
+  Husband: "Partner reaction",
+  Scarcity: "Scarcity",
+  ProblemAware: "Problem aware",
+  Mechanism: "Mechanism (lymphatic)",
+  Authority: "Authority / expert",
+  Offer: "Offer & price",
+  Routine: "Routine / how-to",
+  BeforeAfter: "Before & after",
+  Founder: "Founder story",
+  Sinus: "Sinus & tension",
+  EyeBags: "Eyes",
 };
 
 export const FORMATS: Record<string, string> = {
   UGC: "UGC",
+  AIUGC: "AI UGC",
   Static: "Static",
   VSL: "VSL",
+  Video: "Video",
+  Native: "Native ad / advertorial",
   Interview: "Interview",
+  Podcast: "Podcast",
   Animation: "Animation",
   Carousel: "Carousel",
 };

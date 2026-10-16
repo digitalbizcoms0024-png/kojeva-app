@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ConceptsResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { qs, useApi } from "../api.ts";
 import { cpa, roas, type Targets } from "../../shared/metrics.ts";
+import { ANGLES, FORMATS } from "../../shared/taxonomy.ts";
 import { Card, CpaValue, Empty, HitBadge, PodChip, RoasValue, Select } from "../components/ui.tsx";
 import { int, money, pct, shortDate } from "../format.ts";
 
@@ -39,14 +40,27 @@ function PodCard({ r, targets }: { r: PodRow; targets: Targets }) {
   );
 }
 
-function ConceptsTable({ range, targets, pods }: { range: string; targets: Targets; pods: PodRow[] }) {
-  const [pod, setPod] = useState("");
-  const { data, error } = useApi<ConceptsResponse>(`/api/concepts?${qs({ range, pod })}`);
+export function ConceptsTable({
+  range,
+  targets,
+  pods,
+  filter = {},
+  title = "Concepts tested",
+}: {
+  range: string;
+  targets: Targets;
+  pods: { podId: string | null; name: string }[];
+  filter?: { angle?: string; format?: string; pod?: string };
+  title?: string;
+}) {
+  const [pod, setPod] = useState(filter.pod ?? "");
+  const { data, error } = useApi<ConceptsResponse>(`/api/concepts?${qs({ range, pod, angle: filter.angle, format: filter.format })}`);
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-xs font-medium tracking-wide text-ink-3 uppercase">
-          Concepts tested{data ? ` · ${data.rows.length}` : ""}
+          {title}
+          {data ? ` · ${data.rows.length}` : ""}
         </h3>
         <Select
           label="Pod"
@@ -82,6 +96,12 @@ function ConceptsTable({ range, targets, pods }: { range: string; targets: Targe
                     <div className="text-xs text-ink-3">
                       {k.adsetName} · {k.ads} {k.ads === 1 ? "ad" : "ads"} · {money(k.allTime.spendCents, { compact: true })} all-time
                     </div>
+                    {(k.angle || k.format) && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {k.angle && <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[11px] text-accent">{ANGLES[k.angle] ?? k.angle}</span>}
+                        {k.format && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-ink-2">{FORMATS[k.format] ?? k.format}</span>}
+                      </div>
+                    )}
                   </td>
                   <td className="num px-3 py-2 whitespace-nowrap text-ink-2">
                     {shortDate(k.firstSpend)} – {shortDate(k.windowEnd)}

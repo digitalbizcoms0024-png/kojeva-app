@@ -1,5 +1,6 @@
 // Pulls ads and daily insights from Meta into D1. See docs/ROADMAP.md → Phase 1.
 import { attributePod, DEFAULT_ATTRIBUTION, detectPodsStart, type AttributionSettings } from "../../shared/attribution.ts";
+import { classify } from "../../shared/classify.ts";
 import { buildConcepts } from "../../shared/concepts.ts";
 import { parseAdName } from "../../shared/naming.ts";
 import { podByCode, type PodCode } from "../../shared/taxonomy.ts";
@@ -227,7 +228,10 @@ export async function attribute(db: D1Database) {
       settings,
     );
     const origin = [...list].sort((a, b) => (a.created_time ?? "").localeCompare(b.created_time ?? ""))[0]!;
-    const tags = parseAdName(origin.name);
+    const parsed = parseAdName(origin.name);
+    // Ad names rarely carry tags; the testing ad set's name usually does ("… | STATIC | Scarcity").
+    const guess = classify({ adset: origin.adset_name, ads: [origin.name] });
+    const tags = { ...parsed, angle: parsed.angle ?? guess.angle, format: parsed.format ?? guess.format };
     const old = oldAssign.get(postId);
     const keepPod = old?.pod_source === "manual";
     const keepTags = old?.tags_source === "manual";

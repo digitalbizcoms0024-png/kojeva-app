@@ -4,6 +4,7 @@ import { RANGE_LABELS, useApi } from "./api.ts";
 import { Empty } from "./components/ui.tsx";
 import { dateTime, shortDate } from "./format.ts";
 import { DashboardPage } from "./pages/Dashboard.tsx";
+import { InsightsPage } from "./pages/Insights.tsx";
 import { NamingToolPage } from "./pages/NamingTool.tsx";
 import { RankingsPage } from "./pages/Rankings.tsx";
 import { SettingsPage } from "./pages/Settings.tsx";
@@ -14,7 +15,7 @@ type Range = keyof typeof RANGE_LABELS;
 const NAV = [
   { path: "dashboard", label: "Dashboard" },
   { path: "rankings", label: "Ad Rankings" },
-  { path: "insights", label: "Creative Insights", soon: "Phase 3" },
+  { path: "insights", label: "Creative Insights" },
   { path: "tagging", label: "Needs Tagging" },
   { path: "naming", label: "Naming Tool" },
   { path: "settings", label: "Settings" },
@@ -56,7 +57,6 @@ export default function App() {
               }`}
             >
               {n.label}
-              {"soon" in n && <span className="ml-2 text-[10px] text-ink-3">{n.soon}</span>}
             </a>
           ))}
         </nav>
@@ -95,11 +95,7 @@ export default function App() {
         {meta.data && path === "tagging" && <TaggingPage meta={meta.data} />}
         {path === "naming" && <NamingToolPage />}
         {meta.data && path === "settings" && <SettingsPage meta={meta.data} onSynced={() => setMetaVersion((v) => v + 1)} />}
-        {path === "insights" && (
-          <Empty>
-            Creative Insights (performance by angle, format and hook, plus AI write-ups) is planned for Phase 3, once ads are tagged.
-          </Empty>
-        )}
+        {meta.data && path === "insights" && <InsightsPage meta={meta.data} range={range} setRange={setRange} />}
       </main>
     </div>
   );

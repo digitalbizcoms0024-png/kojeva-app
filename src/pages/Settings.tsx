@@ -23,7 +23,7 @@ const secondary = `${btn} border border-line bg-surface text-ink hover:bg-surfac
 
 function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
-    <li className="flex gap-2">
+    <li className="relative flex gap-2">
       <span aria-hidden className={ok ? "text-good" : "text-bad"}>{ok ? "✓" : "✕"}</span>
       <span className="sr-only">{ok ? "Done:" : "To do:"}</span>
       <span className={ok ? "text-ink-2" : "text-ink"}>{children}</span>

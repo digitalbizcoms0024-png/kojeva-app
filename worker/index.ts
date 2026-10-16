@@ -2,6 +2,9 @@ import { Hono } from "hono";
 import type {
   ConceptsResponse,
   Editor,
+  InsightDimension,
+  InsightRow,
+  InsightsResponse,
   CopyRow,
   MetaResponse,
   PodRow,
@@ -238,14 +241,53 @@ app.get("/pods", async (c) => {
   return c.json(body);
 });
 
+/** Concept results grouped by angle or format. Same period rule as the Pods tab. */
+app.get("/insights", async (c) => {
+  const db = c.env.DB;
+  const range = await resolveRange(db, (k) => c.req.query(k));
+  if (!range) return c.json({ error: "Invalid custom date range" }, 400);
+  const dimension: InsightDimension = c.req.query("dimension") === "format" ? "format" : "angle";
+  const pod = c.req.query("pod");
+  const concepts = (await loadConcepts(db)).filter(
+    (k) => k.firstSpend >= range.from && k.firstSpend <= range.to && (!pod || k.podId === pod),
+  );
+  const groups = new Map<string | null, typeof concepts>();
+  for (const k of concepts) groups.set(k[dimension], [...(groups.get(k[dimension]) ?? []), k]);
+  const rows: InsightRow[] = [...groups].map(([value, list]) => {
+    const statuses = list.map((k) => k.status);
+    const pods = new Map<string, number>();
+    for (const k of list) pods.set(k.podId, (pods.get(k.podId) ?? 0) + 1);
+    return {
+      value,
+      concepts: list.length,
+      hits: statuses.filter((s) => s === "hit").length,
+      misses: statuses.filter((s) => s === "miss").length,
+      testing: statuses.filter((s) => s === "testing").length,
+      hitRate: hitRate(statuses),
+      window: list.reduce((acc, k) => addTotals(acc, k.window), ZERO_TOTALS),
+      pods: [...pods].map(([podId, n]) => ({ podId, concepts: n })).sort((a, b) => b.concepts - a.concepts),
+    };
+  });
+  rows.sort((a, b) => (a.value === null ? 1 : b.value === null ? -1 : b.concepts - a.concepts || b.window.spendCents - a.window.spendCents));
+  const body: InsightsResponse = { ...range, dimension, rows };
+  return c.json(body);
+});
+
 /** Concepts that first spent in the range, newest first. ?pod=<id> narrows to one pod. */
 app.get("/concepts", async (c) => {
   const db = c.env.DB;
   const range = await resolveRange(db, (k) => c.req.query(k));
   if (!range) return c.json({ error: "Invalid custom date range" }, 400);
   const pod = c.req.query("pod");
+  // ?angle= / ?format= narrow to one tag; "none" means untagged.
+  const tag = (q: string | undefined, v: string | null) => q === undefined || (q === "none" ? v === null : v === q);
+  const angle = c.req.query("angle");
+  const format = c.req.query("format");
   const rows = (await loadConcepts(db))
-    .filter((k) => k.firstSpend >= range.from && k.firstSpend <= range.to && (!pod || k.podId === pod))
+    .filter(
+      (k) =>
+        k.firstSpend >= range.from && k.firstSpend <= range.to && (!pod || k.podId === pod) && tag(angle, k.angle) && tag(format, k.format),
+    )
     .sort((a, b) => b.firstSpend.localeCompare(a.firstSpend) || b.window.spendCents - a.window.spendCents);
   const body: ConceptsResponse = { ...range, rows };
   return c.json(body);

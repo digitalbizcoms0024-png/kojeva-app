@@ -146,3 +146,41 @@ describe("editors", () => {
     expect((await pod("p_harris"))!.editor_id).toBeNull();
   });
 });
+
+describe("insights", () => {
+  it("groups concepts by angle and format, preferring hand-set tags", async () => {
+    // Two in-house concepts named for their angle, plus spend so they have results.
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO posts (id, media_type) VALUES ('p_s1', 'image'), ('p_s2', 'image')"),
+      env.DB.prepare(
+        `INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time) VALUES
+         ('s1', 'p_s1', 'scarcity v1', 'as_s1', 'IH | Harris | KOJEVA 3 | STATIC | Scarcity', 'ACTIVE', '2026-10-02T00:00:00.000Z'),
+         ('s2', 'p_s2', 'v1', 'as_s2', 'Shameer | Static 3 | Negative Marketing #2', 'ACTIVE', '2026-10-02T00:00:00.000Z')`,
+      ),
+      env.DB.prepare(
+        `INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES
+         ('s1', '2026-10-02', 15000, 12, 30000), ('s2', '2026-10-02', 15000, 5, 9000), ('a1', '2026-10-10', 100, 0, 0)`,
+      ),
+    ]);
+    await attribute(env.DB);
+
+    const get = async (q: string) => (await (await call(`/api/insights?range=all&${q}`)).json()) as { rows: { value: string | null; concepts: number; hits: number; misses: number }[] };
+    const byAngle = await get("dimension=angle");
+    expect(byAngle.rows).toContainEqual(expect.objectContaining({ value: "Scarcity", concepts: 1, hits: 1 }));
+    expect(byAngle.rows).toContainEqual(expect.objectContaining({ value: "ProblemAware", concepts: 1, misses: 1 }));
+    const byFormat = await get("dimension=format");
+    expect(byFormat.rows).toContainEqual(expect.objectContaining({ value: "Static", concepts: 2 }));
+
+    // The post's own tags were filled from the ad set name too.
+    expect((await pod("p_s1"))!.angle).toBe("Scarcity");
+
+    // Tag Shameer's concept by hand: the hand-set angle wins.
+    await call("/api/posts/p_s2/assignment", json("PATCH", { angle: "SocialProof" }));
+    const after = await get("dimension=angle");
+    expect(after.rows).toContainEqual(expect.objectContaining({ value: "SocialProof", concepts: 1 }));
+    expect(after.rows.find((r) => r.value === "ProblemAware")).toBeUndefined();
+
+    const drill = (await (await call("/api/concepts?range=all&angle=SocialProof")).json()) as { rows: { label: string; tagsSource: string }[] };
+    expect(drill.rows).toEqual([expect.objectContaining({ label: "Static 3 | Negative Marketing #2", tagsSource: "manual" })]);
+  });
+});
