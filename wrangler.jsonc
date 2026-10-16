@@ -3,6 +3,9 @@
   "name": "kojeva-hub",
   "main": "worker/index.ts",
   "compatibility_date": "2025-10-01",
+  // Serve at kojeva-hub.<account>.workers.dev; lock it with Cloudflare Access (docs/ARCHITECTURE.md).
+  "workers_dev": true,
+  "preview_urls": false,
   "assets": {
     "not_found_handling": "single-page-application"
   },
