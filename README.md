@@ -12,6 +12,13 @@ npm run db:reset:local   # create local DB + load sample data
 npm run dev              # http://localhost:5173
 ```
 
+## Deploys
+
+Cloudflare Workers Builds deploys this repo on every push to the production branch
+(`claude/affectionate-cannon-rltll0` for now). Deploy command: `npm run deploy:sample` until the
+live Meta sync lands; it reseeds the database with sample data on every deploy. See
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#deploying-cloudflare-workers-builds-auto-deploys-from-github).
+
 ## Preview without a server
 
 `npm run build:preview` writes `dist-demo/kojeva-hub-preview.html`: one self-contained page that runs
