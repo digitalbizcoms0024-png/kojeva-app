@@ -62,7 +62,7 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
 
   for await (const page of gc.pages<GraphAd>(`${env.META_AD_ACCOUNT_ID}/ads`, {
     fields: AD_FIELDS,
-    limit: "500",
+    limit: "200",
     filtering: JSON.stringify([{ field: "effective_status", operator: "IN", value: ALL_STATUSES }]),
   })) {
     for (const ad of page) {
@@ -180,7 +180,7 @@ export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, si
     time_increment: "1",
     time_range: JSON.stringify({ since, until }),
     fields: INSIGHT_FIELDS,
-    limit: "500",
+    limit: "250",
   }))
     rows.push(...page);
 

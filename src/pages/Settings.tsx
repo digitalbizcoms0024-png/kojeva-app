@@ -31,6 +31,43 @@ function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   );
 }
 
+function TokenForm(props: {
+  open: boolean;
+  title: string;
+  token: string;
+  setToken: (t: string) => void;
+  disabled: boolean;
+  busy: boolean;
+  onSubmit: () => void;
+}) {
+  return (
+    <details open={props.open} className="rounded-xl border border-line p-4 text-sm">
+      <summary className="cursor-pointer font-medium text-ink">{props.title}</summary>
+      <ol className="mt-3 list-decimal space-y-1 pl-5 text-ink-2">
+        <li>
+          Open{" "}
+          <a className="text-accent underline" href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer">
+            Graph API Explorer
+          </a>
+          , pick the app, choose <b>User token</b>, add <code>ads_read</code>, click <b>Generate Access Token</b>.
+        </li>
+        <li>Copy the token and paste it here within a few minutes. The hub swaps it for a 60-day token and stores it encrypted.</li>
+      </ol>
+      <textarea
+        id="meta-token"
+        value={props.token}
+        onChange={(e) => props.setToken(e.target.value)}
+        rows={3}
+        placeholder="EAA…"
+        className="num mt-3 w-full rounded-lg border border-line bg-surface p-2 text-xs text-ink focus:outline-2 focus:outline-accent"
+      />
+      <button className={`${primary} mt-2`} disabled={props.disabled || props.token.length < 20} onClick={props.onSubmit}>
+        {props.busy ? "Connecting…" : "Connect with this token"}
+      </button>
+    </details>
+  );
+}
+
 function MetaPanel({ onSynced }: { onSynced: () => void }) {
   const [reload, setReload] = useState(0);
   const { data: s, error } = useApi<ConnectionStatus>(`/api/connection?r=${reload}`);
@@ -152,13 +189,6 @@ function MetaPanel({ onSynced }: { onSynced: () => void }) {
       )}
 
       <div className="flex flex-wrap gap-2">
-        <a
-          href={ready ? "/api/connection/facebook/start" : undefined}
-          aria-disabled={!ready}
-          className={`${connected ? secondary : primary} ${ready ? "" : "pointer-events-none opacity-40"}`}
-        >
-          {connected ? "Reconnect with Facebook" : "Connect with Facebook"}
-        </a>
         {connected && (
           <>
             <button className={primary} disabled={!!busy || !ready} onClick={() => runSync(7)}>
@@ -205,36 +235,17 @@ function MetaPanel({ onSynced }: { onSynced: () => void }) {
         </div>
       )}
 
-      <details className="rounded-xl border border-line p-4 text-sm">
-        <summary className="cursor-pointer font-medium text-ink">Facebook login not working? Paste a token instead</summary>
-        <ol className="mt-3 list-decimal space-y-1 pl-5 text-ink-2">
-          <li>
-            Open{" "}
-            <a className="text-accent underline" href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer">
-              Graph API Explorer
-            </a>
-            , pick the app, choose <b>User token</b>, add <code>ads_read</code>, click <b>Generate Access Token</b>.
-          </li>
-          <li>Copy the token and paste it here. The hub swaps it for a 60-day token and stores it encrypted.</li>
-        </ol>
-        <textarea
-          id="meta-token"
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-          rows={3}
-          placeholder="EAA…"
-          className="num mt-3 w-full rounded-lg border border-line bg-surface p-2 text-xs text-ink focus:outline-2 focus:outline-accent"
-        />
-        <button className={`${primary} mt-2`} disabled={!ready || token.length < 20 || !!busy} onClick={connectWithToken}>
-          {busy === "token" ? "Connecting…" : "Connect with this token"}
-        </button>
-      </details>
-
-      <details className="rounded-xl border border-line p-4 text-sm">
-        <summary className="cursor-pointer font-medium text-ink">Meta app settings for the Facebook login</summary>
-        <p className="mt-2 text-ink-2">In the Meta app (ID {s.appId}), allow this redirect URL:</p>
-        <code className="num mt-1 block rounded-lg bg-surface-2 p-2 text-xs break-all text-ink select-all">{s.redirectUri}</code>
-      </details>
+      {/* The Meta app's Marketing API use case doesn't include Facebook Login, so the OAuth
+          redirect is refused ("Can't load URL"). Pasting a token is the supported way in. */}
+      <TokenForm
+        open={!connected}
+        title={connected ? "Renew the connection" : "Connect with a token"}
+        token={token}
+        setToken={setToken}
+        disabled={!ready || !!busy}
+        busy={busy === "token"}
+        onSubmit={connectWithToken}
+      />
     </div>
   );
 }

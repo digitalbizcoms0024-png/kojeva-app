@@ -78,8 +78,9 @@ function fakeMeta(handler: Handler): typeof fetch & { calls: URL[] } {
 }
 
 /** Serves ADS over two pages, and insights for any range. */
-const metaApi = (insightRows: () => GraphInsight[] = insights) =>
-  fakeMeta((url) => {
+const metaHandler =
+  (insightRows: () => GraphInsight[] = insights): Handler =>
+  (url) => {
     if (url.pathname.endsWith(`${ACT}/ads`)) {
       if (url.searchParams.get("after") === "p2") return { data: ADS.slice(2) };
       const next = new URL(url);
@@ -88,7 +89,8 @@ const metaApi = (insightRows: () => GraphInsight[] = insights) =>
     }
     if (url.pathname.endsWith(`${ACT}/insights`)) return { data: insightRows() };
     return { error: { message: `Unexpected ${url.pathname}`, code: 100 } };
-  });
+  };
+const metaApi = (insightRows?: () => GraphInsight[]) => fakeMeta(metaHandler(insightRows));
 
 let env: Env;
 beforeEach(async () => {
@@ -161,6 +163,22 @@ describe("runSync", () => {
     const res = await app.fetch(new Request("https://hub.test/api/rankings?range=all"), env, {} as ExecutionContext);
     const body = (await res.json()) as { items: { postId: string; name: string; copies: number; assignment: { podId: string } }[] };
     expect(body.items[0]).toMatchObject({ postId: POST_HXM, name: "HxM-1-ANIMSONG-Husband at Walmart | Post ID", copies: 2, assignment: { podId: "harris" } });
+  });
+
+  it("shrinks the page size when Meta says a page is too much data", async () => {
+    const base = metaHandler();
+    const limits: number[] = [];
+    const picky = fakeMeta((url) => {
+      if (url.pathname.endsWith("/ads") || url.pathname.endsWith("/insights")) {
+        const limit = Number(url.searchParams.get("limit"));
+        limits.push(limit);
+        if (limit > 60) return { error: { message: "Please reduce the amount of data you're asking for, then retry your request", code: 1 } };
+      }
+      return base(url);
+    });
+    const result = await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, picky);
+    expect(result).toMatchObject({ ok: true, ads: 4, rows: 4 });
+    expect(limits.slice(0, 3)).toEqual([200, 100, 50]);
   });
 
   it("records an expired token as needing reconnection", async () => {

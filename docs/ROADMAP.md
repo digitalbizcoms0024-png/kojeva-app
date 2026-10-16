@@ -8,8 +8,10 @@ Each phase is one branch + PR. A phase is done when its acceptance criteria pass
 - Naming parser and metric math with tests built from real ad names.
 
 ## Phase 1: Live Meta data ✅ (built; first live sync pending)
-- "Connect with Facebook" (OAuth, `ads_read`) or paste a Graph Explorer token. Either is swapped for a
-  60-day token, checked against the ad account, and stored AES-GCM encrypted. An optional
+- Paste a Graph Explorer token (the app's Marketing API use case has no Facebook Login, so the OAuth
+  route exists but Meta refuses its redirect). The token is swapped for a
+  60-day token, checked against the ad account, and stored AES-GCM encrypted.
+- Graph paging halves the page size and retries when Meta answers "reduce the amount of data". An optional
   `META_SYSTEM_TOKEN` secret (never expires) takes precedence.
 - Sync: all ads (every status) with ad set, campaign, creative and post ID; daily ad-level insights.
   Nightly cron re-pulls the last 7 days. Backfill 90/180/365 days from Settings, in 14-day requests.

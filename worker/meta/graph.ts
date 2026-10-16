@@ -8,6 +8,10 @@ export class GraphError extends Error {
   ) {
     super(message);
   }
+  /** Meta's "Please reduce the amount of data you're asking for" (code 1). */
+  get tooMuchData(): boolean {
+    return this.code === 1 || /reduce the amount of data/i.test(this.message);
+  }
   /** Token expired, revoked, or missing permissions: the user must reconnect. */
   get needsReconnect(): boolean {
     return this.code === 190 || this.code === 102 || this.code === 10 || this.code === 200;
@@ -58,8 +62,22 @@ export function graphClient(opts: {
     },
     async *pages<T>(path: string, params?: Record<string, string>) {
       let next: string | undefined = await url(path, params);
-      for (let page = 0; next && page < (opts.maxPages ?? 200); page++) {
-        const body: { data: T[]; paging?: { next?: string } } = await parse(await fetcher(next));
+      for (let page = 0; next && page < (opts.maxPages ?? 400); page++) {
+        let current: string = next;
+        let body: { data: T[]; paging?: { next?: string } };
+        for (;;) {
+          try {
+            body = await parse(await fetcher(current));
+            break;
+          } catch (e) {
+            // Meta refuses pages it considers too heavy: halve the page size and retry.
+            const u: URL = new URL(current);
+            const limit = Number(u.searchParams.get("limit") ?? 25);
+            if (!(e instanceof GraphError && e.tooMuchData) || limit <= 10) throw e;
+            u.searchParams.set("limit", String(Math.floor(limit / 2)));
+            current = u.toString();
+          }
+        }
         yield body.data;
         next = body.paging?.next;
       }
