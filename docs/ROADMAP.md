@@ -52,13 +52,13 @@ attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ 
   untagged spend), suggested pods with Accept in Needs Tagging, configurable amber CPA band, recently
   generated names in the Naming Tool (per browser).
 
-## Phase 4: Triple Whale + analytics (in progress)
+## Phase 4: Triple Whale + analytics ✅
 - ✅ (app side) Triple Whale attributed orders/revenue per ad and day ("Clicks & deterministic views",
   lifetime), pushed nightly by a Claude task to `/api/ingest/tw` (`docs/TRIPLE_WHALE.md`). Shown as
   separate "· TW" values: Dashboard ROAS tile, ranking cards, ad detail, Pods page and table.
 - ✅ Fatigue signals (frequency ↑, CTR ↓, CPA ↑ vs the ad's first week; reach stored from migration 0007), dashboard
   trend charts (spend / CPA / ROAS, Meta and Triple Whale), CSV export on Rankings, Concepts and Pods.
 
-## Phase 5: Operations (needs `ads_management`)
-- Approval queue: copy winners to Cost Cap Scale / Bid Cap Graveyard by post ID, pause losers.
-- Every action previewed, approved, created paused, logged.
+## Out of scope: managing ads
+The hub reports and analyses; it never changes campaigns. Meta access stays read-only (`ads_read`).
+Copying winners, pausing losers and other ad-management work stay in Ads Manager.

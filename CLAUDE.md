@@ -41,6 +41,6 @@ Before pushing: `npm run typecheck && npm test && npm run build` must all pass.
 - Atria tags arrive via `/api/ingest/atria` from a nightly Claude task signed in with an Access service token (`requireService`); service tokens can't use any other write route. See `docs/ATRIA.md`.
 - Connection, sync and editing routes require Cloudflare Access (`worker/access.ts`, `requireAccess` on each write route). Don't weaken that.
 - D1 allows at most **100 bound values per statement**; chunk anything built from a list. `worker/testing/sqljs-d1.ts` enforces it in tests.
-- Read-only Meta access (`ads_read`) until the ad-management phase. Any write action needs a preview, explicit approval, defaults to paused, and an audit log entry.
+- **Read-only on Meta, permanently** (`ads_read`). The hub reports and analyses; it never creates, edits or pauses ads. Ad management is out of scope.
 - Secrets (`META_APP_SECRET`, `TOKEN_KEY`, Triple Whale key) are Worker secrets, never in code or `wrangler.jsonc`. The Meta user token is stored encrypted in D1.
 - Sample data (`scripts/gen-sample.ts`) is fake. The UI shows the "Sample data" banner until a Meta sync succeeds; the first connection wipes it. Never reseed a live database.

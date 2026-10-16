@@ -37,9 +37,9 @@ name; see `NAMING.md` for the attribution rules.
 
 ## Later
 Creative Insights (by angle/format/hook, AI write-ups) → Triple Whale columns and fatigue
-analytics → approved ad-management actions (copy to Scale/Graveyard, pause).
+analytics.
 
 ## Non-goals for v1
-- No automated changes to campaigns.
+- No changes to campaigns, automated or approved: the hub is read-only on Meta (`ads_read`). Ad management stays in Ads Manager.
 - No blended "single source of truth" ROAS. Meta and Triple Whale stay separate.
 - No native app; responsive web only.
