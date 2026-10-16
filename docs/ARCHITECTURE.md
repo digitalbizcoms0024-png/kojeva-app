@@ -56,9 +56,9 @@ Atria is only reachable through its MCP connector inside Claude, not from the Wo
 scheduled Claude task runs nightly, reads tags/transcripts via the Atria MCP, and POSTs them to
 `/api/ingest/atria` with a shared ingest key. Atria is enrichment only; the app works without it.
 
-## Deploying (first time)
-1. `npx wrangler login`
-2. `npx wrangler d1 create kojeva-hub` → put the id in `wrangler.jsonc`.
-3. `npx wrangler d1 migrations apply kojeva-hub --remote`
-4. `npm run deploy`
-5. Zero Trust → Access → Applications → add the Worker's hostname, allow `@kojeva…` emails.
+## Deploying (Cloudflare Workers Builds, auto-deploys from GitHub)
+1. Cloudflare dashboard → Storage & databases → D1 → Create database `kojeva-hub`; put its ID in `wrangler.jsonc`.
+2. Workers & Pages → Create → Import a repository → `kojeva-app`.
+   - Build command: *(empty)*
+   - Deploy command: `npm run deploy:sample` until Phase 1 (**it wipes and reseeds the DB on every deploy**), then `npm run deploy`.
+3. Worker → Settings → Domains & Routes → workers.dev → enable Cloudflare Access, allow the team's emails.
