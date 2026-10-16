@@ -2,7 +2,7 @@
 // Usage: node scripts/gen-sample.ts > seed/sample.sql
 import { attributePod, type AttributionAd } from "../shared/attribution.ts";
 import { parseAdName } from "../shared/naming.ts";
-import { PODS } from "../shared/taxonomy.ts";
+import { GROUPS, PODS } from "../shared/taxonomy.ts";
 
 const DAYS = 90;
 
@@ -89,7 +89,11 @@ for (let i = 0; i < 64; i++) {
   // Winners get copied into scaling campaigns, like real account structure.
   const copies = winner ? 2 + Math.floor(rand() * 7) : rand() < 0.3 ? 2 : 1;
   // Like the real account: testing ad sets carry the strategist's name; a few don't.
-  const testAdSet = rand() < 0.85 ? `ABO | ${pod.name} | Test ${1 + (i % 9)}` : "ABO | Broad test";
+  const testAdSet = legacy
+    ? `${pick(["ME", "QW", "TV", "YD"])} | R${1 + (i % 5)}-S${10 + i} | ${rand() < 0.5 ? "Statics" : "Videos"}`
+    : rand() < 0.85
+      ? `IH | ${pod.name} | KOJEVA ${1 + (i % 9)}`
+      : "Top Spenders From ABO";
   const adsForAttribution: AttributionAd[] = [];
   for (let c = 0; c < copies; c++) {
     const camp = c === 0 ? CAMPAIGNS[0]! : pick(CAMPAIGNS.slice(1));
@@ -125,9 +129,10 @@ for (let i = 0; i < 64; i++) {
   // Same rules the live sync will use; about a third of the rest were tagged by hand.
   const auto = attributePod(adsForAttribution);
   const manual = !auto && rand() < 0.35;
-  const podId = auto ? PODS.find((p) => p.code === auto.podCode)!.id : manual ? pod.id : null;
+  const podId = auto ? GROUPS.find((p) => p.code === auto.podCode)!.id : manual ? pod.id : null;
   if (podId || parsed.angle || parsed.format) {
-    const editor = podId ? pick(editors.filter((e) => e.pod === podId)) : null;
+    const podEditors = editors.filter((e) => e.pod === podId);
+    const editor = podEditors.length ? pick(podEditors) : null;
     out.push(
       `INSERT INTO assignments (post_id, pod_id, pod_source, editor_id, angle, format, hook, landing_page, tags_source, updated_at, updated_by) VALUES (` +
         [q(plan.id), q(podId), q(auto ? auto.source : manual ? "manual" : null), q(editor?.id ?? null),

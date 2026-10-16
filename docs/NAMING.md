@@ -2,19 +2,26 @@
 
 ## How a post gets its pod (`shared/attribution.ts`)
 
-Today Kojeva separates pods by **ad set**: each creative strategist's name is in the names of the
-ad sets that hold their ads. Ad names are mostly free-form and carry no meaning (e.g. "HxM").
+Kojeva separates pods by **ad set**. In-house ad sets are named `IH | <Strategist> | …`
+("IH | Harris | KOJEVA 3 | STATIC | Scarcity"). Before the pods, an **agency** made the ads; its ad
+sets start with `ME`, `QW`, `TV` or `YD` ("ME | R2-S12 | Statics"). Ad names are mostly free-form
+and carry no meaning (e.g. "HxM").
 
 First match wins:
 1. **Set by hand** in the app. Never overwritten by a sync.
 2. **Pod code** in a standard ad name (`HAR-…`, `DHI-…`, `SHA-…`, `ALI-…`).
-3. **Strategist named in the ad set** as a separate word ("ABO | Harris | Oct" → Harris).
+3. **Strategist named in the ad set** as a separate word ("IH | Dhia | …" → Dhia).
    The ad set of the post's **earliest** ad is checked first, so a winner copied into unnamed
-   Scale / Graveyard ad sets keeps the pod that made it. An ad set naming two strategists is skipped.
-4. **Strategist named in the ad name** (`…VSL_HARRIS-h2`).
-5. A legacy prefix configured in Settings (none configured; prefixes like "HxM" are random).
+   Scale ad sets ("Top Spenders From ABO", "May Winners") keeps the pod that made it. An ad set
+   naming two strategists is skipped.
+4. **Agency ad set**: first segment is one of the agency codes → Agency.
+5. **Strategist named in the ad name** (`…VSL_HARRIS-h2`).
+6. A legacy prefix configured in Settings (none configured; prefixes like "HxM" are random).
+7. **Launched before the pods started** → Agency. The start date is detected as the first ad in a
+   strategist-named ad set, unless `podsStartDate` is set in the `attribution` setting.
 
-Anything left goes to **Needs Tagging**.
+Anything left (launched after pods started, untraceable) goes to **Needs Tagging**. The agency
+is shown beside the pods with its own hit rate, never inside a pod's numbers.
 
 ## The convention (for all new ads)
 

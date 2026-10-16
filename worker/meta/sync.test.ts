@@ -38,6 +38,24 @@ const ADS: GraphAd[] = [
     creative: { id: "983026154843231", effective_object_story_id: "776862388850901_122144514117047339", object_type: "VIDEO" },
   },
   {
+    id: "120241757339710001",
+    name: "Video 30",
+    effective_status: "ACTIVE",
+    created_time: "2026-06-02T10:00:00-0400",
+    adset: { id: "as5", name: "Top Spenders From ABO" },
+    campaign: { id: "c9", name: "Cost Cap | Scale" },
+    creative: { id: "111", effective_object_story_id: "776862388850901_111", object_type: "VIDEO" },
+  },
+  {
+    id: "120241980715400001",
+    name: "V457 | CBO",
+    effective_status: "ACTIVE",
+    created_time: "2026-08-10T10:00:00-0400",
+    adset: { id: "as6", name: "ME | R2-S12 | Statics" },
+    campaign: { id: "c1", name: "ABO | Creative Testing" },
+    creative: { id: "222", effective_object_story_id: "776862388850901_222", object_type: "PHOTO", image_url: "https://x/i2.jpg" },
+  },
+  {
     id: "120250321829620075",
     name: "Copy of 22v1",
     effective_status: "ACTIVE",
@@ -82,10 +100,10 @@ const metaHandler =
   (insightRows: () => GraphInsight[] = insights): Handler =>
   (url) => {
     if (url.pathname.endsWith(`${ACT}/ads`)) {
-      if (url.searchParams.get("after") === "p2") return { data: ADS.slice(2) };
+      if (url.searchParams.get("after") === "p2") return { data: ADS.slice(3) };
       const next = new URL(url);
       next.searchParams.set("after", "p2");
-      return { data: ADS.slice(0, 2), paging: { next: next.toString() } };
+      return { data: ADS.slice(0, 3), paging: { next: next.toString() } };
     }
     if (url.pathname.endsWith(`${ACT}/insights`)) return { data: insightRows() };
     return { error: { message: `Unexpected ${url.pathname}`, code: 100 } };
@@ -109,7 +127,7 @@ describe("runSync", () => {
   it("syncs ads, groups copies, attributes pods and loads daily metrics", async () => {
     const meta = metaApi();
     const result = await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, meta);
-    expect(result).toMatchObject({ ok: true, ads: 4, posts: 3, rows: 4 });
+    expect(result).toMatchObject({ ok: true, ads: 6, posts: 5, rows: 4 });
 
     // Paging followed, account and version used, token sent.
     const adsCalls = meta.calls.filter((u) => u.pathname === `/v26.0/${ACT}/ads`);
@@ -127,6 +145,9 @@ describe("runSync", () => {
     expect(pods).toContainEqual({ post_id: "776862388850901_122144514117047339", pod_id: "harris", pod_source: "name" });
     expect(pods).toContainEqual({ post_id: "776862388850901_122144074965047339", pod_id: "dhia", pod_source: "adset" });
     expect(pods).toContainEqual({ post_id: "ad:999", pod_id: "ali", pod_source: "adset" });
+    // Agency: by ad set prefix, and by launching before the first strategist-named ad set (Sept 20).
+    expect(pods).toContainEqual({ post_id: "776862388850901_222", pod_id: "agency", pod_source: "adset" });
+    expect(pods).toContainEqual({ post_id: "776862388850901_111", pod_id: "agency", pod_source: "era" });
 
     const [post] = await q<{ media_type: string; thumbnail_url: string }>("SELECT media_type, thumbnail_url FROM posts WHERE id = ?1", POST_HXM);
     expect(post).toEqual({ media_type: "video", thumbnail_url: "https://scontent.example/t1.jpg" });
@@ -177,7 +198,7 @@ describe("runSync", () => {
       return base(url);
     });
     const result = await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, picky);
-    expect(result).toMatchObject({ ok: true, ads: 4, rows: 4 });
+    expect(result).toMatchObject({ ok: true, ads: 6, rows: 4 });
     expect(limits.slice(0, 3)).toEqual([200, 100, 50]);
   });
 

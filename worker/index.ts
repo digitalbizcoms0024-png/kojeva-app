@@ -9,6 +9,7 @@ import type {
   SortKey,
 } from "../shared/api.ts";
 import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, roas, type Totals } from "../shared/metrics.ts";
+import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { accessConfigured, accessMiddleware } from "./access.ts";
 import type { AppEnv, Env } from "./env.ts";
 import { connection, sync } from "./meta/routes.ts";
@@ -52,16 +53,21 @@ const SORTERS: Record<SortKey, (t: Totals) => number | null> = {
 
 app.get("/meta", async (c) => {
   const db = c.env.DB;
-  const [targets, latestDate, lastRun, pods, live, conn] = await Promise.all([
+  const [targets, latestDate, lastRun, pods, live, conn, attr, detected] = await Promise.all([
     getTargets(db),
     getLatestDate(db),
     db
       .prepare("SELECT source, finished_at, status, message FROM sync_runs ORDER BY id DESC LIMIT 1")
       .first<{ source: string; finished_at: string | null; status: string; message: string | null }>(),
-    db.prepare("SELECT id, code, name, color FROM pods ORDER BY name").all<MetaResponse["pods"][number]>(),
+    db
+      .prepare("SELECT id, code, name, color, kind FROM pods ORDER BY kind DESC, name")
+      .all<MetaResponse["pods"][number]>(),
     db.prepare("SELECT 1 AS x FROM sync_runs WHERE source = 'meta' AND status = 'ok' LIMIT 1").first(),
     db.prepare("SELECT expires_at FROM meta_connections WHERE id = 1").first<{ expires_at: string | null }>(),
+    db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),
+    db.prepare("SELECT value FROM settings WHERE key = 'pods_start_detected'").first<{ value: string }>(),
   ]);
+  const attribution = { ...DEFAULT_ATTRIBUTION, ...(attr ? (JSON.parse(attr.value) as Partial<AttributionSettings>) : {}) };
   const body: MetaResponse = {
     dataMode: live ? "live" : "sample",
     connectionExpiresInDays:
@@ -73,6 +79,11 @@ app.get("/meta", async (c) => {
     latestDate,
     targets,
     pods: pods.results,
+    attribution: {
+      agencyPrefixes: attribution.agencyPrefixes,
+      podsStartDate: attribution.podsStartDate ?? (detected ? (JSON.parse(detected.value) as string | null) : null),
+      detected: !attribution.podsStartDate,
+    },
   };
   return c.json(body);
 });
@@ -174,12 +185,14 @@ app.get("/pods", async (c) => {
   if (!range) return c.json({ error: "Invalid custom date range" }, 400);
   const [posts, pods] = await Promise.all([
     loadPosts(db, range.from, range.to),
-    db.prepare("SELECT id, name, color FROM pods ORDER BY name").all<{ id: string; name: string; color: string }>(),
+    db
+      .prepare("SELECT id, name, color, kind FROM pods ORDER BY kind DESC, name")
+      .all<{ id: string; name: string; color: string; kind: "pod" | "agency" }>(),
   ]);
 
-  const groups: { podId: string | null; name: string; color: string | null }[] = [
-    ...pods.results.map((p) => ({ podId: p.id, name: p.name, color: p.color })),
-    { podId: null, name: "Unassigned", color: null },
+  const groups: { podId: string | null; name: string; color: string | null; kind: PodRow["kind"] }[] = [
+    ...pods.results.map((p) => ({ podId: p.id, name: p.name, color: p.color, kind: p.kind })),
+    { podId: null, name: "Unassigned", color: null, kind: "unassigned" },
   ];
 
   const rows: PodRow[] = groups.map((g) => {

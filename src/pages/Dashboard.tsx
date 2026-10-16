@@ -10,7 +10,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
   const top = useApi<RankingsResponse>(`/api/rankings?${qs({ range, sort: "spend", limit: 5 })}`);
   const pods = useApi<PodsResponse>(`/api/pods?${qs({ range })}`);
   const t = top.data?.totals;
-  const unassigned = pods.data?.rows.find((r) => !r.podId);
+  const unassigned = pods.data?.rows.find((r) => r.kind === "unassigned");
   const unassignedShare = t && unassigned && t.spendCents > 0 ? unassigned.totals.spendCents / t.spendCents : null;
 
   return (
@@ -37,7 +37,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
 
       {unassignedShare != null && unassignedShare > 0.05 && (
         <a href="#/tagging" className="block rounded-xl border border-warn/40 bg-warn-soft px-4 py-3 text-sm text-ink">
-          <b>{pct(unassignedShare, 0)} of spend</b> ({money(unassigned!.totals.spendCents, { compact: true })}) is on ads with no pod, so pod rankings leave it out. <span className="text-accent underline">Tag them →</span>
+          <b>{pct(unassignedShare, 0)} of spend</b> ({money(unassigned!.totals.spendCents, { compact: true })}) is on ads the hub can't credit to a pod or the agency. <span className="text-accent underline">Tag them →</span>
         </a>
       )}
 
@@ -46,7 +46,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
         {pods.error && <Empty>{pods.error.message}</Empty>}
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {pods.data?.rows
-            .filter((r) => r.podId)
+            .filter((r) => r.kind === "pod")
             .sort((a, b) => (b.hitRate ?? -1) - (a.hitRate ?? -1))
             .map((r) => (
               <Card key={r.podId} className="p-4">

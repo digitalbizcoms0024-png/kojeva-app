@@ -30,7 +30,8 @@ export interface MetaResponse {
   lastSync: { source: string; finishedAt: string | null; status: string; message: string | null } | null;
   latestDate: string | null;
   targets: Targets;
-  pods: { id: string; code: string; name: string; color: string }[];
+  pods: { id: string; code: string; name: string; color: string; kind: "pod" | "agency" }[];
+  attribution: { agencyPrefixes: string[]; podsStartDate: string | null; detected: boolean };
 }
 
 export interface Assignment {
@@ -84,6 +85,7 @@ export interface PostDetail extends PostSummary {
 
 export interface PodRow {
   podId: string | null;
+  kind: "pod" | "agency" | "unassigned";
   name: string;
   color: string | null;
   totals: Totals;

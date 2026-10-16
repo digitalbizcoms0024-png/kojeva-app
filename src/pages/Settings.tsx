@@ -286,8 +286,12 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
       </Card>
 
       <Card className="p-5">
-        <h2 className="font-semibold text-ink">Pods</h2>
-        <p className="text-xs text-ink-3">An ad's pod comes from the strategist named in its ad set.</p>
+        <h2 className="font-semibold text-ink">Pods & agency</h2>
+        <p className="text-xs text-ink-3">
+          An ad's pod comes from the strategist named in its in-house ad set ("IH | Harris | …"). Ad sets starting with{" "}
+          {meta.attribution.agencyPrefixes.join(", ")} are the agency's, and so is anything launched before the pods started
+          {meta.attribution.podsStartDate ? ` (${shortDate(meta.attribution.podsStartDate)}${meta.attribution.detected ? ", detected from the first IH ad set" : ""})` : ""}.
+        </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {meta.pods.map((p) => (
             <span key={p.id} className="flex items-center gap-2">

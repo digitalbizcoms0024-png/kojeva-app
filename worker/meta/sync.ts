@@ -1,5 +1,5 @@
 // Pulls ads and daily insights from Meta into D1. See docs/ROADMAP.md → Phase 1.
-import { attributePod } from "../../shared/attribution.ts";
+import { attributePod, DEFAULT_ATTRIBUTION, detectPodsStart, type AttributionSettings } from "../../shared/attribution.ts";
 import { parseAdName } from "../../shared/naming.ts";
 import { podByCode, type PodCode } from "../../shared/taxonomy.ts";
 import { decrypt } from "../crypto.ts";
@@ -113,7 +113,7 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
 
 /** Recomputes pod and tags for every post, never touching manual values. */
 export async function attribute(db: D1Database) {
-  const [{ results: ads }, prefix] = await Promise.all([
+  const [{ results: ads }, prefix, attr] = await Promise.all([
     db.prepare("SELECT post_id, name, adset_name, created_time FROM ads").all<{
       post_id: string;
       name: string;
@@ -121,8 +121,20 @@ export async function attribute(db: D1Database) {
       created_time: string | null;
     }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'legacy_prefix_map'").first<{ value: string }>(),
+    db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),
   ]);
   const prefixMap = prefix ? (JSON.parse(prefix.value) as Record<string, PodCode>) : {};
+  const settings: AttributionSettings = { ...DEFAULT_ATTRIBUTION, ...(attr ? JSON.parse(attr.value) : {}) };
+  if (!settings.podsStartDate) {
+    settings.podsStartDate = detectPodsStart(
+      ads.map((a) => ({ name: a.name, adsetName: a.adset_name, createdTime: a.created_time })),
+    );
+    // Shown in Settings so the team can check the detected date.
+    await db
+      .prepare("INSERT INTO settings (key, value) VALUES ('pods_start_detected', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .bind(JSON.stringify(settings.podsStartDate))
+      .run();
+  }
   const byPost = new Map<string, typeof ads>();
   for (const a of ads) byPost.set(a.post_id, [...(byPost.get(a.post_id) ?? []), a]);
 
@@ -132,6 +144,7 @@ export async function attribute(db: D1Database) {
     const pod = attributePod(
       list.map((a) => ({ name: a.name, adsetName: a.adset_name, createdTime: a.created_time })),
       prefixMap,
+      settings,
     );
     const origin = [...list].sort((a, b) => (a.created_time ?? "").localeCompare(b.created_time ?? ""))[0]!;
     const tags = parseAdName(origin.name);

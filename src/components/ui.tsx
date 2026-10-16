@@ -10,6 +10,7 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 
 const SOURCE_LABEL: Record<string, string> = {
   adset: "from the ad set name",
+  era: "because it launched before the pods started",
   name: "from the ad name",
   manual: "by hand",
 };

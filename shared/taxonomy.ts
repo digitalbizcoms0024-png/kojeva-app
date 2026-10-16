@@ -8,15 +8,21 @@ export const PODS = [
   { id: "ali", code: "ALI", name: "Ali", color: "#eda100" },
 ] as const;
 
-export type PodCode = (typeof PODS)[number]["code"];
-export type PodId = (typeof PODS)[number]["id"];
+/** The agency that produced ads before the in-house pods started. Not a pod, but ranked beside them. */
+export const AGENCY = { id: "agency", code: "AGY", name: "Agency", color: "#8a847c" } as const;
+
+/** Everyone ads can be credited to: the 4 pods, then the agency. */
+export const GROUPS = [...PODS, AGENCY] as const;
+
+export type PodCode = (typeof GROUPS)[number]["code"];
+export type PodId = (typeof GROUPS)[number]["id"];
 
 export function podByCode(code: string) {
-  return PODS.find((p) => p.code === code.toUpperCase()) ?? null;
+  return GROUPS.find((p) => p.code === code.toUpperCase()) ?? null;
 }
 
 export function podById(id: string) {
-  return PODS.find((p) => p.id === id) ?? null;
+  return GROUPS.find((p) => p.id === id) ?? null;
 }
 
 export const ANGLES: Record<string, string> = {

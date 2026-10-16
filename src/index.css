@@ -24,6 +24,7 @@
   --pod-dhia: #eb6834;
   --pod-shameer: #1baf7a;
   --pod-ali: #eda100;
+  --pod-agency: #8a847c;
   --chart-bar: #78716c;
   --chart-line: #1c1917;
 }
@@ -49,6 +50,7 @@
     --pod-dhia: #d95926;
     --pod-shameer: #199e70;
     --pod-ali: #c98500;
+    --pod-agency: #8f8d85;
     --chart-bar: #a8a29e;
     --chart-line: #f0efec;
   }
@@ -74,6 +76,7 @@
   --pod-dhia: #d95926;
   --pod-shameer: #199e70;
   --pod-ali: #c98500;
+  --pod-agency: #8f8d85;
   --chart-bar: #a8a29e;
   --chart-line: #f0efec;
 }
