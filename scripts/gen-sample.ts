@@ -31,7 +31,9 @@ const LEGACY_NAMES = [
   "HxM-120 Proving My Husband Wrong - Ad", "23v2", "HxM 7.1 Funeral_MatureFace_UGC_Story",
   "V556 PDP", "Video 30", "Video 22", "Video 61", "V402", "batch12-1", "batch14-3", "HxM-98 Wedding Day",
   "7-1", "18v3", "Video 140 | PDP", "V488 | CBO", "Video 12", "HxM 5.2 Gua Sha Broke", "V511",
-  "batch16-1", "Video 77", "V530 PDP", "31v1", "Video 145",
+  "batch16-1", "Video 77", "V530 PDP", "31v1", "HxM2-Yapper Founder-2 | Post ID",
+  "HxM-1-ANIMSONG-Husband at Walmart | Post ID", "kojeva 10 HK2 | Post ID",
+  "GS_SA_COMPARISON VSL_HARRIS-h2 | Post ID", "Copy of 22v1",
 ];
 const ANGLES = ["Depuff", "MatureFace", "Comparison", "SocialProof", "Husband", "Jawline"];
 const FORMATS = ["UGC", "UGC", "UGC", "Static", "VSL", "Interview"];
@@ -83,13 +85,14 @@ for (let i = 0; i < 64; i++) {
   out.push(`INSERT INTO posts (id, media_type, created_time) VALUES (${q(plan.id)}, ${q(mediaType)}, ${q(isoDay(launch))});`);
 
   // Standard names carry their pod; about half of legacy posts were tagged by hand.
-  const manual = !parsed.podCode && rand() < 0.5;
-  const podId = parsed.podCode ? PODS.find((p) => p.code === parsed.podCode)!.id : manual ? pod.id : null;
+  const fromName = parsed.podCode ?? parsed.strategistHint;
+  const manual = !fromName && rand() < 0.5;
+  const podId = fromName ? PODS.find((p) => p.code === fromName)!.id : manual ? pod.id : null;
   if (podId || parsed.angle || parsed.format) {
     const editor = podId ? pick(editors.filter((e) => e.pod === podId)) : null;
     out.push(
       `INSERT INTO assignments (post_id, pod_id, pod_source, editor_id, angle, format, hook, landing_page, tags_source, updated_at, updated_by) VALUES (` +
-        [q(plan.id), q(podId), q(podId ? (parsed.podCode ? "name" : "manual") : null), q(editor?.id ?? null),
+        [q(plan.id), q(podId), q(podId ? (fromName ? "name" : "manual") : null), q(editor?.id ?? null),
          q(parsed.angle), q(parsed.format), q(parsed.hook), q(parsed.landingPage), q("name"), q(isoDay(0)), q("sample")].join(", ") + ");",
     );
   }

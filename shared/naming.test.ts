@@ -34,7 +34,22 @@ describe("parseAdName — legacy names", () => {
         title: "Funeral_MatureFace_UGC_Story",
       },
     ],
-    ["ad2 - Copy 4", { creativeId: null, isCopy: true, convention: "unparsed", title: "ad2" }],
+    // From the Graph API, Oct 2026.
+    [
+      "HxM2-Yapper Founder-2 | Post ID",
+      { legacyPrefix: "HxM", creativeId: "HxM-2", isCopy: false, title: "Yapper Founder-2" },
+    ],
+    [
+      "HxM-1-ANIMSONG-Husband at Walmart | Post ID",
+      { legacyPrefix: "HxM", creativeId: "HxM-1", angle: "Husband", title: "ANIMSONG-Husband at Walmart" },
+    ],
+    ["kojeva 10 HK2 | Post ID", { legacyPrefix: "kojeva", creativeId: "kojeva-10", title: "HK2" }],
+    [
+      "GS_SA_COMPARISON VSL_HARRIS-h2 | Post ID",
+      { convention: "unparsed", angle: "Comparison", format: "VSL", strategistHint: "HAR" },
+    ],
+    ["Copy of 22v1", { creativeId: "22", iteration: 1, isCopy: true }],
+    ["ad2 - Copy 4", { legacyPrefix: "ad", creativeId: "ad-2", isCopy: true }],
   ];
 
   it.each(cases)("%s", (raw, expected) => {
@@ -103,6 +118,13 @@ describe("suggestPodCode", () => {
     expect(suggestPodCode(parseAdName("ALI-5 | - | - | - | -"), {})).toEqual({
       podCode: "ALI",
       reason: "from ad name",
+    });
+  });
+
+  it("uses a strategist named in the ad name", () => {
+    expect(suggestPodCode(parseAdName("GS_SA_COMPARISON VSL_HARRIS-h2 | Post ID"), {})).toEqual({
+      podCode: "HAR",
+      reason: "Harris named in ad name",
     });
   });
 

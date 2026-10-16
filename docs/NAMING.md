@@ -27,10 +27,14 @@ stripped before parsing, and copies are grouped by post anyway.
 | `N-M` | `4-2` | creative `4`, iteration 2 (meaning unconfirmed) |
 | `PREFIX-N` / `PREFIX N.M` | `HxM-120 …`, `HxM 7.1 …` | prefix `HxM`, creative `HxM-120`, iteration 1 |
 | ` \| CBO`, ` \| PDP`, ` PDP` | `V457 \| CBO`, `V556 PDP` | campaign hint / landing page |
+| `PREFIXN-…` | `HxM2-Yapper Founder-2` | prefix `HxM`, creative `HxM-2` |
+| Strategist name anywhere | `GS_SA_COMPARISON VSL_HARRIS-h2` | suggests Harris's pod; also picks out Comparison / VSL |
+| ` \| Post ID` suffix | `kojeva 10 HK2 \| Post ID` | ignored (ad launched from an existing post) |
+| `Copy of …` prefix | `Copy of 22v1` | copy of creative `22`, iteration 1 |
 | Underscore tokens | `Funeral_MatureFace_UGC_Story` | known tags are picked out (angle MatureFace, format UGC, hook Story) |
 
-Legacy names **never** set a pod on their own. A prefix such as `HxM` maps to a pod only after it's
-added to the legacy prefix map in Settings. Everything else goes to **Needs Tagging**.
+Legacy names set a pod only when a strategist is named in them (HARRIS, DHIA, SHAMEER, ALI as a
+separate word). A prefix such as `HxM` maps to a pod only after it's added to the legacy prefix map in Settings. Everything else goes to **Needs Tagging**.
 
 ## Open questions
 - What does `HxM` stand for, and which pod is it?

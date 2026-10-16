@@ -6,6 +6,7 @@ import {
   FORMATS,
   HOOKS,
   LANDING_PAGES,
+  PODS,
   podByCode,
   type PodCode,
 } from "./taxonomy.ts";
@@ -27,11 +28,16 @@ export interface ParsedName {
   landingPage: string | null;
   campaignHint: (typeof CAMPAIGN_HINTS)[number] | null;
   isCopy: boolean;
+  /** Pod whose strategist is named in the ad name, e.g. "…VSL_HARRIS-h2". */
+  strategistHint: PodCode | null;
   /** Free text left over after known tokens were removed. */
   title: string | null;
 }
 
 const COPY_SUFFIX = /\s*-\s*Copy(?:\s+\d+)?\s*$/i;
+const COPY_PREFIX = /^Copy of\s+/i;
+// Marks ads launched from an existing post; carries no creative information.
+const POST_ID_SUFFIX = /\s*\|\s*Post ID\s*$/i;
 const STANDARD = /^(HAR|DHI|SHA|ALI)-([A-Z]?\d+)(?:-i(\d+))?((?:\s*\|\s*[^|]*)*)$/i;
 const EMPTY = "-";
 
@@ -49,6 +55,7 @@ function empty(raw: string): ParsedName {
     landingPage: null,
     campaignHint: null,
     isCopy: false,
+    strategistHint: null,
     title: null,
   };
 }
@@ -61,10 +68,12 @@ function lookup(vocab: Record<string, string>, token: string): string | null {
 /** Records known vocabulary tokens found in text; returns the unrecognised remainder. */
 function absorbTokens(text: string, out: ParsedName): string {
   const leftover: string[] = [];
-  for (const token of text.split(/[\s_|]+/).filter(Boolean)) {
+  for (const token of text.split(/[\s_|-]+/).filter(Boolean)) {
     const hint = CAMPAIGN_HINTS.find((h) => h === token.toUpperCase());
+    const strategist = PODS.find((p) => p.name.toUpperCase() === token.toUpperCase());
     let key: string | null;
-    if (hint && !out.campaignHint) out.campaignHint = hint;
+    if (strategist && !out.strategistHint) out.strategistHint = strategist.code;
+    else if (hint && !out.campaignHint) out.campaignHint = hint;
     else if (!out.landingPage && (key = lookup(LANDING_PAGES, token))) out.landingPage = key;
     else if (!out.format && (key = lookup(FORMATS, token))) out.format = key;
     else if (!out.hook && (key = lookup(HOOKS, token))) out.hook = key;
@@ -77,9 +86,15 @@ function absorbTokens(text: string, out: ParsedName): string {
 export function parseAdName(raw: string): ParsedName {
   const out = empty(raw);
   let name = raw.trim();
-  while (COPY_SUFFIX.test(name)) {
-    out.isCopy = true;
-    name = name.replace(COPY_SUFFIX, "");
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const re of [COPY_SUFFIX, COPY_PREFIX, POST_ID_SUFFIX]) {
+      if (re.test(name)) {
+        if (re !== POST_ID_SUFFIX) out.isCopy = true;
+        name = name.replace(re, "").trim();
+        changed = true;
+      }
+    }
   }
 
   const std = STANDARD.exec(name);
@@ -120,12 +135,14 @@ export function parseAdName(raw: string): ParsedName {
     out.creativeId = m[1]!;
     out.iteration = Number(m[2]);
     rest = m[3]!;
-  } else if ((m = /^([A-Za-z][A-Za-z0-9]{1,5})[-\s]+(\d+)(?:\.(\d+))?\b(.*)$/.exec(name))) {
+  } else if ((m = /^([A-Za-z]{2,8})[-\s]?(\d+)(?:\.(\d+))?(?=[-\s_|]|$)(.*)$/.exec(name))) {
     out.legacyPrefix = m[1]!;
     out.creativeId = `${m[1]}-${m[2]}`;
     out.iteration = m[3] ? Number(m[3]) : null;
     rest = m[4]!;
   } else {
+    // No recognisable ID, but tags and a strategist name may still be in there.
+    absorbTokens(name, out);
     out.title = name || null;
     return out;
   }
@@ -172,6 +189,8 @@ export function suggestPodCode(
   legacyPrefixMap: Record<string, PodCode>,
 ): { podCode: PodCode; reason: string } | null {
   if (parsed.podCode) return { podCode: parsed.podCode, reason: "from ad name" };
+  if (parsed.strategistHint)
+    return { podCode: parsed.strategistHint, reason: `${podByCode(parsed.strategistHint)!.name} named in ad name` };
   if (parsed.legacyPrefix) {
     const key = Object.keys(legacyPrefixMap).find(
       (k) => k.toLowerCase() === parsed.legacyPrefix!.toLowerCase(),

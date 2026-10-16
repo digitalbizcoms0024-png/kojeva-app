@@ -10,8 +10,7 @@
     {
       "binding": "DB",
       "database_name": "kojeva-hub",
-      // Replace with the id printed by `wrangler d1 create kojeva-hub` before the first deploy.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "3d5567bd-8374-4f81-880c-6ad59d1f0878",
       "migrations_dir": "migrations"
     }
   ],
