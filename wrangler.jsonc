@@ -30,7 +30,7 @@
     "ACCESS_TEAM_DOMAIN": "tiny-band-a384.cloudflareaccess.com",
     "ACCESS_AUD": "",
     // Client ID of the Access service token the nightly Atria task uses (docs/ATRIA.md).
-    "ATRIA_CLIENT_ID": ""
+    "ATRIA_CLIENT_ID": "52d224fd6c7660e512605f4d71331b55.access"
   },
   "triggers": {
     // Nightly Meta sync, 09:17 UTC (~5am New York).
