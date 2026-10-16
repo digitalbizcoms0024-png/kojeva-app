@@ -25,11 +25,15 @@ function b64urlDecode(s: string): Uint8Array {
   return out;
 }
 
-/** Returns the signed-in email, or null if the token is missing or invalid. */
+/**
+ * Returns the signed-in email, or null if the token is missing or invalid.
+ * Without `aud`, any application in the team is accepted; the team being the
+ * account's own, that still limits sign-ins to its Access policies.
+ */
 export async function verifyAccessJwt(
   token: string,
   team: string,
-  aud: string,
+  aud: string | undefined,
   fetcher: typeof fetch = fetch,
   now = Date.now(),
 ): Promise<string | null> {
@@ -54,7 +58,7 @@ export async function verifyAccessJwt(
       new TextEncoder().encode(`${h}.${p}`),
     );
     const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-    if (!ok || !auds.includes(aud) || payload.iss !== `https://${team}`) return null;
+    if (!ok || (aud && !auds.includes(aud)) || payload.iss !== `https://${team}`) return null;
     if (!payload.exp || payload.exp * 1000 < now) return null;
     return payload.email ?? "unknown";
   } catch {
@@ -63,7 +67,7 @@ export async function verifyAccessJwt(
 }
 
 export function accessConfigured(env: AppEnv["Bindings"]): boolean {
-  return Boolean(env.ACCESS_TEAM_DOMAIN && env.ACCESS_AUD);
+  return Boolean(env.ACCESS_TEAM_DOMAIN);
 }
 
 /**
@@ -76,7 +80,7 @@ export const accessMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const token =
     c.req.header("Cf-Access-Jwt-Assertion") ??
     /(?:^|;\s*)CF_Authorization=([^;]+)/.exec(c.req.header("Cookie") ?? "")?.[1];
-  const email = token ? await verifyAccessJwt(token, c.env.ACCESS_TEAM_DOMAIN!, c.env.ACCESS_AUD!) : null;
+  const email = token ? await verifyAccessJwt(token, c.env.ACCESS_TEAM_DOMAIN!, c.env.ACCESS_AUD || undefined) : null;
   if (!email) return c.json({ error: "Sign in through Cloudflare Access to use Kojeva Hub." }, 401);
   c.set("userEmail", email);
   return next();

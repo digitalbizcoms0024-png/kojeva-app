@@ -21,9 +21,10 @@
     "META_APP_ID": "2206600029921100",
     "META_AD_ACCOUNT_ID": "act_2930078677198801",
     "META_GRAPH_VERSION": "v26.0",
-    // From Zero Trust → Access → Applications → this app. Until both are set, the app
-    // refuses to connect Meta. Secrets (META_APP_SECRET, TOKEN_KEY) are set in the dashboard.
-    "ACCESS_TEAM_DOMAIN": "",
+    // Zero Trust team domain. While empty, the app refuses to connect Meta. ACCESS_AUD
+    // (the app's audience tag) narrows sign-ins to this one Access app; optional.
+    // Secrets (META_APP_SECRET, TOKEN_KEY) are set in the dashboard.
+    "ACCESS_TEAM_DOMAIN": "tiny-band-a384.cloudflareaccess.com",
     "ACCESS_AUD": ""
   },
   "triggers": {

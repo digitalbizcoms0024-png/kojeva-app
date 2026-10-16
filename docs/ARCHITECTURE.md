@@ -47,7 +47,8 @@ Ranges are relative to the latest synced day, not the wall clock. Connection and
 | Name | Kind | Where |
 |---|---|---|
 | `META_APP_ID`, `META_AD_ACCOUNT_ID`, `META_GRAPH_VERSION` | var | `wrangler.jsonc` |
-| `ACCESS_TEAM_DOMAIN` (e.g. `kojeva.cloudflareaccess.com`), `ACCESS_AUD` | var | `wrangler.jsonc` |
+| `ACCESS_TEAM_DOMAIN` (`tiny-band-a384.cloudflareaccess.com`) | var | `wrangler.jsonc` |
+| `ACCESS_AUD` (optional: limits sign-ins to this one Access app) | var | `wrangler.jsonc` |
 | `META_APP_SECRET` | secret | Worker → Settings → Variables and Secrets |
 | `TOKEN_KEY` (random, 32+ chars) | secret | same |
 | `META_SYSTEM_TOKEN` (optional) | secret | same |

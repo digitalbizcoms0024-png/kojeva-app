@@ -118,7 +118,7 @@ function MetaPanel({ onSynced }: { onSynced: () => void }) {
           <div className="text-sm font-medium text-ink">Before connecting</div>
           <ul className="mt-2 flex flex-col gap-1 text-sm">
             <Check ok={s.accessProtected}>
-              Cloudflare Access is on, and its team domain and AUD tag are set as <code>ACCESS_TEAM_DOMAIN</code> / <code>ACCESS_AUD</code>
+              Cloudflare Access is on, and its team domain is set as <code>ACCESS_TEAM_DOMAIN</code>
             </Check>
             <Check ok={!s.missingSecrets.includes("META_APP_SECRET")}>
               <code>META_APP_SECRET</code> secret added (Meta app → App settings → Basic)

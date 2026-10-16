@@ -202,7 +202,7 @@ describe("guards", () => {
   });
 
   it("requires an Access sign-in on every API call once configured", async () => {
-    const locked = { ...env, ACCESS_TEAM_DOMAIN: "kojeva.cloudflareaccess.com", ACCESS_AUD: "aud" };
+    const locked = { ...env, ACCESS_TEAM_DOMAIN: "kojeva.cloudflareaccess.com" };
     const res = await app.fetch(new Request("https://hub.test/api/rankings"), locked, {} as ExecutionContext);
     expect(res.status).toBe(401);
   });

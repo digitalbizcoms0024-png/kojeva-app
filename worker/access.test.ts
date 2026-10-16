@@ -42,6 +42,11 @@ describe("verifyAccessJwt", () => {
     expect(await verifyAccessJwt(await sign({ ...valid(), iss: "https://evil.cloudflareaccess.com" }), TEAM, AUD, certsFetch)).toBeNull();
   });
 
+  it("accepts any audience from the team when no AUD is configured", async () => {
+    expect(await verifyAccessJwt(await sign({ ...valid(), aud: ["other-app"] }), TEAM, undefined, certsFetch)).toBe("founder@kojeva.com");
+    expect(await verifyAccessJwt(await sign({ ...valid(), iss: "https://evil.cloudflareaccess.com" }), TEAM, undefined, certsFetch)).toBeNull();
+  });
+
   it("rejects a token signed by another key or with a tampered payload", async () => {
     const other = (await crypto.subtle.generateKey(
       { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
