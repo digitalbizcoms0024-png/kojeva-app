@@ -41,10 +41,11 @@ attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ 
   names; hand-set tags win. Synced posts get these as their automatic tags.
 - ✅ Creative Insights page: hit rate, test CPA / ROAS / spend per angle or format, by pod and period,
   with a drill-down to the concepts behind each row. Thin samples (< 3 decided) are flagged.
-- Next: Atria tags + transcripts. Blocked on reachability: a scheduled Claude task can't reach
-  workers.dev, and the app sits behind Access. Needs an Access service token plus the domain allowed
-  in the Claude environment's network settings.
-- Next: "Why it works" AI notes, always citing the numbers they're based on (needs an LLM API key).
+- ✅ (app side) Atria tags: Meta sync records each ad's video/image; `/api/ingest/atria` (service
+  token only) receives tags from a nightly Claude task; tags shown on ads, concepts, and Insights "By
+  Atria theme" / "By core desire". Setup steps in `docs/ATRIA.md`. Transcripts skipped (cost credits).
+- ⏸ Parked (remind the user): "Why it works" AI notes per winning concept, citing its numbers. Needs a
+  Claude API key as a Worker secret; a few dollars a month.
 
 ## Phase 4: Triple Whale + analytics
 - Triple Whale attributed revenue/ROAS per ad as separate columns.

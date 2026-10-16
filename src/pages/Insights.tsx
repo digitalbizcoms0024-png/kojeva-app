@@ -9,7 +9,9 @@ import { ConceptsTable } from "./PodsView.tsx";
 
 type Range = keyof typeof RANGE_LABELS;
 
-const LABELS: Record<InsightDimension, Record<string, string>> = { angle: ANGLES, format: FORMATS };
+const LABELS: Record<InsightDimension, Record<string, string>> = { angle: ANGLES, format: FORMATS, atria_theme: {}, atria_desire: {} };
+const DIM_NAME: Record<InsightDimension, string> = { angle: "Angle", format: "Format", atria_theme: "Atria theme", atria_desire: "Core desire" };
+const isAtria = (d: InsightDimension) => d === "atria_theme" || d === "atria_desire";
 
 /** Fewer decided tests than this and a hit rate is shown as a hint, not a verdict. */
 const MIN_DECIDED = 3;
@@ -20,9 +22,11 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
   const [open, setOpen] = useState<string | null | undefined>(undefined);
   const { data, error } = useApi<InsightsResponse>(`/api/insights?${qs({ range, dimension, pod })}`);
   const labels = LABELS[dimension];
-  const name = (v: string | null) => (v == null ? `No ${dimension}` : (labels[v] ?? v));
-  const total = data?.rows.reduce((n, r) => n + r.concepts, 0) ?? 0;
-  const tagged = data?.rows.filter((r) => r.value !== null).reduce((n, r) => n + r.concepts, 0) ?? 0;
+  const name = (v: string | null) => (v == null ? (isAtria(dimension) ? "Not tagged by Atria" : `No ${dimension}`) : (labels[v] ?? v));
+  // Atria rows overlap (a concept sits under each of its themes), so count concepts once.
+  const untagged = data?.rows.find((r) => r.value === null)?.concepts ?? 0;
+  const total = isAtria(dimension) ? null : (data?.rows.reduce((n, r) => n + r.concepts, 0) ?? 0);
+  const tagged = total == null ? 0 : total - untagged;
 
   return (
     <div className="flex flex-col gap-5">
@@ -47,6 +51,8 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
           options={[
             { value: "angle", label: "By angle" },
             { value: "format", label: "By format" },
+            { value: "atria_theme", label: "By Atria theme" },
+            { value: "atria_desire", label: "By core desire" },
           ]}
         />
         <Select
@@ -58,10 +64,13 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
           }}
           options={[{ value: "", label: "All" }, ...meta.pods.map((p) => ({ value: p.id, label: p.name }))]}
         />
-        {data && total > 0 && (
+        {data && total != null && total > 0 && (
           <span className="num text-xs text-ink-3">
             {total} concepts · {pct(tagged / total, 0)} have {dimension === "angle" ? "an angle" : "a format"}
           </span>
+        )}
+        {data && isAtria(dimension) && (
+          <span className="text-xs text-ink-3">A concept appears under each of its Atria tags, so rows overlap and don't add up.</span>
         )}
       </div>
 
@@ -73,7 +82,7 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
             <table className="w-full text-sm">
               <thead className="bg-surface-2 text-left text-xs text-ink-3">
                 <tr>
-                  <th className="px-4 py-2 font-medium">{dimension === "angle" ? "Angle" : "Format"}</th>
+                  <th className="px-4 py-2 font-medium">{DIM_NAME[dimension]}</th>
                   <th className="px-3 py-2 font-medium">Concepts</th>
                   <th className="w-[28%] px-3 py-2 font-medium">Hit rate</th>
                   <th className="px-3 py-2 text-right font-medium">Test CPA</th>

@@ -28,7 +28,9 @@
     // (the app's audience tag) narrows sign-ins to this one Access app; optional.
     // Secrets (META_APP_SECRET, TOKEN_KEY) are set in the dashboard.
     "ACCESS_TEAM_DOMAIN": "tiny-band-a384.cloudflareaccess.com",
-    "ACCESS_AUD": ""
+    "ACCESS_AUD": "",
+    // Client ID of the Access service token the nightly Atria task uses (docs/ATRIA.md).
+    "ATRIA_CLIENT_ID": ""
   },
   "triggers": {
     // Nightly Meta sync, 09:17 UTC (~5am New York).

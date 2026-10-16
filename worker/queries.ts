@@ -50,11 +50,26 @@ const POST_BASE_SQL = `
     (SELECT MIN(x.created_time) FROM ads x WHERE x.post_id = p.id) AS launched,
     (SELECT x.concept_id FROM ads x WHERE x.post_id = p.id ORDER BY x.created_time, x.id LIMIT 1) AS concept_id,
     (SELECT x.adset_name FROM ads x WHERE x.post_id = p.id ORDER BY x.created_time, x.id LIMIT 1) AS adset_name,
+    (SELECT t.tags FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
+       WHERE x.post_id = p.id AND t.status = 'tagged' ORDER BY x.created_time, x.id LIMIT 1) AS atria_tags,
     s.pod_id, s.pod_source, s.editor_id, e.name AS editor_name,
     s.angle, s.format, s.hook, s.landing_page, s.tags_source
   FROM posts p
   LEFT JOIN assignments s ON s.post_id = p.id
   LEFT JOIN editors e ON e.id = s.editor_id`;
+
+/** Themes and core desires across a concept's Atria-tagged assets (GROUP_CONCAT of JSON, \x1e-separated). */
+function atriaUnion(raw: unknown): { atriaThemes: string[]; atriaDesires: string[] } {
+  const themes = new Set<string>();
+  const desires = new Set<string>();
+  if (raw != null)
+    for (const json of String(raw).split("\x1e")) {
+      const t = JSON.parse(json) as Record<string, string[]>;
+      for (const v of t.theme ?? []) themes.add(v);
+      for (const v of t.core_desire ?? []) desires.add(v);
+    }
+  return { atriaThemes: [...themes], atriaDesires: [...desires] };
+}
 
 /** Every concept with its test-window totals and hit status. */
 export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
@@ -71,6 +86,8 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
          SELECT c.id, c.pod_id, c.label, c.adset_name,
            (SELECT COUNT(*) FROM ads x WHERE x.concept_id = c.id) AS ads,
            (SELECT GROUP_CONCAT(x.name, char(10)) FROM ads x WHERE x.concept_id = c.id) AS ad_names,
+           (SELECT GROUP_CONCAT(t.tags, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
+              WHERE x.concept_id = c.id AND t.status = 'tagged') AS atria_tags,
            (SELECT s.angle FROM ads x JOIN assignments s ON s.post_id = x.post_id
               WHERE x.concept_id = c.id AND s.tags_source = 'manual' AND s.angle IS NOT NULL LIMIT 1) AS manual_angle,
            (SELECT s.format FROM ads x JOIN assignments s ON s.post_id = x.post_id
@@ -129,6 +146,7 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
       angle: manualAngle ?? guess.angle,
       format: manualFormat ?? guess.format,
       tagsSource: manualAngle || manualFormat ? ("manual" as const) : ("name" as const),
+      ...atriaUnion(r.atria_tags),
       conceptId: String(r.id),
       podId: String(r.pod_id),
       label: String(r.label),
@@ -225,6 +243,7 @@ export async function loadPosts(
       assignment: toAssignment(r),
       totals: totalsByPost.get(postId) ?? toTotals(undefined),
       hit,
+      atria: r.atria_tags == null ? null : (JSON.parse(String(r.atria_tags)) as Record<string, string[]>),
     };
   });
 }

@@ -14,6 +14,8 @@ export interface GraphAd {
     thumbnail_url?: string;
     image_url?: string;
     object_type?: string;
+    video_id?: string;
+    image_hash?: string;
   };
 }
 
@@ -90,6 +92,13 @@ export function mediaTypeFor(ad: Pick<GraphAd, "creative">): string {
   if (t === "VIDEO") return "video";
   if (t === "PHOTO" || (t !== "VIDEO" && ad.creative?.image_url)) return "image";
   return "video";
+}
+
+/** The creative asset Atria tags: "v:<video id>" or "i:<image hash>". */
+export function assetIdFor(ad: Pick<GraphAd, "creative">): string | null {
+  if (ad.creative?.video_id) return `v:${ad.creative.video_id}`;
+  if (ad.creative?.image_hash) return `i:${ad.creative.image_hash}`;
+  return null;
 }
 
 export function thumbnailFor(ad: Pick<GraphAd, "creative">): string | null {

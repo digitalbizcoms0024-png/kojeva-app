@@ -82,6 +82,8 @@ export interface PostSummary {
   assignment: Assignment;
   totals: Totals;
   hit: HitStatus | null;
+  /** Atria's tags for the post's creative, by category (theme, core_desire, …); null if untagged. */
+  atria: Record<string, string[]> | null;
 }
 
 export interface RankingsResponse {
@@ -140,6 +142,9 @@ export interface ConceptResult {
   format: string | null;
   /** "manual" when someone tagged one of its ads by hand, else read from names. */
   tagsSource: "manual" | "name";
+  /** Union of Atria themes / core desires across the concept's ads; empty if none tagged. */
+  atriaThemes: string[];
+  atriaDesires: string[];
 }
 
 export interface ConceptsResponse {
@@ -148,7 +153,8 @@ export interface ConceptsResponse {
   rows: ConceptResult[];
 }
 
-export type InsightDimension = "angle" | "format";
+/** Atria dimensions are multi-valued: a concept counts under each of its themes. */
+export type InsightDimension = "angle" | "format" | "atria_theme" | "atria_desire";
 
 export interface InsightRow {
   /** Tag key, or null for concepts with no tag on this dimension. */

@@ -46,6 +46,7 @@ export async function verifyAccessJwt(
       exp?: number;
       iss?: string;
       email?: string;
+      common_name?: string;
     };
     if (header.alg !== "RS256") return null;
     const jwk = (await certs(team, fetcher)).find((k) => k.kid === header.kid);
@@ -60,7 +61,9 @@ export async function verifyAccessJwt(
     const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
     if (!ok || (aud && !auds.includes(aud)) || payload.iss !== `https://${team}`) return null;
     if (!payload.exp || payload.exp * 1000 < now) return null;
-    return payload.email ?? "unknown";
+    // Service tokens carry no email; their client ID comes as common_name.
+    if (payload.email) return payload.email;
+    return payload.common_name ? `service:${payload.common_name}` : null;
   } catch {
     return null;
   }
@@ -86,12 +89,23 @@ export const accessMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   return next();
 };
 
-/** Guards routes that read or store Meta credentials. */
+/** Guards routes that change data or touch Meta credentials: people only, not service tokens. */
 export const requireAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
   if (!accessConfigured(c.env))
     return c.json(
       { error: "Turn on Cloudflare Access for this app before connecting Meta (see Settings)." },
       403,
     );
+  if (c.get("userEmail")?.startsWith("service:")) return c.json({ error: "Service tokens can't do this." }, 403);
   return next();
 };
+
+/** Guards the ingest routes: only the configured service token. */
+export const requireService =
+  (clientIdVar: "ATRIA_CLIENT_ID"): MiddlewareHandler<AppEnv> =>
+  async (c, next) => {
+    const expected = c.env[clientIdVar];
+    if (!accessConfigured(c.env) || !expected) return c.json({ error: `Set ${clientIdVar} to enable this.` }, 403);
+    if (c.get("userEmail") !== `service:${expected}`) return c.json({ error: "Only the sync service token can call this." }, 403);
+    return next();
+  };

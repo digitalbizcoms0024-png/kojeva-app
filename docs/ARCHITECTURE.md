@@ -45,6 +45,7 @@ adds `tw_ad_daily` so Triple Whale numbers never mix with Meta's.
 | `PUT /api/settings` `{targets?, attribution?}` | edit targets; attribution changes re-credit every post |
 | `POST /api/editors`, `DELETE /api/editors/:id` | editor roster |
 | `POST /api/attribute` | re-credit every post from stored data |
+| `GET /api/ingest/atria/pending`, `POST /api/ingest/atria` | Atria tags in (service token only; see `ATRIA.md`) |
 
 Ranges are relative to the latest synced day, not the wall clock. Connection, sync and editing routes
 return 403 until Cloudflare Access is configured; once it is, every `/api` call needs a valid Access JWT.
@@ -78,9 +79,10 @@ The app supports both; B wins when present.
 API key from Triple Whale → Settings → API Keys, stored as a Worker secret.
 
 ## Atria (Phase 3)
-Atria is only reachable through its MCP connector inside Claude, not from the Worker. A
-scheduled Claude task runs nightly, reads tags/transcripts via the Atria MCP, and POSTs them to
-`/api/ingest/atria` with a shared ingest key. Atria is enrichment only; the app works without it.
+Atria is only reachable through its MCP connector inside Claude, not from the Worker. A scheduled
+Claude task runs nightly, reads tags via the connector, and POSTs them to `/api/ingest/atria`,
+signed in with a Cloudflare Access service token. Atria is enrichment only; the app works without
+it. Setup: `ATRIA.md`.
 
 ## Deploying (Cloudflare Workers Builds, auto-deploys from GitHub)
 1. Cloudflare dashboard → Storage & databases → D1 → Create database `kojeva-hub`; put its ID in `wrangler.jsonc`.

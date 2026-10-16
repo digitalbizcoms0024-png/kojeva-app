@@ -294,6 +294,41 @@ function PostDetailPanel({ postId, range, targets, rank }: { postId: string; ran
       </div>
 
       <div>
+        <div className="mb-2 text-xs font-medium tracking-wide text-ink-3 uppercase">Atria creative tags</div>
+        {data.atria ? (
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]">
+            {(
+              [
+                ["theme", "Theme"],
+                ["core_desire", "Core desire"],
+                ["persona", "Persona"],
+                ["emotions", "Emotions"],
+                ["visual_hook", "Visual hook"],
+                ["media_format", "Format"],
+                ["offer_type", "Offer"],
+                ["key_message", "Key message"],
+              ] as const
+            )
+              .filter(([k]) => data.atria![k]?.length)
+              .map(([k, label]) => (
+                <div key={k} className="contents">
+                  <dt className="text-ink-3">{label}</dt>
+                  <dd className="flex flex-wrap gap-1">
+                    {data.atria![k]!.map((v) => (
+                      <span key={v} className="rounded-md bg-surface-2 px-2 py-0.5 text-xs text-ink">
+                        {v}
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              ))}
+          </dl>
+        ) : (
+          <p className="text-sm text-ink-3">Not tagged by Atria yet. Atria tags creatives in order of spend; the nightly sync picks up new tags.</p>
+        )}
+      </div>
+
+      <div>
         <div className="mb-1 text-xs font-medium tracking-wide text-ink-3 uppercase">Why it works</div>
         <p className="text-sm text-ink-3">Creative notes and AI analysis arrive in Phase 3 (Creative Intelligence).</p>
       </div>

@@ -50,11 +50,13 @@ export function ConceptsTable({
   range: string;
   targets: Targets;
   pods: { podId: string | null; name: string }[];
-  filter?: { angle?: string; format?: string; pod?: string };
+  filter?: { angle?: string; format?: string; atria_theme?: string; atria_desire?: string; pod?: string };
   title?: string;
 }) {
   const [pod, setPod] = useState(filter.pod ?? "");
-  const { data, error } = useApi<ConceptsResponse>(`/api/concepts?${qs({ range, pod, angle: filter.angle, format: filter.format })}`);
+  const { data, error } = useApi<ConceptsResponse>(
+    `/api/concepts?${qs({ range, pod, angle: filter.angle, format: filter.format, atria_theme: filter.atria_theme, atria_desire: filter.atria_desire })}`,
+  );
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -96,10 +98,15 @@ export function ConceptsTable({
                     <div className="text-xs text-ink-3">
                       {k.adsetName} · {k.ads} {k.ads === 1 ? "ad" : "ads"} · {money(k.allTime.spendCents, { compact: true })} all-time
                     </div>
-                    {(k.angle || k.format) && (
+                    {(k.angle || k.format || k.atriaThemes.length > 0) && (
                       <div className="mt-1 flex flex-wrap gap-1">
                         {k.angle && <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[11px] text-accent">{ANGLES[k.angle] ?? k.angle}</span>}
                         {k.format && <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] text-ink-2">{FORMATS[k.format] ?? k.format}</span>}
+                        {k.atriaThemes.slice(0, 3).map((t) => (
+                          <span key={t} className="rounded border border-line px-1.5 py-0.5 text-[11px] text-ink-3" title="Atria theme">
+                            {t}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </td>

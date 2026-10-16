@@ -17,7 +17,13 @@ const ADS: GraphAd[] = [
     created_time: "2026-09-20T10:00:00-0400",
     adset: { id: "as1", name: "ABO | Harris | Sept 20" },
     campaign: { id: "c1", name: "ABO | Creative Testing" },
-    creative: { id: "959193566785002", effective_object_story_id: POST_HXM, thumbnail_url: "https://scontent.example/t1.jpg", object_type: "VIDEO" },
+    creative: {
+      id: "959193566785002",
+      effective_object_story_id: POST_HXM,
+      thumbnail_url: "https://scontent.example/t1.jpg",
+      object_type: "VIDEO",
+      video_id: "1053927990294150",
+    },
   },
   {
     id: "120250321798060999",
@@ -53,7 +59,13 @@ const ADS: GraphAd[] = [
     created_time: "2026-08-10T10:00:00-0400",
     adset: { id: "as6", name: "ME | R2-S12 | Statics" },
     campaign: { id: "c1", name: "ABO | Creative Testing" },
-    creative: { id: "222", effective_object_story_id: "776862388850901_222", object_type: "PHOTO", image_url: "https://x/i2.jpg" },
+    creative: {
+      id: "222",
+      effective_object_story_id: "776862388850901_222",
+      object_type: "PHOTO",
+      image_url: "https://x/i2.jpg",
+      image_hash: "b1679ce60dbda9e125c26e84d9f82e94",
+    },
   },
   {
     id: "120250321829620075",
@@ -155,6 +167,11 @@ describe("runSync", () => {
       { id: "as1", pod_id: "harris", label: "ABO | Harris | Sept 20" },
       { id: "as3", pod_id: "dhia", label: "ABO - Dhia - Batch 22" },
       { id: "as6", pod_id: "agency", label: "R2-S12 | Statics" },
+    ]);
+    const assets = await q<{ id: string; asset_id: string | null }>("SELECT id, asset_id FROM ads WHERE asset_id IS NOT NULL ORDER BY id");
+    expect(assets).toEqual([
+      { id: "120241980715400001", asset_id: "i:b1679ce60dbda9e125c26e84d9f82e94" },
+      { id: "120250321798060075", asset_id: "v:1053927990294150" },
     ]);
     const [copy] = await q<{ concept_id: string | null }>("SELECT concept_id FROM ads WHERE id = '120250321798060999'");
     expect(copy!.concept_id).toBeNull();

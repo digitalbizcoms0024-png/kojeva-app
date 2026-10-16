@@ -17,6 +17,7 @@ import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, roas, type Totals } from "..
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { accessConfigured, accessMiddleware } from "./access.ts";
 import type { AppEnv, Env } from "./env.ts";
+import { atria } from "./atria.ts";
 import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
@@ -27,6 +28,7 @@ const app = new Hono<AppEnv>().basePath("/api");
 app.use("*", accessMiddleware);
 app.route("/connection", connection);
 app.route("/sync", sync);
+app.route("/ingest/atria", atria);
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -246,13 +248,20 @@ app.get("/insights", async (c) => {
   const db = c.env.DB;
   const range = await resolveRange(db, (k) => c.req.query(k));
   if (!range) return c.json({ error: "Invalid custom date range" }, 400);
-  const dimension: InsightDimension = c.req.query("dimension") === "format" ? "format" : "angle";
+  const dims: InsightDimension[] = ["angle", "format", "atria_theme", "atria_desire"];
+  const dimension = (dims.find((d) => d === c.req.query("dimension")) ?? "angle") as InsightDimension;
   const pod = c.req.query("pod");
   const concepts = (await loadConcepts(db)).filter(
     (k) => k.firstSpend >= range.from && k.firstSpend <= range.to && (!pod || k.podId === pod),
   );
+  // Angle/format: one value per concept. Atria: every theme/desire the concept carries.
+  const valuesOf = (k: (typeof concepts)[number]): (string | null)[] => {
+    if (dimension === "angle" || dimension === "format") return [k[dimension]];
+    const v = dimension === "atria_theme" ? k.atriaThemes : k.atriaDesires;
+    return v.length ? v : [null];
+  };
   const groups = new Map<string | null, typeof concepts>();
-  for (const k of concepts) groups.set(k[dimension], [...(groups.get(k[dimension]) ?? []), k]);
+  for (const k of concepts) for (const v of valuesOf(k)) groups.set(v, [...(groups.get(v) ?? []), k]);
   const rows: InsightRow[] = [...groups].map(([value, list]) => {
     const statuses = list.map((k) => k.status);
     const pods = new Map<string, number>();
@@ -283,10 +292,19 @@ app.get("/concepts", async (c) => {
   const tag = (q: string | undefined, v: string | null) => q === undefined || (q === "none" ? v === null : v === q);
   const angle = c.req.query("angle");
   const format = c.req.query("format");
+  const many = (q: string | undefined, vs: string[]) => q === undefined || (q === "none" ? vs.length === 0 : vs.includes(q));
+  const theme = c.req.query("atria_theme");
+  const desire = c.req.query("atria_desire");
   const rows = (await loadConcepts(db))
     .filter(
       (k) =>
-        k.firstSpend >= range.from && k.firstSpend <= range.to && (!pod || k.podId === pod) && tag(angle, k.angle) && tag(format, k.format),
+        k.firstSpend >= range.from &&
+        k.firstSpend <= range.to &&
+        (!pod || k.podId === pod) &&
+        tag(angle, k.angle) &&
+        tag(format, k.format) &&
+        many(theme, k.atriaThemes) &&
+        many(desire, k.atriaDesires),
     )
     .sort((a, b) => b.firstSpend.localeCompare(a.firstSpend) || b.window.spendCents - a.window.spendCents);
   const body: ConceptsResponse = { ...range, rows };

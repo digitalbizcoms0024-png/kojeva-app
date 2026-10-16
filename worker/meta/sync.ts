@@ -7,11 +7,11 @@ import { podByCode, type PodCode } from "../../shared/taxonomy.ts";
 import { decrypt } from "../crypto.ts";
 import type { Env } from "../env.ts";
 import { GraphError, graphClient, type GraphClient } from "./graph.ts";
-import { insightToDaily, isoTime, mediaTypeFor, postIdFor, thumbnailFor, type GraphAd, type GraphInsight } from "./transform.ts";
+import { assetIdFor, insightToDaily, isoTime, mediaTypeFor, postIdFor, thumbnailFor, type GraphAd, type GraphInsight } from "./transform.ts";
 
 const AD_FIELDS =
   "id,name,status,effective_status,created_time,adset{id,name},campaign{id,name}," +
-  "creative{id,effective_object_story_id,thumbnail_url,image_url,object_type}";
+  "creative{id,effective_object_story_id,thumbnail_url,image_url,object_type,video_id,image_hash}";
 const INSIGHT_FIELDS =
   "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,inline_link_clicks,actions,action_values";
 const ALL_STATUSES = [
@@ -69,10 +69,11 @@ type AdRow = {
   status: string;
   created_time: string | null;
   creative_id: string | null;
+  asset_id: string | null;
 };
 type PostRow = { id: string; media_type: string; thumbnail_url: string | null; created_time: string | null };
 
-const AD_COLS = ["post_id", "name", "campaign_id", "campaign_name", "adset_id", "adset_name", "status", "created_time", "creative_id"] as const;
+const AD_COLS = ["post_id", "name", "campaign_id", "campaign_name", "adset_id", "adset_name", "status", "created_time", "creative_id", "asset_id"] as const;
 
 const same = <T extends object>(a: T, b: T, keys: readonly (keyof T)[]) => keys.every((k) => (a[k] ?? null) === (b[k] ?? null));
 
@@ -121,6 +122,7 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
         status: ad.effective_status ?? ad.status ?? "UNKNOWN",
         created_time: created,
         creative_id: ad.creative?.id ?? null,
+        asset_id: assetIdFor(ad),
       });
     }
   }
@@ -150,14 +152,15 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
     adStmts.push(
       db
         .prepare(
-          `INSERT INTO ads (id, post_id, name, campaign_id, campaign_name, adset_id, adset_name, status, created_time, creative_id, updated_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+          `INSERT INTO ads (id, post_id, name, campaign_id, campaign_name, adset_id, adset_name, status, created_time, creative_id, asset_id, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
            ON CONFLICT(id) DO UPDATE SET post_id = excluded.post_id, name = excluded.name,
              campaign_id = excluded.campaign_id, campaign_name = excluded.campaign_name,
              adset_id = excluded.adset_id, adset_name = excluded.adset_name, status = excluded.status,
-             created_time = excluded.created_time, creative_id = excluded.creative_id, updated_at = excluded.updated_at`,
+             created_time = excluded.created_time, creative_id = excluded.creative_id, asset_id = excluded.asset_id,
+             updated_at = excluded.updated_at`,
         )
-        .bind(a.id, a.post_id, a.name, a.campaign_id, a.campaign_name, a.adset_id, a.adset_name, a.status, a.created_time, a.creative_id, now),
+        .bind(a.id, a.post_id, a.name, a.campaign_id, a.campaign_name, a.adset_id, a.adset_name, a.status, a.created_time, a.creative_id, a.asset_id, now),
     );
   }
 

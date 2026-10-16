@@ -16,6 +16,8 @@ export interface Env {
   ACCESS_TEAM_DOMAIN?: string;
   /** Cloudflare Access application audience (AUD) tag. */
   ACCESS_AUD?: string;
+  /** Client ID of the Access service token the nightly Atria task uses (not secret on its own). */
+  ATRIA_CLIENT_ID?: string;
 }
 
 export type AppEnv = { Bindings: Env; Variables: { userEmail: string | null } };
