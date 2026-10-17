@@ -122,3 +122,19 @@ Both come from a second insights request per sync with `action_attribution_windo
 - **Incremental share** = incremental purchases ÷ 7-day-click purchases (`incrementalShare`), or null when either is missing or 7-day click is 0. Low share = the ad mostly reached people who'd have bought anyway.
 - **Coverage** = spend on ad-days that have incremental data ÷ all spend; shown when below 100% (e.g. before the backfill).
 - History: run Settings → Backfill 90 days once after deploying. It rewrites ~90 days of rows, so do it on a quiet day for D1 writes.
+
+## Coverage map (`worker/coverage.ts`, `/api/coverage`)
+Personas down the side, the five awareness levels across the top. Defaults to the last 7 days.
+- **Running ad** = a post (copies grouped) with spend in the selected period.
+- **Placement**: persona = hand-set, else Claude's label for the post's creative; same for awareness and
+  offer. Posts missing either sit in "No persona yet" / "Not labelled" and count as **not on the map**.
+- **Cell**: running ads, spend, share of all spend in the period, CPA/ROAS (Meta; TW beside it in the
+  cell detail), offer share = spend on ads with a discount/offer ÷ spend on ads whose offer is known.
+- **Hit rate in a cell** is every concept ever tested there (all time), placed by the concept's persona
+  (hand-set on any of its ads, else the most common Claude label) and awareness. So an empty cell can
+  still show "tested before".
+- **Cells with ads running** = placed cells (persona and awareness known) with at least one running ad,
+  out of personas × 5.
+- **Biggest cell** = the placed cell with the most spend. Dashboard alert when it holds over 60% of the
+  last 7 days' spend (`CONCENTRATION` in `worker/alerts.ts`).
+- Shading is one neutral color by spend share; good/bad colors stay on CPA and ROAS.

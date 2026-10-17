@@ -49,10 +49,30 @@ whose tags changed), with their tags, ad names and the **belief groups already i
 - Hand-set values in Needs Tagging (Awareness, Belief shifted) always win. Re-sending unchanged labels
   writes 0 rows.
 
+## Personas and offer (coverage map)
+The coverage map (`worker/coverage.ts`, Coverage Map page) places every running ad by persona ×
+awareness level. Personas are a short list of specific people (table `personas`):
+
+1. **Draft.** With no personas yet, the nightly task reads `GET /api/ingest/atria/personas` (Atria's
+   persona tags by spend) and posts 5–8 drafts to `POST /api/ingest/atria/personas`.
+2. **Confirm.** People rename, merge, delete or add them in Settings → Personas and press Confirm.
+   Until then Claude doesn't assign personas and the map shows an empty state.
+3. **Assign.** `/unlabeled` then also returns assets without a persona decision plus the active
+   personas; `/labels` takes `personaId` (an active persona, or null for "fits none") and `offer`
+   (discount/price offer, true/false). Both are optional so older prompts keep working.
+4. **Suggest.** When several ads fit nobody, the task posts one persona as a suggestion (at most 3
+   waiting). People approve or dismiss it; dismissed names aren't suggested again.
+
+- Adding or approving a persona sends the "fits none" creatives back to Claude for another look.
+  Deleting one sends its creatives back too; merging moves them to the other persona.
+- Hand-set persona, awareness and offer in Needs Tagging always win (`assignments.persona_id`,
+  `assignments.offer`). Re-sending unchanged labels writes 0 rows.
+
 ## Nightly task prompt
 The live prompt is stored on the scheduled task "Kojeva Hub · Atria tag sync". Part 1 is the tag sync
-below; part 2 runs `/unlabeled` → label → `/labels` in up to 3 rounds of 40, with the level definitions
-and belief format above, reusing existing belief group names wherever the idea is the same.
+below; part 2 keeps the persona list going (drafts when empty); part 3 runs `/unlabeled` → label →
+`/labels` in up to 3 rounds of 40 with the level definitions, belief format, offer and persona above,
+reusing existing belief group names, then suggests at most one new persona.
 
 ```
 Sync Atria creative tags into Kojeva Hub. Use bash + curl and the Atria connector.

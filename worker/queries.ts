@@ -71,7 +71,13 @@ const POST_BASE_SQL = `
     (SELECT t.tags FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
        WHERE x.post_id = p.id AND t.status = 'tagged' ORDER BY x.created_time, x.id LIMIT 1) AS atria_tags,
     s.pod_id, s.pod_source, s.editor_id, e.name AS editor_name,
-    s.angle, s.format, s.hook, s.landing_page, s.tags_source, s.awareness, s.belief_group
+    s.angle, s.format, s.hook, s.landing_page, s.tags_source, s.awareness, s.belief_group, s.persona_id, s.offer,
+    (SELECT t.awareness FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
+       WHERE x.post_id = p.id AND t.labeled_at IS NOT NULL ORDER BY x.created_time, x.id LIMIT 1) AS l_awareness,
+    (SELECT t.offer FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
+       WHERE x.post_id = p.id AND t.offer IS NOT NULL ORDER BY x.created_time, x.id LIMIT 1) AS l_offer,
+    (SELECT t.persona_id FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
+       WHERE x.post_id = p.id AND t.persona_id IS NOT NULL ORDER BY x.created_time, x.id LIMIT 1) AS l_persona
   FROM posts p
   LEFT JOIN assignments s ON s.post_id = p.id
   LEFT JOIN editors e ON e.id = s.editor_id`;
@@ -129,6 +135,10 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
               WHERE x.concept_id = c.id AND s.awareness IS NOT NULL LIMIT 1) AS manual_awareness,
            (SELECT s.belief_group FROM ads x JOIN assignments s ON s.post_id = x.post_id
               WHERE x.concept_id = c.id AND s.belief_group IS NOT NULL LIMIT 1) AS manual_belief,
+           (SELECT GROUP_CONCAT(t.persona_id, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
+              WHERE x.concept_id = c.id AND t.persona_id IS NOT NULL) AS persona_list,
+           (SELECT s.persona_id FROM ads x JOIN assignments s ON s.post_id = x.post_id
+              WHERE x.concept_id = c.id AND s.persona_id IS NOT NULL LIMIT 1) AS manual_persona,
            MIN(CASE WHEN daily.spend_cents > 0 THEN daily.date END) AS first_date,
            MAX(CASE WHEN daily.spend_cents > 0 THEN daily.date END) AS last_date,
            MIN(CASE WHEN daily.running >= ?1 THEN daily.date END) AS qualified_on
@@ -205,6 +215,7 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
     const manualAwareness = r.manual_awareness == null ? null : String(r.manual_awareness);
     const manualBelief = r.manual_belief == null ? null : String(r.manual_belief);
     const awareness = manualAwareness ?? mode(list(r.awareness_list));
+    const personaId = r.manual_persona == null ? mode(list(r.persona_list)) : String(r.manual_persona);
     const lastSpend = r.last_date == null ? null : String(r.last_date);
     const guess = classify({
       label: String(r.label),
@@ -222,6 +233,7 @@ export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
       awarenessSource: manualAwareness ? ("manual" as const) : awareness ? ("claude" as const) : null,
       beliefGroups: manualBelief ? [manualBelief] : [...new Set(list(r.belief_group_list))],
       beliefs: [...new Set(list(r.belief_list))].slice(0, 3),
+      personaId,
       conceptId: String(r.id),
       podId: String(r.pod_id),
       label: String(r.label),
@@ -276,21 +288,21 @@ function toAssignment(r: Row): Assignment {
     tagsSource: s("tags_source"),
     awareness: s("awareness"),
     beliefGroup: s("belief_group"),
+    personaId: s("persona_id"),
+    offer: r.offer == null ? null : Number(r.offer) === 1,
   };
 }
 
 /** Every post with its totals in [from, to] and its initial-test verdict. */
-export async function loadPosts(
-  db: D1Database,
-  from: string,
-  to: string,
-  opts: { postId?: string } = {},
-): Promise<PostSummary[]> {
-  const [targets, latest, concepts] = await Promise.all([getTargets(db), getLatestDate(db), loadConcepts(db)]);
+export async function loadPosts(db: D1Database, from: string, to: string, opts: { postId?: string; concepts?: ConceptResult[] } = {}): Promise<PostSummary[]> {
+  const [targets, latest, concepts] = await Promise.all([getTargets(db), getLatestDate(db), opts.concepts ?? loadConcepts(db)]);
   const conceptStatus = new Map(concepts.map((c) => [c.conceptId, c.status]));
   const where = opts.postId ? "WHERE p.id = ?1" : "";
   const [base, ranged, windows, twRows, coverage, fatigueByPost] = await Promise.all([
-    db.prepare(`${POST_BASE_SQL} ${where}`).bind(...(opts.postId ? [opts.postId] : [])).all<Row>(),
+    db
+      .prepare(`${POST_BASE_SQL} ${where}`)
+      .bind(...(opts.postId ? [opts.postId] : []))
+      .all<Row>(),
     db
       .prepare(
         `SELECT a.post_id, ${TOTALS_SQL}
@@ -341,6 +353,11 @@ export async function loadPosts(
       atria: r.atria_tags == null ? null : (JSON.parse(String(r.atria_tags)) as Record<string, string[]>),
       tw: twKnown ? (twByPost.get(postId) ?? toTw(undefined)) : null,
       fatigue: fatigueByPost.get(postId) ?? null,
+      labels: {
+        awareness: r.l_awareness == null ? null : String(r.l_awareness),
+        personaId: r.l_persona == null ? null : String(r.l_persona),
+        offer: r.l_offer == null ? null : Number(r.l_offer) === 1,
+      },
     };
   });
 }

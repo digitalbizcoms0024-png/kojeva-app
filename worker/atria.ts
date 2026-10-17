@@ -4,6 +4,7 @@
 import { Hono } from "hono";
 import { requireService } from "./access.ts";
 import type { AppEnv } from "./env.ts";
+import { cleanPersona, confirmed, loadPersonas, MAX_PERSONAS, newPersonaId, nextSort } from "./personas.ts";
 import { getLatestDate, shiftDay } from "./queries.ts";
 
 export const ATRIA_CATEGORIES = [
@@ -47,12 +48,7 @@ atria.get("/pending", async (c) => {
        ORDER BY spend DESC
        LIMIT ?4`,
     )
-    .bind(
-      shiftDay(latest, -29),
-      new Date(now - 3 * 86_400_000).toISOString(),
-      new Date(now - 30 * 86_400_000).toISOString(),
-      limit,
-    )
+    .bind(shiftDay(latest, -29), new Date(now - 3 * 86_400_000).toISOString(), new Date(now - 30 * 86_400_000).toISOString(), limit)
     .all<{ asset_id: string; spend: number }>();
   return c.json({
     assets: results.map((r) => ({
@@ -134,16 +130,19 @@ atria.get("/unlabeled", async (c) => {
   const db = c.env.DB;
   const limit = Math.min(Number(c.req.query("limit") ?? 40) || 40, 100);
   const latest = (await getLatestDate(db)) ?? new Date().toISOString().slice(0, 10);
+  const personas = await loadPersonas(db);
+  const ready = confirmed(personas);
   const [assets, groups] = await Promise.all([
     db
       .prepare(
         `SELECT t.asset_id, t.tags, SUM(d.spend_cents) AS spend,
            (SELECT GROUP_CONCAT(n.name, char(10)) FROM (SELECT DISTINCT x.name FROM ads x WHERE x.asset_id = t.asset_id) n) AS ad_names
          FROM atria_assets t JOIN ads a ON a.asset_id = t.asset_id JOIN ad_daily d ON d.ad_id = a.id
-         WHERE t.status = 'tagged' AND t.labeled_at IS NULL AND d.date >= ?1
+         WHERE t.status = 'tagged' AND d.date >= ?1
+           AND (t.labeled_at IS NULL OR t.offer IS NULL OR (?3 = 1 AND t.persona_at IS NULL))
          GROUP BY t.asset_id ORDER BY spend DESC LIMIT ?2`,
       )
-      .bind(shiftDay(latest, -89), limit)
+      .bind(shiftDay(latest, -89), limit, ready ? 1 : 0)
       .all<{ asset_id: string; tags: string; spend: number; ad_names: string | null }>(),
     db
       .prepare("SELECT belief_group, COUNT(*) AS n FROM atria_assets WHERE belief_group IS NOT NULL GROUP BY belief_group ORDER BY n DESC")
@@ -152,6 +151,10 @@ atria.get("/unlabeled", async (c) => {
   return c.json({
     awarenessLevels: AWARENESS_LEVELS,
     beliefGroups: groups.results.map((g) => ({ name: g.belief_group, assets: Number(g.n) })),
+    // Until people confirm the list, Claude labels awareness, belief and offer only.
+    personasConfirmed: ready,
+    personas: personas.filter((p) => p.status === "active").map(({ id, name, description }) => ({ id, name, description })),
+    pendingSuggestions: personas.filter((p) => p.status === "suggested").map((p) => p.name),
     assets: assets.results.map((r) => ({
       assetId: r.asset_id,
       adNames: (r.ad_names ?? "").split("\n").filter(Boolean).slice(0, 5),
@@ -161,33 +164,70 @@ atria.get("/unlabeled", async (c) => {
   });
 });
 
-type IncomingLabel = { assetId?: unknown; awareness?: unknown; belief?: unknown; beliefGroup?: unknown };
+type IncomingLabel = { assetId?: unknown; awareness?: unknown; belief?: unknown; beliefGroup?: unknown; offer?: unknown; personaId?: unknown };
+type Label = { assetId: string; awareness: string; belief: string; beliefGroup: string; offer: number | null; persona: { id: string | null } | null };
 
-/** Body: { labels: [{ assetId, awareness, belief, beliefGroup }] }, up to 100. Writes only changed rows. */
+/**
+ * Body: { labels: [{ assetId, awareness, belief, beliefGroup, offer, personaId? }] }, up to 100.
+ * personaId (an active persona's id, or null for "fits none") is only accepted once the persona
+ * list is confirmed. Writes only changed rows.
+ */
 atria.post("/labels", async (c) => {
   const db = c.env.DB;
   const body = await c.req.json<{ labels?: IncomingLabel[] }>().catch(() => null);
   const items = body?.labels;
   if (!Array.isArray(items) || items.length === 0 || items.length > 100) return c.json({ error: "Send 1–100 labels." }, 400);
-  const rows: { assetId: string; awareness: string; belief: string; beliefGroup: string }[] = [];
+  const rows: Label[] = [];
+  const personas = await loadPersonas(db);
+  const active = new Set(personas.filter((p) => p.status === "active").map((p) => p.id));
   const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.trim().length <= max ? v.trim() : null);
   for (const l of items) {
-    if (typeof l.assetId !== "string" || !/^[vi]:[A-Za-z0-9_-]{1,64}$/.test(l.assetId)) return c.json({ error: "assetId must be v:<video id> or i:<image hash>." }, 400);
+    if (typeof l.assetId !== "string" || !/^[vi]:[A-Za-z0-9_-]{1,64}$/.test(l.assetId))
+      return c.json({ error: "assetId must be v:<video id> or i:<image hash>." }, 400);
     if (!(AWARENESS_LEVELS as readonly unknown[]).includes(l.awareness))
       return c.json({ error: `awareness for ${l.assetId} must be one of ${AWARENESS_LEVELS.join(", ")}.` }, 400);
     const belief = text(l.belief, 200);
     const group = text(l.beliefGroup, 60);
     if (!belief || !group) return c.json({ error: `belief (≤200 chars) and beliefGroup (≤60 chars) are required for ${l.assetId}.` }, 400);
-    rows.push({ assetId: l.assetId, awareness: l.awareness as string, belief, beliefGroup: group });
+    // Optional so older task prompts keep working; leaving it out keeps the stored value.
+    if (l.offer !== undefined && typeof l.offer !== "boolean") return c.json({ error: `offer for ${l.assetId} must be true or false.` }, 400);
+    let persona: Label["persona"] = null;
+    if (l.personaId !== undefined) {
+      if (!active.size) return c.json({ error: "The persona list isn't confirmed yet; leave personaId out." }, 400);
+      if (l.personaId !== null && (typeof l.personaId !== "string" || !active.has(l.personaId)))
+        return c.json({ error: `personaId for ${l.assetId} must be an active persona's id, or null if none fits.` }, 400);
+      persona = { id: l.personaId as string | null };
+    }
+    rows.push({
+      assetId: l.assetId,
+      awareness: l.awareness as string,
+      belief,
+      beliefGroup: group,
+      offer: l.offer === undefined ? null : l.offer ? 1 : 0,
+      persona,
+    });
   }
 
-  const stored = new Map<string, { awareness: string | null; belief: string | null; belief_group: string | null; labeled_at: string | null }>();
+  type Stored = {
+    asset_id: string;
+    awareness: string | null;
+    belief: string | null;
+    belief_group: string | null;
+    labeled_at: string | null;
+    offer: number | null;
+    persona_id: string | null;
+    persona_at: string | null;
+  };
+  const stored = new Map<string, Stored>();
   for (let i = 0; i < rows.length; i += 90) {
     const chunk = rows.slice(i, i + 90);
     const { results } = await db
-      .prepare(`SELECT asset_id, awareness, belief, belief_group, labeled_at FROM atria_assets WHERE asset_id IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")})`)
+      .prepare(
+        `SELECT asset_id, awareness, belief, belief_group, labeled_at, offer, persona_id, persona_at
+         FROM atria_assets WHERE asset_id IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")})`,
+      )
       .bind(...chunk.map((r) => r.assetId))
-      .all<{ asset_id: string; awareness: string | null; belief: string | null; belief_group: string | null; labeled_at: string | null }>();
+      .all<Stored>();
     for (const s of results) stored.set(s.asset_id, s);
   }
 
@@ -200,13 +240,98 @@ atria.post("/labels", async (c) => {
       unknown++; // labels only attach to assets Atria has tagged
       continue;
     }
-    if (old.labeled_at && old.awareness === r.awareness && old.belief === r.belief && old.belief_group === r.beliefGroup) continue;
+    const samePersona = !r.persona || (old.persona_at != null && old.persona_id === r.persona.id);
+    if (
+      old.labeled_at &&
+      old.awareness === r.awareness &&
+      old.belief === r.belief &&
+      old.belief_group === r.beliefGroup &&
+      (r.offer == null || old.offer === r.offer) &&
+      samePersona
+    )
+      continue;
     stmts.push(
       db
-        .prepare("UPDATE atria_assets SET awareness = ?2, belief = ?3, belief_group = ?4, labeled_at = ?5 WHERE asset_id = ?1")
-        .bind(r.assetId, r.awareness, r.belief, r.beliefGroup, now),
+        .prepare(
+          `UPDATE atria_assets SET awareness = ?2, belief = ?3, belief_group = ?4, labeled_at = ?5, offer = COALESCE(?6, offer),
+             persona_id = CASE WHEN ?7 = 1 THEN ?8 ELSE persona_id END, persona_at = CASE WHEN ?7 = 1 THEN ?5 ELSE persona_at END
+           WHERE asset_id = ?1`,
+        )
+        .bind(r.assetId, r.awareness, r.belief, r.beliefGroup, now, r.offer, r.persona ? 1 : 0, r.persona?.id ?? null),
     );
   }
   if (stmts.length) await db.batch(stmts);
   return c.json({ ok: true, received: rows.length, written: stmts.length, unknown });
+});
+
+/**
+ * What Claude needs to draft or extend the persona list: the current list and Atria's persona tags
+ * across creatives that spent in the last 90 days, by spend.
+ */
+atria.get("/personas", async (c) => {
+  const db = c.env.DB;
+  const latest = (await getLatestDate(db)) ?? new Date().toISOString().slice(0, 10);
+  const [personas, dismissed, tagged] = await Promise.all([
+    loadPersonas(db),
+    db.prepare("SELECT name FROM personas WHERE status = 'dismissed'").all<{ name: string }>(),
+    db
+      .prepare(
+        `SELECT t.tags, SUM(d.spend_cents) AS spend FROM atria_assets t JOIN ads a ON a.asset_id = t.asset_id JOIN ad_daily d ON d.ad_id = a.id
+         WHERE t.status = 'tagged' AND d.date >= ?1 GROUP BY t.asset_id`,
+      )
+      .bind(shiftDay(latest, -89))
+      .all<{ tags: string; spend: number }>(),
+  ]);
+  const byTag = new Map<string, { assets: number; spendCents: number }>();
+  for (const r of tagged.results)
+    for (const tag of (JSON.parse(r.tags) as AtriaTags).persona ?? []) {
+      const t = byTag.get(tag) ?? { assets: 0, spendCents: 0 };
+      byTag.set(tag, { assets: t.assets + 1, spendCents: t.spendCents + Number(r.spend) });
+    }
+  return c.json({
+    state: personas.length === 0 ? "empty" : confirmed(personas) ? "confirmed" : "draft",
+    personas,
+    dismissed: dismissed.results.map((d) => d.name),
+    atriaPersonas: [...byTag]
+      .map(([tag, v]) => ({ tag, ...v }))
+      .sort((a, b) => b.spendCents - a.spendCents)
+      .slice(0, 80),
+  });
+});
+
+/**
+ * Body: { personas: [{ name, description }] }. With no personas yet, these become the draft list
+ * (up to 8) for people to edit and confirm. Afterwards each is a suggestion (at most 3 waiting)
+ * that a person approves or dismisses; names already in use or dismissed are skipped.
+ */
+atria.post("/personas", async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json<{ personas?: { name?: unknown; description?: unknown }[] }>().catch(() => null);
+  const items = body?.personas;
+  if (!Array.isArray(items) || items.length === 0 || items.length > 8) return c.json({ error: "Send 1–8 personas." }, 400);
+  const clean = [];
+  for (const p of items) {
+    const r = cleanPersona(p);
+    if (typeof r === "string") return c.json({ error: r }, 400);
+    clean.push(r);
+  }
+  const { results: all } = await db.prepare("SELECT name, status FROM personas").all<{ name: string; status: string }>();
+  const taken = new Set(all.map((p) => p.name.toLowerCase()));
+  const drafting = all.length === 0;
+  const waiting = all.filter((p) => p.status === "suggested").length;
+  const live = all.filter((p) => p.status !== "dismissed").length;
+  const room = drafting ? 8 : Math.min(3 - waiting, MAX_PERSONAS - live);
+  const fresh = clean.filter((p) => !taken.has(p.name.toLowerCase()) && taken.add(p.name.toLowerCase())).slice(0, Math.max(0, room));
+  if (fresh.length) {
+    const now = new Date().toISOString();
+    const sort = await nextSort(db);
+    await db.batch(
+      fresh.map((p, i) =>
+        db
+          .prepare("INSERT INTO personas (id, name, description, status, sort, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, 'claude', ?6)")
+          .bind(newPersonaId(), p.name, p.description, drafting ? "draft" : "suggested", sort + i, now),
+      ),
+    );
+  }
+  return c.json({ ok: true, added: fresh.length, as: drafting ? "draft" : "suggested", skipped: clean.length - fresh.length });
 });

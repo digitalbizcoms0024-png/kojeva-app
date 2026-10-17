@@ -5,6 +5,7 @@ import type { Range } from "./components/HeaderControls.tsx";
 import { Empty, Icon, type IconName } from "./components/ui.tsx";
 import { shortDate } from "./format.ts";
 import { DashboardPage } from "./pages/Dashboard.tsx";
+import { CoveragePage } from "./pages/Coverage.tsx";
 import { IncrementalityPage } from "./pages/Incrementality.tsx";
 import { InsightsPage } from "./pages/Insights.tsx";
 import { NamingToolPage } from "./pages/NamingTool.tsx";
@@ -19,6 +20,7 @@ const NAV: { path: string; label: string; icon: IconName }[] = [
   { path: "rankings", label: "Ad Rankings", icon: "rankings" },
   { path: "pods", label: "Pods", icon: "pods" },
   { path: "insights", label: "Creative Insights", icon: "insights" },
+  { path: "coverage", label: "Coverage Map", icon: "grid" },
   { path: "incrementality", label: "Incrementality", icon: "scale" },
   { path: "tagging", label: "Needs Tagging", icon: "tagging" },
   { path: "naming", label: "Naming Tool", icon: "naming" },
@@ -202,6 +204,7 @@ export default function App() {
         {m && path === "naming" && <NamingToolPage meta={m} />}
         {m && path === "settings" && <SettingsPage meta={m} onSynced={refresh} />}
         {m && path === "insights" && <InsightsPage meta={m} range={range} setRange={setRange} />}
+        {m && path === "coverage" && <CoveragePage meta={m} />}
         {m && path === "incrementality" && <IncrementalityPage meta={m} range={range} setRange={setRange} />}
       </main>
     </div>

@@ -23,7 +23,7 @@ const TAGS: { key: "angle" | "format" | "hook" | "landingPage"; label: string; o
 
 const selectCls = "field w-full min-w-28 py-1.5";
 
-type View = "unassigned" | "all";
+type View = "unassigned" | "unplaced" | "all";
 type Period = "month" | "all";
 
 export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged: () => void }) {
@@ -43,15 +43,20 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
     return () => clearTimeout(t);
   }, [search]);
 
+  // "Not placed": running in the last 7 days (the coverage map's default) without a persona or awareness level.
   const { data, error } = useApi<RankingsResponse>(
-    `/api/rankings?${qs({ range: period, pod: view === "unassigned" ? "unassigned" : "all", q, limit: 300, r: reload })}`,
+    `/api/rankings?${qs({ range: view === "unplaced" ? "week" : period, pod: view === "unassigned" ? "unassigned" : "all", q, limit: view === "unplaced" ? 2000 : 300, r: reload })}`,
   );
   const coverage = useApi<PodsResponse>(`/api/pods?${qs({ range: "month", r: reload })}`);
   const sugg = useApi<SuggestionsResponse>(`/api/suggestions?r=${reload}`);
   const suggestions = sugg.data?.suggestions ?? {};
+  const activePersonas = meta.personas.filter((p) => p.status === "active");
+  const personaName = (id: string | null) => activePersonas.find((p) => p.id === id)?.name ?? null;
+  const placed = (r: PostSummary) => !!personaName(r.assignment.personaId ?? r.labels.personaId) && !!(r.assignment.awareness ?? r.labels.awareness);
   useEffect(() => {
-    if (data) setRows(data.items);
+    if (data) setRows(view === "unplaced" ? data.items.filter((r) => !placed(r)) : data.items);
     setSelected(new Set());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   const pods = meta.pods;
@@ -84,6 +89,8 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
             for (const t of TAGS) if (patch[t.key] !== undefined) Object.assign(a, { [t.key]: patch[t.key], tagsSource: "manual" });
             if (patch.awareness !== undefined) a.awareness = patch.awareness;
             if (patch.beliefGroup !== undefined) a.beliefGroup = patch.beliefGroup;
+            if (patch.personaId !== undefined) a.personaId = patch.personaId;
+            if (patch.offer !== undefined) a.offer = patch.offer;
             return { ...r, assignment: a };
           }),
         );
@@ -168,26 +175,44 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
             onChange={setView}
             options={[
               { value: "unassigned", label: "Needs a pod" },
+              ...(activePersonas.length ? [{ value: "unplaced" as const, label: "Not on the coverage map" }] : []),
               { value: "all", label: "All ads" },
             ]}
           />
-          <Segmented
-            label="Period"
-            value={period}
-            onChange={setPeriod}
-            options={[
-              { value: "month", label: "Last 30 days" },
-              { value: "all", label: "All time" },
-            ]}
-          />
+          {view !== "unplaced" && (
+            <Segmented
+              label="Period"
+              value={period}
+              onChange={setPeriod}
+              options={[
+                { value: "month", label: "Last 30 days" },
+                { value: "all", label: "All time" },
+              ]}
+            />
+          )}
         </div>
+        {view === "unplaced" && (
+          <p className="text-sm text-ink-3">
+            Ads that spent in the last 7 days but have no persona or awareness level yet, so they can't be placed on the{" "}
+            <a href="#/coverage" className="link">
+              coverage map
+            </a>
+            . Claude labels new creatives nightly once Atria has tagged them; set one here to place it now.
+          </p>
+        )}
 
         {selected.size > 0 && (
           <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 bg-ink px-4 py-3 text-page">
             <b className="num mr-2">
               {selected.size} selected · {money(selectedSpend)}
             </b>
-            <select aria-label="Set pod" className="bg-page px-2 py-1.5 text-sm text-ink" value={staged.podId === null ? "__none" : (staged.podId ?? "")} onChange={(e) => stage("podId", e.target.value)} disabled={disabled}>
+            <select
+              aria-label="Set pod"
+              className="bg-page px-2 py-1.5 text-sm text-ink"
+              value={staged.podId === null ? "__none" : (staged.podId ?? "")}
+              onChange={(e) => stage("podId", e.target.value)}
+              disabled={disabled}
+            >
               <option value="">Pod…</option>
               {pods.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -195,7 +220,13 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                 </option>
               ))}
             </select>
-            <select aria-label="Set editor" className="bg-page px-2 py-1.5 text-sm text-ink" value={staged.editorId ?? ""} onChange={(e) => stage("editorId", e.target.value)} disabled={disabled || meta.editors.length === 0}>
+            <select
+              aria-label="Set editor"
+              className="bg-page px-2 py-1.5 text-sm text-ink"
+              value={staged.editorId ?? ""}
+              onChange={(e) => stage("editorId", e.target.value)}
+              disabled={disabled || meta.editors.length === 0}
+            >
               <option value="">{meta.editors.length ? "Editor…" : "No editors yet"}</option>
               {meta.editors.map((ed) => (
                 <option key={ed.id} value={ed.id}>
@@ -204,7 +235,14 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
               ))}
             </select>
             {TAGS.slice(0, 2).map((t) => (
-              <select key={t.key} aria-label={`Set ${t.label.toLowerCase()}`} className="bg-page px-2 py-1.5 text-sm text-ink" value={staged[t.key] ?? ""} onChange={(e) => stage(t.key, e.target.value)} disabled={disabled}>
+              <select
+                key={t.key}
+                aria-label={`Set ${t.label.toLowerCase()}`}
+                className="bg-page px-2 py-1.5 text-sm text-ink"
+                value={staged[t.key] ?? ""}
+                onChange={(e) => stage(t.key, e.target.value)}
+                disabled={disabled}
+              >
                 <option value="">{t.label}…</option>
                 {t.options.slice(1).map((o) => (
                   <option key={o.value} value={o.value}>
@@ -213,6 +251,36 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                 ))}
               </select>
             ))}
+            {activePersonas.length > 0 && (
+              <select
+                aria-label="Set persona"
+                className="bg-page px-2 py-1.5 text-sm text-ink"
+                value={staged.personaId ?? ""}
+                onChange={(e) => stage("personaId", e.target.value)}
+                disabled={disabled}
+              >
+                <option value="">Persona…</option>
+                {activePersonas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <select
+              aria-label="Set awareness"
+              className="bg-page px-2 py-1.5 text-sm text-ink"
+              value={staged.awareness ?? ""}
+              onChange={(e) => stage("awareness", e.target.value)}
+              disabled={disabled}
+            >
+              <option value="">Awareness…</option>
+              {Object.entries(AWARENESS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
             <span className="flex-1" />
             {selectedWithSuggestion > 0 && (
               <button className="btn border-page text-page hover:bg-ink-2" disabled={disabled} onClick={acceptSuggestions}>
@@ -222,7 +290,11 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
             <button className="btn btn-primary" disabled={disabled || stagedCount === 0} onClick={applyStaged}>
               Apply to {selected.size} selected
             </button>
-            <button className="btn btn-ghost text-page" onClick={() => bulk([...selected], { reset: ["pod"] }).then(done, (e: Error) => setBulkMsg(e.message))} disabled={disabled}>
+            <button
+              className="btn btn-ghost text-page"
+              onClick={() => bulk([...selected], { reset: ["pod"] }).then(done, (e: Error) => setBulkMsg(e.message))}
+              disabled={disabled}
+            >
               Back to automatic
             </button>
             {bulkMsg && <span className="w-full text-xs opacity-80">{bulkMsg}</span>}
@@ -230,7 +302,15 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
         )}
 
         {error && <Empty>Couldn't load ads: {error.message}</Empty>}
-        {data && rows.length === 0 && <Empty>{view === "unassigned" ? "Every ad with spend in this period has a pod." : "No ads match."}</Empty>}
+        {data && rows.length === 0 && (
+          <Empty>
+            {view === "unassigned"
+              ? "Every ad with spend in this period has a pod."
+              : view === "unplaced"
+                ? "Every ad running this week is on the coverage map."
+                : "No ads match."}
+          </Empty>
+        )}
         {rows.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -254,8 +334,16 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                       {t.label}
                     </th>
                   ))}
+                  {activePersonas.length > 0 && (
+                    <th className="py-2 pr-2 font-normal" title="Empty = Claude's label">
+                      Persona
+                    </th>
+                  )}
                   <th className="py-2 pr-2 font-normal" title="Empty = Claude's label from Atria's tags">
                     Awareness
+                  </th>
+                  <th className="py-2 pr-2 font-normal" title="Empty = Claude's label">
+                    Offer
                   </th>
                   <th className="py-2 pr-2 font-normal" title="Empty = Claude's grouping">
                     Belief shifted
@@ -326,7 +414,13 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                         )}
                       </td>
                       <td className="py-2.5 pr-2">
-                        <select aria-label="Pod" className={selectCls} value={a.podId ?? ""} disabled={disabled} onChange={(e) => patchRow(r, { podId: e.target.value || null })}>
+                        <select
+                          aria-label="Pod"
+                          className={selectCls}
+                          value={a.podId ?? ""}
+                          disabled={disabled}
+                          onChange={(e) => patchRow(r, { podId: e.target.value || null })}
+                        >
                           {podOptions.map((o) => (
                             <option key={o.value} value={o.value}>
                               {o.label}
@@ -346,7 +440,13 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                         </div>
                       </td>
                       <td className="py-2.5 pr-2">
-                        <select aria-label="Editor" className={selectCls} value={a.editorId ?? ""} disabled={disabled} onChange={(e) => patchRow(r, { editorId: e.target.value || null })}>
+                        <select
+                          aria-label="Editor"
+                          className={selectCls}
+                          value={a.editorId ?? ""}
+                          disabled={disabled}
+                          onChange={(e) => patchRow(r, { editorId: e.target.value || null })}
+                        >
                           <option value="">—</option>
                           {editorsFor(a.podId).map((ed) => (
                             <option key={ed.id} value={ed.id}>
@@ -357,7 +457,13 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                       </td>
                       {TAGS.map((t) => (
                         <td key={t.key} className="py-2.5 pr-2">
-                          <select aria-label={t.label} className={selectCls} value={a[t.key] ?? ""} disabled={disabled} onChange={(e) => patchRow(r, { [t.key]: e.target.value || null })}>
+                          <select
+                            aria-label={t.label}
+                            className={selectCls}
+                            value={a[t.key] ?? ""}
+                            disabled={disabled}
+                            onChange={(e) => patchRow(r, { [t.key]: e.target.value || null })}
+                          >
                             {t.options.map((o) => (
                               <option key={o.value} value={o.value}>
                                 {o.label}
@@ -366,6 +472,24 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                           </select>
                         </td>
                       ))}
+                      {activePersonas.length > 0 && (
+                        <td className="py-2.5 pr-2">
+                          <select
+                            aria-label="Persona"
+                            className={`${selectCls} min-w-36`}
+                            value={a.personaId ?? ""}
+                            disabled={disabled}
+                            onChange={(e) => patchRow(r, { personaId: e.target.value || null })}
+                          >
+                            <option value="">Claude: {personaName(r.labels.personaId) ?? "—"}</option>
+                            {activePersonas.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      )}
                       <td className="py-2.5 pr-2">
                         <select
                           aria-label="Awareness"
@@ -374,12 +498,25 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                           disabled={disabled}
                           onChange={(e) => patchRow(r, { awareness: e.target.value || null })}
                         >
-                          <option value="">Claude's label</option>
+                          <option value="">Claude: {r.labels.awareness ? (AWARENESS[r.labels.awareness] ?? "—") : "—"}</option>
                           {Object.entries(AWARENESS).map(([value, label]) => (
                             <option key={value} value={value}>
                               {label}
                             </option>
                           ))}
+                        </select>
+                      </td>
+                      <td className="py-2.5 pr-2">
+                        <select
+                          aria-label="Offer"
+                          className={selectCls}
+                          value={a.offer == null ? "" : a.offer ? "yes" : "no"}
+                          disabled={disabled}
+                          onChange={(e) => patchRow(r, { offer: e.target.value === "" ? null : e.target.value === "yes" })}
+                        >
+                          <option value="">Claude: {r.labels.offer == null ? "—" : r.labels.offer ? "Offer" : "No offer"}</option>
+                          <option value="yes">Discount / offer</option>
+                          <option value="no">No offer</option>
                         </select>
                       </td>
                       <td className="py-2.5 pr-2">

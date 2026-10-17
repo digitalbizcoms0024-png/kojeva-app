@@ -67,6 +67,12 @@ attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ 
 - Standard vs 7-day click vs Meta's incremental attribution per pod, concept and ad, on its own page and in the ad detail.
   Report only (hit rate stays on standard). Needs a one-time 90-day backfill after deploy.
 
+## Coverage map ✅ (built; needs the persona list confirmed)
+- Persona × awareness grid of running ads with spend share, CPA/ROAS, offer share and each cell's concept
+  track record. Claude drafts personas, people confirm them in Settings, Claude places ads nightly and
+  suggests new personas for ads that fit none. Persona and offer pickers in Needs Tagging, "By persona" in
+  Insights, a dashboard alert when one cell holds most of the spend.
+
 ## Out of scope: managing ads
 The hub reports and analyses; it never changes campaigns. Meta access stays read-only (`ads_read`).
 Copying winners, pausing losers and other ad-management work stay in Ads Manager.

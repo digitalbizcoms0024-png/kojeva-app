@@ -2,9 +2,14 @@
 import type { Alert, Editor, PodSuggestion } from "../shared/api.ts";
 import type { Fatigue } from "../shared/fatigue.ts";
 import { cpa, roas } from "../shared/metrics.ts";
-import { podById } from "../shared/taxonomy.ts";
+import { AWARENESS, podById } from "../shared/taxonomy.ts";
+import { loadCoverage } from "./coverage.ts";
+import { confirmed, loadPersonas } from "./personas.ts";
 import { loadFatigue } from "./fatigue.ts";
 import { getLatestDate, getTargets, loadConcepts, shiftDay } from "./queries.ts";
+
+/** Share of a week's spend in a single persona × awareness cell that raises an alert. */
+export const CONCENTRATION = 0.6;
 
 const usd = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
 const usd2 = (v: number) => `$${v.toFixed(2)}`;
@@ -13,7 +18,8 @@ const usd2 = (v: number) => `$${v.toFixed(2)}`;
  * Up to ~7 alerts, worst first:
  * - fatigue (shared/fatigue.ts): two or more signals vs the ad's first week, or a CPA rise on its own;
  * - concepts whose test window closed in the last 7 days as a hit;
- * - spend in the last 7 days that no pod or the agency is credited with.
+ * - spend in the last 7 days that no pod or the agency is credited with;
+ * - over 60% of the week's spend in one persona × awareness cell (worker/coverage.ts).
  */
 export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null; alerts: Alert[] }> {
   const [latest, targets] = await Promise.all([getLatestDate(db), getTargets(db)]);
@@ -60,6 +66,21 @@ export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null;
       detail: "Spend in the last 7 days that no pod or the agency gets credit for yet",
       href: "#/tagging",
       action: "Tag ads",
+    });
+  }
+
+  // Most of the week's spend in one persona × awareness cell (once personas are confirmed).
+  const map = confirmed(await loadPersonas(db)) ? await loadCoverage(db, weekFrom, latest, undefined, concepts) : null;
+  if (map?.top && map.top.share > CONCENTRATION) {
+    const who = map.personas.find((p) => p.id === map.top!.personaId)?.name ?? "one persona";
+    const offer = map.top.offerShare != null && map.top.offerShare >= 0.5 ? `, ${Math.round(map.top.offerShare * 100)}% of it with a discount or offer` : "";
+    alerts.push({
+      id: "concentration",
+      tone: "warn",
+      title: `${Math.round(map.top.share * 100)}% of spend sits in one cell: ${who} × ${AWARENESS[map.top.awareness] ?? map.top.awareness}`,
+      detail: `Last 7 days${offer}. ${map.filled} of ${map.defined} persona × awareness cells have ads running`,
+      href: "#/coverage",
+      action: "Open coverage map",
     });
   }
 
@@ -116,7 +137,13 @@ async function fatigueAlerts(db: D1Database, tired: Map<string, Fatigue>): Promi
 }
 
 /** Words in a name, upper-cased, split on anything that isn't a letter. */
-const words = (s: string) => new Set(s.toUpperCase().split(/[^A-Z]+/).filter((w) => w.length >= 3));
+const words = (s: string) =>
+  new Set(
+    s
+      .toUpperCase()
+      .split(/[^A-Z]+/)
+      .filter((w) => w.length >= 3),
+  );
 
 /**
  * Suggested pods for posts no pod or the agency is credited with:

@@ -32,6 +32,8 @@ import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
 import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL, toTw, twCoverage } from "./queries.ts";
+import { loadCoverage } from "./coverage.ts";
+import { loadPersonas } from "./personas.ts";
 import { tripleWhale, twStatus } from "./triplewhale.ts";
 
 const app = new Hono<AppEnv>().basePath("/api");
@@ -78,7 +80,7 @@ const SORTERS: Record<SortKey, (t: Totals) => number | null> = {
 
 app.get("/meta", async (c) => {
   const db = c.env.DB;
-  const [targets, latestDate, lastRun, pods, live, conn, attr, detected, editors, untagged, tw] = await Promise.all([
+  const [targets, latestDate, lastRun, pods, live, conn, attr, detected, editors, untagged, tw, personas] = await Promise.all([
     getTargets(db),
     getLatestDate(db),
     db
@@ -99,6 +101,7 @@ app.get("/meta", async (c) => {
       )
       .first<{ n: number }>(),
     twStatus(db),
+    loadPersonas(db),
   ]);
   const attribution = { ...DEFAULT_ATTRIBUTION, ...(attr ? (JSON.parse(attr.value) as Partial<AttributionSettings>) : {}) };
   const body: MetaResponse = {
@@ -120,6 +123,7 @@ app.get("/meta", async (c) => {
     viewer: c.get("userEmail"),
     needsTagging: Number(untagged?.n ?? 0),
     tripleWhale: tw,
+    personas,
   };
   return c.json(body);
 });
@@ -304,13 +308,14 @@ app.get("/insights", async (c) => {
   const db = c.env.DB;
   const range = await resolveRange(db, (k) => c.req.query(k));
   if (!range) return c.json({ error: "Invalid custom date range" }, 400);
-  const dims: InsightDimension[] = ["angle", "format", "awareness", "atria_hook", "atria_persona", "atria_desire", "belief", "atria_theme"];
+  const dims: InsightDimension[] = ["angle", "format", "awareness", "persona", "atria_hook", "atria_persona", "atria_desire", "belief", "atria_theme"];
   const dimension = (dims.find((d) => d === c.req.query("dimension")) ?? "angle") as InsightDimension;
   const pod = c.req.query("pod");
   const concepts = (await loadConcepts(db)).filter((k) => k.firstSpend >= range.from && k.firstSpend <= range.to && (!pod || k.podId === pod));
   // Angle/format: one value per concept. Atria: every theme/desire the concept carries.
   const valuesOf = (k: (typeof concepts)[number]): (string | null)[] => {
     if (dimension === "angle" || dimension === "format" || dimension === "awareness") return [k[dimension]];
+    if (dimension === "persona") return [k.personaId];
     const v = conceptValues(k, dimension);
     return v.length ? v : [null];
   };
@@ -503,6 +508,7 @@ app.get("/concepts", async (c) => {
   const many = (q: string | undefined, vs: string[]) => q === undefined || (q === "none" ? vs.length === 0 : vs.includes(q));
   const multi = (["atria_theme", "atria_desire", "atria_hook", "atria_persona", "belief"] as const).map((d) => [d, c.req.query(d)] as const);
   const awareness = c.req.query("awareness");
+  const persona = c.req.query("persona");
   const rows = (await loadConcepts(db))
     .filter(
       (k) =>
@@ -512,11 +518,19 @@ app.get("/concepts", async (c) => {
         tag(angle, k.angle) &&
         tag(format, k.format) &&
         tag(awareness, k.awareness) &&
+        tag(persona, k.personaId) &&
         multi.every(([d, q]) => many(q, conceptValues(k, d))),
     )
     .sort((a, b) => b.firstSpend.localeCompare(a.firstSpend) || b.window.spendCents - a.window.spendCents);
   const body: ConceptsResponse = { ...range, rows };
   return c.json(body);
+});
+
+/** Running ads by persona × awareness level (?range, ?pod). */
+app.get("/coverage", async (c) => {
+  const range = await resolveRange(c.env.DB, (k) => c.req.query(k));
+  if (!range) return c.json({ error: "Invalid custom date range" }, 400);
+  return c.json(await loadCoverage(c.env.DB, range.from, range.to, c.req.query("pod") || undefined));
 });
 
 // Mounted last so the read routes above take precedence.

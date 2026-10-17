@@ -41,8 +41,21 @@ export interface AssignmentPatch {
   awareness?: string | null;
   /** Belief group, free text up to 60 characters; a hand-set value wins over Claude's. */
   beliefGroup?: string | null;
+  /** Persona id (an active persona); a hand-set value wins over Claude's. */
+  personaId?: string | null;
+  /** Whether the ad carries a discount or offer; a hand-set value wins over Claude's. */
+  offer?: boolean | null;
   /** Hand the pod (or tags) back to automatic attribution. */
   reset?: ("pod" | "tags")[];
+}
+
+/** A persona for the coverage map: one specific person an ad speaks to. */
+export interface Persona {
+  id: string;
+  name: string;
+  description: string;
+  /** draft: Claude's first list, not confirmed yet · active: in use · suggested: Claude proposes it for ads nobody fits. */
+  status: "draft" | "active" | "suggested";
 }
 
 export interface MetaResponse {
@@ -64,6 +77,8 @@ export interface MetaResponse {
   needsTagging: number;
   /** Triple Whale sync state; null until the first push. */
   tripleWhale: { lastSync: string; latestDate: string; days: number; model: string } | null;
+  /** Personas in display order (drafts, active and Claude's suggestions; dismissed ones left out). */
+  personas: Persona[];
 }
 
 export interface Assignment {
@@ -76,9 +91,18 @@ export interface Assignment {
   hook: string | null;
   landingPage: string | null;
   tagsSource: string | null;
-  /** Hand-set awareness and belief group; null means use Claude's labels. */
+  /** Hand-set awareness, belief group, persona and offer; null means use Claude's labels. */
   awareness: string | null;
   beliefGroup: string | null;
+  personaId: string | null;
+  offer: boolean | null;
+}
+
+/** Claude's labels for a post's creative (from its first labelled asset); null where not labelled. */
+export interface CreativeLabels {
+  awareness: string | null;
+  personaId: string | null;
+  offer: boolean | null;
 }
 
 export interface PostSummary {
@@ -102,6 +126,8 @@ export interface PostSummary {
   tw: TwTotals | null;
   /** Last 3 days vs the first week; null when not spending, too new, or nothing flagged. */
   fatigue: Fatigue | null;
+  /** Claude's labels; the hand-set values in `assignment` win over these. */
+  labels: CreativeLabels;
 }
 
 /** How many of the period's days (with Meta data) Triple Whale has been synced for. */
@@ -193,6 +219,8 @@ export interface ConceptResult {
   /** Belief groups it shifts (hand-set one wins), and up to 3 of Claude's belief wordings. */
   beliefGroups: string[];
   beliefs: string[];
+  /** Persona: hand-set on one of its ads, else the most common one Claude gave its assets. */
+  personaId: string | null;
 }
 
 export interface ConceptsResponse {
@@ -202,7 +230,7 @@ export interface ConceptsResponse {
 }
 
 /** Atria dimensions are multi-valued: a concept counts under each of its themes. */
-export type InsightDimension = "angle" | "format" | "awareness" | "atria_hook" | "atria_persona" | "atria_desire" | "belief" | "atria_theme";
+export type InsightDimension = "angle" | "format" | "awareness" | "persona" | "atria_hook" | "atria_persona" | "atria_desire" | "belief" | "atria_theme";
 
 export interface InsightRow {
   /** Tag key, or null for concepts with no tag on this dimension. */
@@ -311,4 +339,56 @@ export interface AttributionResponse {
   level: AttributionLevel;
   total: AttributionRow;
   rows: AttributionRow[];
+}
+
+/** A post on the coverage map, with its effective persona, awareness and offer (hand-set wins over Claude). */
+export interface CoveragePost {
+  postId: string;
+  name: string;
+  thumbnailUrl: string | null;
+  mediaType: string;
+  podId: string | null;
+  totals: Totals;
+  tw: TwTotals | null;
+  personaId: string | null;
+  awareness: string | null;
+  offer: boolean | null;
+  hit: HitStatus | null;
+}
+
+/** One persona × awareness cell. personaId / awareness null = not placed yet. */
+export interface CoverageCell {
+  personaId: string | null;
+  awareness: string | null;
+  /** Posts running in the period (spent in it). */
+  ads: number;
+  totals: Totals;
+  tw: TwTotals | null;
+  /** Spend on ads labelled with a discount/offer, and on ads whose offer label is known. */
+  offerSpendCents: number;
+  offerKnownSpendCents: number;
+  /** All-time concept track record in this cell (not limited to the period). */
+  concepts: number;
+  hits: number;
+  misses: number;
+  testing: number;
+  hitRate: number | null;
+}
+
+export interface CoverageResponse {
+  from: string;
+  to: string;
+  /** Active personas, in order. Empty until the list is confirmed in Settings. */
+  personas: Persona[];
+  totals: Totals;
+  /** Every cell with running ads or a concept history (empty ones are left out). */
+  cells: CoverageCell[];
+  posts: CoveragePost[];
+  /** Persona × awareness cells on the grid, and how many have running ads. */
+  defined: number;
+  filled: number;
+  /** The placed cell with the most spend, with its share of all spend and its offer share. */
+  top: { personaId: string; awareness: string; share: number; offerShare: number | null } | null;
+  /** Running posts missing a persona or an awareness level. */
+  unplaced: number;
 }

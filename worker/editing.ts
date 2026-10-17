@@ -9,6 +9,7 @@ import { requireAccess } from "./access.ts";
 import { randomToken } from "./crypto.ts";
 import type { AppEnv } from "./env.ts";
 import { attribute } from "./meta/sync.ts";
+import { cleanPersona, loadPersonas, MAX_PERSONAS, newPersonaId, nextSort, relabelUnplaced } from "./personas.ts";
 
 export const editing = new Hono<AppEnv>();
 
@@ -33,6 +34,11 @@ async function checkPatch(db: D1Database, p: AssignmentPatch): Promise<Problem> 
   if (p.awareness != null && !(p.awareness in AWARENESS)) return `Unknown awareness "${String(p.awareness)}".`;
   if (p.beliefGroup != null && (typeof p.beliefGroup !== "string" || !p.beliefGroup.trim() || p.beliefGroup.length > 60))
     return "Belief group must be 1–60 characters.";
+  if (p.personaId != null) {
+    const e = await db.prepare("SELECT 1 FROM personas WHERE id = ?1 AND status = 'active'").bind(p.personaId).first();
+    if (!e) return "Unknown persona.";
+  }
+  if (p.offer !== undefined && p.offer !== null && typeof p.offer !== "boolean") return "offer must be true, false or null.";
   if (p.editorId != null) {
     const e = await db.prepare("SELECT 1 FROM editors WHERE id = ?1").bind(p.editorId).first();
     if (!e) return "Unknown editor.";
@@ -74,22 +80,22 @@ function patchStatements(db: D1Database, postIds: string[], p: AssignmentPatch, 
   // Hand-set labels live in their own columns; null hands them back to Claude's labels.
   if (p.awareness !== undefined) col("awareness = ?", p.awareness);
   if (p.beliefGroup !== undefined) col("belief_group = ?", p.beliefGroup?.trim() ?? null);
+  if (p.personaId !== undefined) col("persona_id = ?", p.personaId);
+  if (p.offer !== undefined) col("offer = ?", p.offer == null ? null : p.offer ? 1 : 0);
   if (p.reset?.includes("pod")) sets.push("pod_source = NULL");
   if (p.reset?.includes("tags")) sets.push("tags_source = NULL");
   sets.push("updated_at = ?2", "updated_by = ?3");
 
-  return postIds.map((id) =>
-    db
-      .prepare(
-        `INSERT INTO assignments (post_id, updated_at, updated_by) VALUES (?1, ?2, ?3)
+  return postIds
+    .map((id) =>
+      db
+        .prepare(
+          `INSERT INTO assignments (post_id, updated_at, updated_by) VALUES (?1, ?2, ?3)
          ON CONFLICT(post_id) DO NOTHING;`,
-      )
-      .bind(id, now, by),
-  ).concat(
-    postIds.map((id) =>
-      db.prepare(`UPDATE assignments SET ${sets.join(", ")} WHERE post_id = ?1`).bind(id, now, by, ...vals),
-    ),
-  );
+        )
+        .bind(id, now, by),
+    )
+    .concat(postIds.map((id) => db.prepare(`UPDATE assignments SET ${sets.join(", ")} WHERE post_id = ?1`).bind(id, now, by, ...vals)));
 }
 
 async function applyPatch(db: D1Database, postIds: string[], p: AssignmentPatch, by: string | null) {
@@ -137,8 +143,7 @@ function checkTargets(t: Partial<Targets>): Problem {
     return "The late-hit window must be a whole number of days from 0 to 30.";
   if (t.cpaWarnMax !== undefined && t.cpaWarnMax !== null && !num(t.cpaWarnMax, 0.01, 10_000))
     return "The amber CPA limit must be a positive amount, or empty for 25% over target.";
-  if (t.cpaWarnMax != null && t.targetCpa !== undefined && t.cpaWarnMax <= t.targetCpa)
-    return "The amber CPA limit must be above the target CPA.";
+  if (t.cpaWarnMax != null && t.targetCpa !== undefined && t.cpaWarnMax <= t.targetCpa) return "The amber CPA limit must be above the target CPA.";
   return null;
 }
 
@@ -203,6 +208,91 @@ editing.delete("/editors/:id", requireAccess, async (c) => {
   await db.batch([
     db.prepare("UPDATE assignments SET editor_id = NULL WHERE editor_id = ?1").bind(id),
     db.prepare("DELETE FROM editors WHERE id = ?1").bind(id),
+  ]);
+  return c.json({ ok: true });
+});
+
+// ---- Personas ----
+
+/** Adds a persona: active once the list is confirmed, otherwise another draft. */
+editing.post("/personas", requireAccess, async (c) => {
+  const db = c.env.DB;
+  const p = cleanPersona((await c.req.json<{ name?: unknown; description?: unknown }>().catch(() => null)) ?? {});
+  if (typeof p === "string") return c.json({ error: p }, 400);
+  const list = await loadPersonas(db);
+  if (list.length >= MAX_PERSONAS) return c.json({ error: `At most ${MAX_PERSONAS} personas; merge or delete one first.` }, 400);
+  if (list.some((x) => x.name.toLowerCase() === p.name.toLowerCase())) return c.json({ error: "A persona with that name exists." }, 400);
+  const live = list.some((x) => x.status === "active");
+  const id = newPersonaId();
+  const now = new Date().toISOString();
+  await db.batch([
+    db
+      .prepare("INSERT INTO personas (id, name, description, status, sort, created_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
+      .bind(id, p.name, p.description, live ? "active" : "draft", await nextSort(db), c.get("userEmail"), now),
+    // Ads that fit no persona get another look against the new one.
+    ...(live ? [relabelUnplaced(db)] : []),
+  ]);
+  return c.json({ id }, 201);
+});
+
+/** Rename / redescribe, or approve one of Claude's suggestions ({ status: "active" }). */
+editing.patch("/personas/:id", requireAccess, async (c) => {
+  const db = c.env.DB;
+  const id = c.req.param("id");
+  const body = await c.req.json<{ name?: unknown; description?: unknown; status?: unknown }>().catch(() => null);
+  const row = await db
+    .prepare("SELECT name, description, status FROM personas WHERE id = ?1")
+    .bind(id)
+    .first<{ name: string; description: string; status: string }>();
+  if (!row || row.status === "dismissed") return c.json({ error: "Not found" }, 404);
+  const p = cleanPersona({ name: body?.name ?? row.name, description: body?.description ?? row.description });
+  if (typeof p === "string") return c.json({ error: p }, 400);
+  const clash = await db.prepare("SELECT 1 FROM personas WHERE lower(name) = lower(?1) AND id <> ?2").bind(p.name, id).first();
+  if (clash) return c.json({ error: "A persona with that name exists." }, 400);
+  if (body?.status !== undefined && !(body.status === "active" && row.status === "suggested"))
+    return c.json({ error: "Only a suggestion can be approved." }, 400);
+  const approve = body?.status === "active";
+  await db.batch([
+    db
+      .prepare("UPDATE personas SET name = ?2, description = ?3, status = ?4, updated_at = ?5 WHERE id = ?1")
+      .bind(id, p.name, p.description, approve ? "active" : row.status, new Date().toISOString()),
+    ...(approve ? [relabelUnplaced(db)] : []),
+  ]);
+  return c.json({ ok: true });
+});
+
+/** Turns the drafts into the live list; Claude starts assigning ads on its next run. */
+editing.post("/personas/confirm", requireAccess, async (c) => {
+  const db = c.env.DB;
+  const r = await db.prepare("UPDATE personas SET status = 'active', updated_at = ?1 WHERE status = 'draft'").bind(new Date().toISOString()).run();
+  if (!r.meta.changes) return c.json({ error: "No draft personas to confirm." }, 400);
+  return c.json({ ok: true, confirmed: r.meta.changes });
+});
+
+/**
+ * Deletes a persona. ?into=<id> merges it: its ads move to that persona. Without it, its ads go
+ * back to Claude to place again. A suggestion is dismissed instead, so it isn't suggested again.
+ */
+editing.delete("/personas/:id", requireAccess, async (c) => {
+  const db = c.env.DB;
+  const id = c.req.param("id");
+  const into = c.req.query("into") ?? null;
+  const row = await db.prepare("SELECT status FROM personas WHERE id = ?1").bind(id).first<{ status: string }>();
+  if (!row || row.status === "dismissed") return c.json({ error: "Not found" }, 404);
+  if (row.status === "suggested") {
+    await db.prepare("UPDATE personas SET status = 'dismissed', updated_at = ?2 WHERE id = ?1").bind(id, new Date().toISOString()).run();
+    return c.json({ ok: true, dismissed: true });
+  }
+  if (into) {
+    const target = await db.prepare("SELECT status FROM personas WHERE id = ?1").bind(into).first<{ status: string }>();
+    if (!target || into === id || (target.status !== "active" && target.status !== "draft")) return c.json({ error: "Merge into an existing persona." }, 400);
+  }
+  await db.batch([
+    into
+      ? db.prepare("UPDATE atria_assets SET persona_id = ?2 WHERE persona_id = ?1").bind(id, into)
+      : db.prepare("UPDATE atria_assets SET persona_id = NULL, persona_at = NULL WHERE persona_id = ?1").bind(id),
+    db.prepare("UPDATE assignments SET persona_id = ?2 WHERE persona_id = ?1").bind(id, into),
+    db.prepare("DELETE FROM personas WHERE id = ?1").bind(id),
   ]);
   return c.json({ ok: true });
 });

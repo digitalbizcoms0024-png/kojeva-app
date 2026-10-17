@@ -73,10 +73,17 @@ describe("Atria ingest", () => {
     expect((await call("/api/ingest/atria/pending", person)).status).toBe(403);
     expect((await call("/api/ingest/atria/pending", {})).status).toBe(401);
     expect((await call("/api/ingest/atria/pending", service)).status).toBe(200);
-    const edit = await call("/api/posts/p1/assignment", { ...service, "Content-Type": "application/json" }, { method: "PATCH", body: JSON.stringify({ podId: "ali" }) });
+    const edit = await call(
+      "/api/posts/p1/assignment",
+      { ...service, "Content-Type": "application/json" },
+      { method: "PATCH", body: JSON.stringify({ podId: "ali" }) },
+    );
     expect(edit.status).toBe(403);
     expect((await call("/api/ingest/atria/pending", service)).status).toBe(200);
-    expect((await app.fetch(new Request("https://hub.test/api/ingest/atria/pending", { headers: service }), { ...env, ATRIA_CLIENT_ID: "" }, {} as ExecutionContext)).status).toBe(403);
+    expect(
+      (await app.fetch(new Request("https://hub.test/api/ingest/atria/pending", { headers: service }), { ...env, ATRIA_CLIENT_ID: "" }, {} as ExecutionContext))
+        .status,
+    ).toBe(403);
   });
 
   it("stores tags, stops asking for them, and shows them on posts, concepts and insights", async () => {
@@ -101,7 +108,9 @@ describe("Atria ingest", () => {
     expect(rankings.items.find((p) => p.postId === "p1")!.atria).toMatchObject({ theme: VIDEO_TAGS.theme, media_format: ["UGC Video"] });
     expect(rankings.items.find((p) => p.postId === "p3")!.atria).toBeNull();
 
-    const insights = (await (await call("/api/insights?range=all&dimension=atria_theme", person)).json()) as { rows: { value: string | null; concepts: number }[] };
+    const insights = (await (await call("/api/insights?range=all&dimension=atria_theme", person)).json()) as {
+      rows: { value: string | null; concepts: number }[];
+    };
     const byTheme = Object.fromEntries(insights.rows.map((r) => [r.value ?? "none", r.concepts]));
     expect(byTheme).toMatchObject({ Comparison: 1, Scarcity: 1, "Product Demo": 1, none: 1 });
 
@@ -110,7 +119,12 @@ describe("Atria ingest", () => {
   });
 
   it("rejects malformed tags", async () => {
-    for (const assets of [[{ assetId: "x:1", status: "tagged", tags: {} }], [{ assetId: "v:1", status: "tagged", tags: { theme: "Scarcity" } }], [{ assetId: "v:1", status: "maybe" }], []])
+    for (const assets of [
+      [{ assetId: "x:1", status: "tagged", tags: {} }],
+      [{ assetId: "v:1", status: "tagged", tags: { theme: "Scarcity" } }],
+      [{ assetId: "v:1", status: "maybe" }],
+      [],
+    ])
       expect((await call("/api/ingest/atria", service, post({ assets }))).status).toBe(400);
   });
 
@@ -130,8 +144,14 @@ describe("Atria ingest", () => {
       );
     const LABELS = {
       labels: [
-        { assetId: VIDEO, awareness: "problem", belief: "Puffiness isn't fat, it's fluid that can drain", beliefGroup: "Puffiness is fluid, not fat" },
-        { assetId: IMAGE, awareness: "most", belief: "This deal won't come back", beliefGroup: "Now is the time to buy" },
+        {
+          assetId: VIDEO,
+          awareness: "problem",
+          belief: "Puffiness isn't fat, it's fluid that can drain",
+          beliefGroup: "Puffiness is fluid, not fat",
+          offer: false,
+        },
+        { assetId: IMAGE, awareness: "most", belief: "This deal won't come back", beliefGroup: "Now is the time to buy", offer: true },
       ],
     };
 
@@ -159,10 +179,9 @@ describe("Atria ingest", () => {
 
       const rows = async (dimension: string) =>
         Object.fromEntries(
-          ((await (await call(`/api/insights?range=all&dimension=${dimension}`, person)).json()) as { rows: { value: string | null; concepts: number }[] }).rows.map((r) => [
-            r.value ?? "none",
-            r.concepts,
-          ]),
+          (
+            (await (await call(`/api/insights?range=all&dimension=${dimension}`, person)).json()) as { rows: { value: string | null; concepts: number }[] }
+          ).rows.map((r) => [r.value ?? "none", r.concepts]),
         );
       expect(await rows("awareness")).toMatchObject({ problem: 1, most: 1, none: 1 });
       expect(await rows("belief")).toMatchObject({ "Puffiness is fluid, not fat": 1, "Now is the time to buy": 1, none: 1 });
@@ -175,12 +194,17 @@ describe("Atria ingest", () => {
     it("lets a hand-set awareness and belief group win over Claude's", async () => {
       await tagBoth();
       await call("/api/ingest/atria/labels", service, post(LABELS));
-      const res = await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ awareness: "solution", beliefGroup: "Real gua sha beats fakes" }) });
+      const res = await call("/api/posts/p1/assignment", person, {
+        method: "PATCH",
+        body: JSON.stringify({ awareness: "solution", beliefGroup: "Real gua sha beats fakes" }),
+      });
       expect(res.status).toBe(200);
       const concepts = (await (await call("/api/concepts?range=all&awareness=solution", person)).json()) as {
         rows: { awareness: string; awarenessSource: string; beliefGroups: string[] }[];
       };
-      expect(concepts.rows).toEqual([expect.objectContaining({ awareness: "solution", awarenessSource: "manual", beliefGroups: ["Real gua sha beats fakes"] })]);
+      expect(concepts.rows).toEqual([
+        expect.objectContaining({ awareness: "solution", awarenessSource: "manual", beliefGroups: ["Real gua sha beats fakes"] }),
+      ]);
       expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ awareness: "very" }) })).status).toBe(400);
     });
 

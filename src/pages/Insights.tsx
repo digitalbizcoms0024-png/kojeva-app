@@ -12,6 +12,7 @@ const LABELS: Record<InsightDimension, Record<string, string>> = {
   angle: ANGLES,
   format: FORMATS,
   awareness: AWARENESS,
+  persona: {},
   atria_hook: {},
   atria_persona: {},
   atria_desire: {},
@@ -22,6 +23,7 @@ const DIM_NAME: Record<InsightDimension, string> = {
   angle: "By angle",
   format: "By format",
   awareness: "By awareness level",
+  persona: "By persona",
   atria_hook: "By hook type",
   atria_persona: "By avatar",
   atria_desire: "By mass desire",
@@ -31,6 +33,7 @@ const DIM_NAME: Record<InsightDimension, string> = {
 /** Where each dimension comes from, shown under its title. */
 const DIM_SOURCE: Partial<Record<InsightDimension, string>> = {
   awareness: "Labelled by Claude from Atria's tags; hand-set values win",
+  persona: "Your persona list (Settings); placed by Claude, hand-set values win",
   atria_hook: "Atria · visual hook",
   atria_persona: "Atria · persona",
   atria_desire: "Atria · core desire",
@@ -39,7 +42,7 @@ const DIM_SOURCE: Partial<Record<InsightDimension, string>> = {
 };
 /** Dimensions where a concept can carry several values, so rows overlap. */
 const isAtria = (d: InsightDimension) => d.startsWith("atria_") || d === "belief";
-const isLabel = (d: InsightDimension) => d === "awareness" || d === "belief";
+const isLabel = (d: InsightDimension) => d === "awareness" || d === "belief" || d === "persona";
 
 /** Panels, two per row, in the order the team reads them. */
 const GROUPS: InsightDimension[][] = [
@@ -54,9 +57,9 @@ const MIN_DECIDED = 3;
 
 const BAND_FILL = { good: "var(--good)", warn: "var(--warn-line)", bad: "var(--bad)", none: "var(--line)" } as const;
 
-function name(dimension: InsightDimension, v: string | null) {
+function name(dimension: InsightDimension, v: string | null, personas: Record<string, string> = {}) {
   if (v == null) return isLabel(dimension) ? "Not labelled yet" : isAtria(dimension) ? "Not tagged by Atria" : `No ${dimension}`;
-  return LABELS[dimension][v] ?? v;
+  return (dimension === "persona" ? personas[v] : LABELS[dimension][v]) ?? v;
 }
 
 function Panel({
@@ -66,11 +69,13 @@ function Panel({
   targets,
   open,
   onOpen,
+  personas,
 }: {
   dimension: InsightDimension;
   range: Range;
   pod: string;
   targets: Targets;
+  personas: Record<string, string>;
   open: { dimension: InsightDimension; value: string | null } | null;
   onOpen: (value: string | null) => void;
 }) {
@@ -113,7 +118,10 @@ function Panel({
               <th className="py-1.5 font-normal">
                 <div className="relative flex justify-between">
                   <span>$0</span>
-                  <span className="absolute font-bold whitespace-nowrap text-accent-ink" style={{ left: `${(targets.targetCpa / scale) * 100}%`, transform: "translateX(-50%)" }}>
+                  <span
+                    className="absolute font-bold whitespace-nowrap text-accent-ink"
+                    style={{ left: `${(targets.targetCpa / scale) * 100}%`, transform: "translateX(-50%)" }}
+                  >
                     Target ${targets.targetCpa}
                   </span>
                   <span>${Math.round(scale)}</span>
@@ -133,6 +141,7 @@ function Panel({
                 targets={targets}
                 scale={scale}
                 maxSpend={maxSpend}
+                personas={personas}
                 active={open?.dimension === dimension && open.value === r.value}
                 onClick={() => onOpen(r.value)}
               />
@@ -142,10 +151,14 @@ function Panel({
       )}
       {total != null && total > 0 && (
         <p className="num mt-2 text-xs text-ink-3">
-          {total} concepts · {pct((total - untagged) / total, 0)} have {dimension === "angle" ? "an angle" : dimension === "format" ? "a format" : "an awareness level"} · click a row for its concepts
+          {total} concepts · {pct((total - untagged) / total, 0)} have{" "}
+          {dimension === "angle" ? "an angle" : dimension === "format" ? "a format" : dimension === "persona" ? "a persona" : "an awareness level"} · click a
+          row for its concepts
         </p>
       )}
-      {isAtria(dimension) && rows.length > 0 && <p className="mt-2 text-xs text-ink-3">A concept appears under each of its Atria tags, so rows overlap and don't add up.</p>}
+      {isAtria(dimension) && rows.length > 0 && (
+        <p className="mt-2 text-xs text-ink-3">A concept appears under each of its Atria tags, so rows overlap and don't add up.</p>
+      )}
     </section>
   );
 }
@@ -158,8 +171,10 @@ function Row({
   maxSpend,
   active,
   onClick,
+  personas,
 }: {
   r: InsightRow;
+  personas: Record<string, string>;
   dimension: InsightDimension;
   targets: Targets;
   scale: number;
@@ -174,8 +189,8 @@ function Row({
   return (
     <tr onClick={onClick} className={`cursor-pointer border-t border-divider align-middle transition hover:bg-surface ${active ? "bg-surface" : ""}`}>
       <td className="py-2.5 pr-3">
-        <div className={`truncate font-semibold ${r.value === null ? "text-ink-3" : "text-ink"}`} title={name(dimension, r.value)}>
-          {name(dimension, r.value)}
+        <div className={`truncate font-semibold ${r.value === null ? "text-ink-3" : "text-ink"}`} title={name(dimension, r.value, personas)}>
+          {name(dimension, r.value, personas)}
         </div>
         <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-ink-3">
           <span>
@@ -192,8 +207,16 @@ function Row({
       </td>
       <td className="py-2.5">
         <div className="relative flex flex-col gap-1">
-          <div className="h-3" style={{ width: `${c == null ? 0 : Math.min(1, c / scale) * 100}%`, background: BAND_FILL[band] }} title={c == null ? "No purchases" : `Test CPA $${c.toFixed(2)}`} />
-          <div className="h-1" style={{ width: `${(r.window.spendCents / maxSpend) * 100}%`, background: "var(--chart-bar)" }} title={`Test spend ${money(r.window.spendCents)}`} />
+          <div
+            className="h-3"
+            style={{ width: `${c == null ? 0 : Math.min(1, c / scale) * 100}%`, background: BAND_FILL[band] }}
+            title={c == null ? "No purchases" : `Test CPA $${c.toFixed(2)}`}
+          />
+          <div
+            className="h-1"
+            style={{ width: `${(r.window.spendCents / maxSpend) * 100}%`, background: "var(--chart-bar)" }}
+            title={`Test spend ${money(r.window.spendCents)}`}
+          />
           <div className="absolute -inset-y-1.5 border-l-2 border-dashed border-accent" style={{ left: `${(targets.targetCpa / scale) * 100}%` }} aria-hidden />
         </div>
       </td>
@@ -216,6 +239,9 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
   const [pod, setPod] = useState("");
   const [open, setOpen] = useState<{ dimension: InsightDimension; value: string | null } | null>(null);
   const t = meta.targets;
+  const personas = Object.fromEntries(meta.personas.filter((p) => p.status === "active").map((p) => [p.id, p.name]));
+  // Once the persona list is confirmed, "By persona" uses it instead of Atria's raw persona tags.
+  const groups = Object.keys(personas).length ? GROUPS.map((g) => g.map((d) => (d === "atria_persona" ? "persona" : d))) : GROUPS;
   const toggle = (dimension: InsightDimension) => (value: string | null) =>
     setOpen((o) => (o && o.dimension === dimension && o.value === value ? null : { dimension, value }));
 
@@ -227,7 +253,8 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
       <div className="flex flex-col gap-8 px-4 py-6 md:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="max-w-[90ch] text-sm text-ink-3">
-            Test CPA and spend sum each concept's judging window. {hitRuleText(t)} Grey hit rates mark fewer than {MIN_DECIDED} decided tests: treat them as hints.
+            Test CPA and spend sum each concept's judging window. {hitRuleText(t)} Grey hit rates mark fewer than {MIN_DECIDED} decided tests: treat them as
+            hints.
           </p>
           <Select
             label="Pod"
@@ -240,11 +267,11 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
           />
         </div>
 
-        {GROUPS.map((group) => (
+        {groups.map((group) => (
           <Fragment key={group.join()}>
             <div className="grid gap-8 xl:grid-cols-2">
               {group.map((d) => (
-                <Panel key={d} dimension={d} range={range} pod={pod} targets={t} open={open} onOpen={toggle(d)} />
+                <Panel key={d} dimension={d} range={range} pod={pod} targets={t} open={open} onOpen={toggle(d)} personas={personas} />
               ))}
             </div>
             {open && group.includes(open.dimension) && (
@@ -254,7 +281,7 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
                 targets={t}
                 pods={meta.pods.map((p) => ({ podId: p.id, name: p.name }))}
                 filter={{ [open.dimension]: open.value ?? "none", pod }}
-                title={`${DIM_NAME[open.dimension].replace("By ", "")}: ${name(open.dimension, open.value)}`}
+                title={`${DIM_NAME[open.dimension].replace("By ", "")}: ${name(open.dimension, open.value, personas)}`}
               />
             )}
           </Fragment>

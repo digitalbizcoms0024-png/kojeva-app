@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ConnectionStatus, MetaResponse } from "../../shared/api.ts";
+import type { ConnectionStatus, MetaResponse, Persona } from "../../shared/api.ts";
 import { useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
 import { PageHeader, PodChip, SectionTitle } from "../components/ui.tsx";
@@ -24,7 +24,9 @@ const secondary = "btn btn-secondary";
 function Check({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
     <li className="relative flex gap-2">
-      <span aria-hidden className={ok ? "text-good" : "text-bad"}>{ok ? "✓" : "✕"}</span>
+      <span aria-hidden className={ok ? "text-good" : "text-bad"}>
+        {ok ? "✓" : "✕"}
+      </span>
       <span className="sr-only">{ok ? "Done:" : "To do:"}</span>
       <span className={ok ? "text-ink-2" : "text-ink"}>{children}</span>
     </li>
@@ -112,8 +114,7 @@ function MetaPanel({ onSynced }: { onSynced: () => void }) {
     setNotice(null);
     const size = Math.min(14, s.maxWindowDays); // small requests stay inside Worker time limits
     const windows: { since: string; until: string }[] = [];
-    for (let end = 0; end > -total; end -= size)
-      windows.push({ since: utcDay(Math.max(end - size + 1, -total + 1)), until: utcDay(end) });
+    for (let end = 0; end > -total; end -= size) windows.push({ since: utcDay(Math.max(end - size + 1, -total + 1)), until: utcDay(end) });
     let rows = 0;
     try {
       for (const [i, w] of windows.entries()) {
@@ -171,15 +172,21 @@ function MetaPanel({ onSynced }: { onSynced: () => void }) {
       {connected ? (
         <div className="flex flex-col gap-1 text-sm">
           <div className="text-ink">
-            <span className="text-good" aria-hidden>●</span>{" "}
+            <span className="text-good" aria-hidden>
+              ●
+            </span>{" "}
             {s.systemToken ? "Connected with a system-user token (never expires)" : `Connected as ${s.connection?.userName ?? "unknown"}`}
           </div>
           {s.connection && !s.systemToken && (
             <div className="text-ink-3">
               {s.connection.method === "oauth" ? "Facebook login" : "Pasted token"} · connected {dateTime(s.connection.connectedAt)}
               {s.connection.connectedBy && ` by ${s.connection.connectedBy}`} ·{" "}
-              {expiresIn == null ? "no expiry reported" : (
-                <span className={expiresIn <= 7 ? "font-medium text-bad" : ""}>expires in {expiresIn} days ({shortDate(s.connection.expiresAt)})</span>
+              {expiresIn == null ? (
+                "no expiry reported"
+              ) : (
+                <span className={expiresIn <= 7 ? "font-medium text-bad" : ""}>
+                  expires in {expiresIn} days ({shortDate(s.connection.expiresAt)})
+                </span>
               )}
             </div>
           )}
@@ -199,13 +206,7 @@ function MetaPanel({ onSynced }: { onSynced: () => void }) {
               <button className={secondary} disabled={!!busy || !ready} onClick={() => runSync(days)}>
                 Backfill
               </button>
-              <select
-                id="backfill-days"
-                aria-label="Backfill length"
-                value={days}
-                onChange={(e) => setDays(Number(e.target.value))}
-                className="field"
-              >
+              <select id="backfill-days" aria-label="Backfill length" value={days} onChange={(e) => setDays(Number(e.target.value))} className="field">
                 {[90, 180, 365].map((d) => (
                   <option key={d} value={d}>
                     {d} days
@@ -321,7 +322,16 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
       <SectionTitle title="Targets" />
       <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-7">
         <Labeled label="Target CPA ($)">
-          <input id="t-cpa" type="number" min="0.01" step="0.01" value={cpa} onChange={(e) => setCpa(e.target.value)} className={field} disabled={!meta.canEdit} />
+          <input
+            id="t-cpa"
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={cpa}
+            onChange={(e) => setCpa(e.target.value)}
+            className={field}
+            disabled={!meta.canEdit}
+          />
         </Labeled>
         <Labeled label="Amber up to ($)" hint="Empty: 25% over target">
           <input
@@ -337,13 +347,42 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           />
         </Labeled>
         <Labeled label="Target ROAS">
-          <input id="t-roas" type="number" min="0.01" step="0.05" value={roasT} onChange={(e) => setRoasT(e.target.value)} className={field} disabled={!meta.canEdit} />
+          <input
+            id="t-roas"
+            type="number"
+            min="0.01"
+            step="0.05"
+            value={roasT}
+            onChange={(e) => setRoasT(e.target.value)}
+            className={field}
+            disabled={!meta.canEdit}
+          />
         </Labeled>
         <Labeled label="Testing window (days)">
-          <input id="t-days" type="number" min="1" max="30" step="1" value={days} onChange={(e) => setDays(e.target.value)} className={field} disabled={!meta.canEdit} />
+          <input
+            id="t-days"
+            type="number"
+            min="1"
+            max="30"
+            step="1"
+            value={days}
+            onChange={(e) => setDays(e.target.value)}
+            className={field}
+            disabled={!meta.canEdit}
+          />
         </Labeled>
         <Labeled label="Late-hit window (days)" hint="0 turns late hits off">
-          <input id="t-late" type="number" min="0" max="30" step="1" value={late} onChange={(e) => setLate(e.target.value)} className={field} disabled={!meta.canEdit} />
+          <input
+            id="t-late"
+            type="number"
+            min="0"
+            max="30"
+            step="1"
+            value={late}
+            onChange={(e) => setLate(e.target.value)}
+            className={field}
+            disabled={!meta.canEdit}
+          />
         </Labeled>
         <Labeled label="Qualifies at ($ on one ad)">
           <input id="t-min" type="number" min="0" step="10" value={min} onChange={(e) => setMin(e.target.value)} className={field} disabled={!meta.canEdit} />
@@ -401,8 +440,8 @@ function AttributionCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () =>
     <section>
       <SectionTitle title="Pods & agency" />
       <p className="max-w-[70ch] text-xs text-ink-3">
-        An ad's pod comes from the strategist named in its ad set ("IH | Harris | …", "Shameer | Static 3 | …"). Ad sets starting with an agency
-        code are the agency's, and so is anything launched before the pods started. Ads you tag by hand keep their pod.
+        An ad's pod comes from the strategist named in its ad set ("IH | Harris | …", "Shameer | Static 3 | …"). Ad sets starting with an agency code are the
+        agency's, and so is anything launched before the pods started. Ads you tag by hand keep their pod.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {meta.pods.map((p) => (
@@ -418,7 +457,11 @@ function AttributionCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () =>
         </Labeled>
         <Labeled
           label="Pods started on"
-          hint={a.detected ? `Leave empty to detect it (currently ${shortDate(a.podsStartDate)}, from the first strategist ad set).` : "Clear it to detect from the first strategist ad set."}
+          hint={
+            a.detected
+              ? `Leave empty to detect it (currently ${shortDate(a.podsStartDate)}, from the first strategist ad set).`
+              : "Clear it to detect from the first strategist ad set."
+          }
         >
           <input id="a-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} className={field} disabled={!meta.canEdit} />
         </Labeled>
@@ -493,6 +536,196 @@ function PodRosterCard({ meta, podId, onSaved }: { meta: MetaResponse; podId: st
   );
 }
 
+const STATUS_LABEL: Record<Persona["status"], string> = { draft: "Draft", active: "In use", suggested: "Suggested by Claude" };
+
+/** One persona, edited in place (saved when a field loses focus). */
+function PersonaRow({
+  meta,
+  p,
+  others,
+  run,
+  busy,
+}: {
+  meta: MetaResponse;
+  p: Persona;
+  others: Persona[];
+  run: ReturnType<typeof useSave>["run"];
+  busy: boolean;
+}) {
+  const [into, setInto] = useState("");
+  const off = !meta.canEdit || busy;
+  const save = (patch: { name?: string; description?: string }) => {
+    if ((patch.name ?? p.name) === p.name && (patch.description ?? p.description) === p.description) return;
+    void run(`/api/personas/${p.id}`, "PATCH", patch, "Saved.");
+  };
+  return (
+    <div className={`flex flex-col gap-2 p-3 ${p.status === "suggested" ? "border border-dashed border-line" : "bg-surface"}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          aria-label="Persona name"
+          defaultValue={p.name}
+          maxLength={60}
+          disabled={off}
+          className={`${field} min-w-48 flex-1 bg-page font-bold`}
+          onBlur={(e) => save({ name: e.target.value.trim() })}
+        />
+        <span className="bg-page px-1.5 py-px text-[11px] font-semibold text-ink-2">{STATUS_LABEL[p.status]}</span>
+      </div>
+      <textarea
+        aria-label={`Who is ${p.name}`}
+        defaultValue={p.description}
+        maxLength={240}
+        rows={2}
+        disabled={off}
+        placeholder="One specific person: age, situation, what they've tried, what they want"
+        className={`${field} bg-page text-sm`}
+        onBlur={(e) => save({ description: e.target.value.trim() })}
+      />
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {p.status === "suggested" ? (
+          <>
+            <button className={secondary} disabled={off} onClick={() => run(`/api/personas/${p.id}`, "PATCH", { status: "active" }, `Added ${p.name}.`)}>
+              Approve
+            </button>
+            <button className="btn btn-ghost" disabled={off} onClick={() => run(`/api/personas/${p.id}`, "DELETE", {}, `Dismissed ${p.name}.`)}>
+              Dismiss
+            </button>
+          </>
+        ) : (
+          <>
+            <select
+              aria-label={`Merge ${p.name} into`}
+              className={`${field} bg-page py-1`}
+              value={into}
+              onChange={(e) => setInto(e.target.value)}
+              disabled={off || others.length === 0}
+            >
+              <option value="">Merge into…</option>
+              {others.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+            {into && (
+              <button
+                className={secondary}
+                disabled={off}
+                onClick={() => run(`/api/personas/${p.id}?into=${into}`, "DELETE", {}, `Merged ${p.name} into ${others.find((o) => o.id === into)?.name}.`)}
+              >
+                Merge
+              </button>
+            )}
+            <button
+              className="btn btn-ghost text-bad"
+              disabled={off}
+              onClick={() => {
+                if (confirm(`Delete ${p.name}? Its ads go back to Claude to place again.`))
+                  void run(`/api/personas/${p.id}`, "DELETE", {}, `Deleted ${p.name}.`);
+              }}
+            >
+              Delete
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PersonasCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => void }) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const { busy, run, note } = useSave(onSaved);
+  const list = meta.personas.filter((p) => p.status !== "suggested");
+  const suggested = meta.personas.filter((p) => p.status === "suggested");
+  const drafts = list.filter((p) => p.status === "draft").length;
+  const confirmed = list.some((p) => p.status === "active");
+  const add = async () => {
+    if (await run("/api/personas", "POST", { name: name.trim(), description: description.trim() }, `Added ${name.trim()}.`)) {
+      setName("");
+      setDescription("");
+    }
+  };
+  return (
+    <section id="personas">
+      <SectionTitle
+        title="Personas"
+        right={
+          <span>
+            Rows of the{" "}
+            <a href="#/coverage" className="link">
+              coverage map
+            </a>
+            . Claude places each ad in one, nightly.
+          </span>
+        }
+      />
+      {list.length === 0 && (
+        <p className="mb-3 text-sm text-ink-3">
+          No personas yet. Claude drafts a list from Atria's persona tags on its next nightly run, or add your own below. Aim for 4–8 specific people.
+        </p>
+      )}
+      {drafts > 0 && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 bg-warn-soft px-3 py-2 text-sm text-ink">
+          <span>
+            {confirmed ? `${drafts} draft ${drafts === 1 ? "persona isn't" : "personas aren't"} in use yet.` : "Claude drafted these from Atria's tags."}{" "}
+            Rename, merge or delete, then confirm. Claude starts placing ads on its next run.
+          </span>
+          <button className={primary} disabled={!meta.canEdit || busy} onClick={() => run("/api/personas/confirm", "POST", {}, "Persona list confirmed.")}>
+            Confirm {drafts === 1 ? "persona" : `${drafts} personas`}
+          </button>
+        </div>
+      )}
+      <div className="grid gap-3 lg:grid-cols-2">
+        {list.map((p) => (
+          <PersonaRow key={`${p.id}:${p.name}:${p.description}`} meta={meta} p={p} others={list.filter((o) => o.id !== p.id)} run={run} busy={busy} />
+        ))}
+      </div>
+      {suggested.length > 0 && (
+        <>
+          <h3 className="mt-5 mb-2 font-extrabold text-ink">Suggested by Claude for ads that fit none of these</h3>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {suggested.map((p) => (
+              <PersonaRow key={`${p.id}:${p.name}:${p.description}`} meta={meta} p={p} others={[]} run={run} busy={busy} />
+            ))}
+          </div>
+        </>
+      )}
+      <form
+        className="mt-4 flex flex-wrap items-start gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) void add();
+        }}
+      >
+        <input
+          aria-label="New persona name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={60}
+          placeholder="Name, e.g. Loyal Lisa"
+          className={`${field} min-w-48`}
+          disabled={!meta.canEdit}
+        />
+        <input
+          aria-label="New persona description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          maxLength={240}
+          placeholder="Who they are and what they've tried"
+          className={`${field} min-w-64 flex-1`}
+          disabled={!meta.canEdit}
+        />
+        <button className={secondary} disabled={!name.trim() || busy || !meta.canEdit}>
+          Add persona
+        </button>
+      </form>
+      <div className="mt-2">{note}</div>
+    </section>
+  );
+}
+
 export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced: () => void }) {
   return (
     <div>
@@ -512,6 +745,8 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
               ))}
           </div>
         </section>
+
+        <PersonasCard meta={meta} onSaved={onSynced} />
 
         <AttributionCard meta={meta} onSaved={onSynced} />
 
@@ -538,15 +773,15 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
             <div>
               <h3 className="text-lg font-extrabold text-ink">Triple Whale</h3>
               <p className="text-sm text-ink-3">
-                Pixel-attributed orders and revenue per ad ({TW_MODEL_LABEL}, lifetime window), pushed nightly by a scheduled Claude task. Shown beside
-                Meta's numbers as "· TW", never added to them.
+                Pixel-attributed orders and revenue per ad ({TW_MODEL_LABEL}, lifetime window), pushed nightly by a scheduled Claude task. Shown beside Meta's
+                numbers as "· TW", never added to them.
               </p>
             </div>
             <span className="inline-flex items-center gap-2 text-sm text-ink-2">
               {meta.tripleWhale ? (
                 <>
-                  <span className="size-2 bg-good" aria-hidden />✓ {meta.tripleWhale.days} days · through {shortDate(meta.tripleWhale.latestDate)} · last new day{" "}
-                  {dateTime(meta.tripleWhale.lastSync)}
+                  <span className="size-2 bg-good" aria-hidden />✓ {meta.tripleWhale.days} days · through {shortDate(meta.tripleWhale.latestDate)} · last new
+                  day {dateTime(meta.tripleWhale.lastSync)}
                 </>
               ) : (
                 "Not synced yet"
