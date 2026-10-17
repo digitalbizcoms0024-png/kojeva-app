@@ -406,7 +406,8 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
         </span>
         <span className="text-ink-3">
           A concept qualifies once one ad has spent ${min}, and is judged from first spend to day {days} or the day it qualified, whichever is later.
-          {Number(late) > 0 && ` A miss that keeps spending becomes a late hit if any ${late} days in a row reach target (with at least $${min} spent).`}
+          {Number(late) > 0 && ` A miss that keeps spending becomes a late hit if any ${late} days in a row reach target (with at least $${min} spent).`} Each
+          ad is also judged on its own the same way; one ad hitting makes the concept a hit.
         </span>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">

@@ -27,6 +27,12 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - It's **judged** on all its ads combined, from its first day of spend to day `testWindowDays` (3) or
   the day it qualified, whichever is later. A slow CBO concept that qualifies on day 6 is judged on
   days 1–6.
+- **Best ad decides**: every ad in the concept is also judged on its own the same way (its first spend
+  to day 3 or the day *it* reached $100, plus its own late-hit look). The concept takes the best result
+  of itself and its ads (hit > late hit > testing > miss > not at $100; `bestStatus`), and records the
+  ad that decided it (`decidedBy`, shown as "via <ad name>"). Example: Harris "KOJEVA 3 | STATIC |
+  Scarcity" missed combined (days 1–3 CPA $17.14) but its "Almost Sold Out" ad hit on its own
+  (Sep 18–21, CPA $12.60, ROAS 2.47), so the concept is a hit.
 - Status:
   - **testing**: the judging window hasn't passed yet
   - **No ad at $100** (`ineligible`): window passed and no ad has reached $100; not counted

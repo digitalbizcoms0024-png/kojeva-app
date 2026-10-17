@@ -168,6 +168,16 @@ export function lateHitWindow(
   return null;
 }
 
+const STATUS_RANK: Record<HitStatus, number> = { hit: 0, late_hit: 1, testing: 2, miss: 3, ineligible: 4 };
+
+/**
+ * A concept's result from its own verdict and its ads' verdicts ("best ad decides"): a hit if
+ * anything hit, else a late hit, else still testing while any of them is, else a miss.
+ */
+export function bestStatus(statuses: HitStatus[]): HitStatus {
+  return statuses.reduce<HitStatus>((best, s) => (STATUS_RANK[s] < STATUS_RANK[best] ? s : best), "ineligible");
+}
+
 /** Last day of the judging window: day N from first spend, or the qualifying day if later. */
 export function judgingWindowEnd(firstSpend: string, qualifiedOn: string | null, t: Targets): string {
   const d = new Date(`${firstSpend}T00:00:00Z`);

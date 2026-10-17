@@ -202,6 +202,11 @@ export interface ConceptResult {
   lateWindow: { from: string; to: string; totals: Totals } | null;
   /** Last day with spend. */
   lastSpend: string | null;
+  /**
+   * The ad that made it a hit or late hit when the concept's combined numbers didn't ("best ad
+   * decides"): that ad's own judging (or late) window. Null when the concept's totals decided it.
+   */
+  decidedBy: { adId: string; name: string; from: string; to: string; totals: Totals; status: "hit" | "late_hit" } | null;
   /** Spent in the last 3 synced days. */
   stillRunning: boolean;
   angle: string | null;

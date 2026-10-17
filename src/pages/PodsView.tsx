@@ -23,7 +23,7 @@ export const podOrder = (id: string | null) => {
 };
 
 export function hitRuleText(t: Targets): string {
-  return `A concept qualifies once one of its ads has spent $${t.minTestSpend}, and is judged from first spend to day ${t.testWindowDays} or the day it qualified, whichever is later. Hit = CPA ≤ $${t.targetCpa} ${t.hitRule === "both" ? "and" : "or"} ROAS ≥ ${t.targetRoas} (Meta) over that window.${t.lateWindowDays > 0 ? ` A miss that keeps spending becomes a late hit if any ${t.lateWindowDays} days in a row reach target with at least $${t.minTestSpend} spent; late hits count in the hit rate.` : ""}`;
+  return `A concept qualifies once one of its ads has spent $${t.minTestSpend}, and is judged from first spend to day ${t.testWindowDays} or the day it qualified, whichever is later. Hit = CPA ≤ $${t.targetCpa} ${t.hitRule === "both" ? "and" : "or"} ROAS ≥ ${t.targetRoas} (Meta) over that window. Each ad is also judged on its own the same way, and the best ad decides: one ad hitting makes the concept a hit.${t.lateWindowDays > 0 ? ` A miss that keeps spending becomes a late hit if any ${t.lateWindowDays} days in a row reach target with at least $${t.minTestSpend} spent; late hits count in the hit rate.` : ""}`;
 }
 
 /** The tag value with the most hits among a pod's concepts (ties: more test spend). */
@@ -209,9 +209,7 @@ export function ConceptsTable({
   title?: string;
 }) {
   const [pod, setPod] = useState(filter.pod ?? "");
-  const { data, error } = useApi<ConceptsResponse>(
-    `/api/concepts?${qs({ ...filter, range, pod })}`,
-  );
+  const { data, error } = useApi<ConceptsResponse>(`/api/concepts?${qs({ ...filter, range, pod })}`);
   return (
     <section>
       <SectionTitle
@@ -307,7 +305,10 @@ export function ConceptsTable({
                         {k.angle && <span className="bg-accent-soft px-1.5 py-px text-[11px] text-accent-ink">{ANGLES[k.angle] ?? k.angle}</span>}
                         {k.format && <span className="bg-surface-2 px-1.5 py-px text-[11px] text-ink-2">{FORMATS[k.format] ?? k.format}</span>}
                         {k.awareness && (
-                          <span className="bg-ink px-1.5 py-px text-[11px] text-page" title={k.awarenessSource === "manual" ? "Awareness, set by hand" : "Awareness, labelled by Claude"}>
+                          <span
+                            className="bg-ink px-1.5 py-px text-[11px] text-page"
+                            title={k.awarenessSource === "manual" ? "Awareness, set by hand" : "Awareness, labelled by Claude"}
+                          >
                             {AWARENESS[k.awareness] ?? k.awareness}
                           </span>
                         )}
@@ -336,6 +337,17 @@ export function ConceptsTable({
                   </td>
                   <td className="py-2.5">
                     <HitBadge status={k.status} stillRunning={k.stillRunning} />
+                    {k.decidedBy && (
+                      <div className="mt-0.5 max-w-56 truncate text-[11px] text-ink-2" title={`Decided by ${k.decidedBy.name}`}>
+                        via {k.decidedBy.name}
+                      </div>
+                    )}
+                    {k.decidedBy?.status === "hit" && (
+                      <div className="num text-[11px] text-ink-3">
+                        {shortDate(k.decidedBy.from)} – {shortDate(k.decidedBy.to)} · CPA {dollars(cpa(k.decidedBy.totals))} · ROAS{" "}
+                        {roas(k.decidedBy.totals)?.toFixed(2) ?? "—"}
+                      </div>
+                    )}
                     {k.lateWindow && (
                       <div className="num mt-0.5 text-[11px] text-ink-3">
                         {shortDate(k.lateWindow.from)} – {shortDate(k.lateWindow.to)} · CPA {dollars(cpa(k.lateWindow.totals))} · ROAS{" "}
