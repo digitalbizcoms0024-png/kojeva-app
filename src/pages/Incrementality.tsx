@@ -3,7 +3,7 @@ import type { AttributionLevel, AttributionResponse, AttributionRow, MetaRespons
 import { attributedCpa, attributedRoas, incrementalShare, type AttributedTotals } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { CpaValue, CsvButton, Empty, PageHeader, PodChip, RoasValue, SectionTitle, Tabs } from "../components/ui.tsx";
+import { CsvButton, Empty, PageHeader, PodChip, SectionTitle, Tabs } from "../components/ui.tsx";
 import { dollars, downloadCsv, money, pct, plain, plainDollars, ratio } from "../format.ts";
 
 /** Modelled purchases can be fractional; show one decimal only on small counts. */
@@ -22,22 +22,8 @@ function Share({ v }: { v: number | null }) {
   );
 }
 
-function Group({
-  title,
-  note,
-  t,
-  spend,
-  banded,
-  meta,
-}: {
-  title: string;
-  note: string;
-  t: AttributedTotals | null;
-  spend: number;
-  banded: boolean;
-  meta: MetaResponse;
-}) {
-  const tg = meta.targets;
+/** No target colors here: the $14 / 1.7 targets were set for the ad sets' own attribution setting. */
+function Group({ title, note, t, spend }: { title: string; note: string; t: AttributedTotals | null; spend: number }) {
   const cpa = attributedCpa(t, spend);
   const roas = attributedRoas(t, spend);
   return (
@@ -51,15 +37,11 @@ function Group({
         </div>
         <div>
           <dt className="kicker">CPA</dt>
-          <dd className="text-lg font-extrabold">
-            {banded ? <CpaValue value={cpa} target={tg.targetCpa} warnMax={tg.cpaWarnMax} /> : <span className="num text-ink">{dollars(cpa)}</span>}
-          </dd>
+          <dd className="num text-lg font-extrabold text-ink">{dollars(cpa)}</dd>
         </div>
         <div>
           <dt className="kicker">ROAS</dt>
-          <dd className="text-lg font-extrabold">
-            {banded ? <RoasValue value={roas} target={tg.targetRoas} /> : <span className="num text-ink">{ratio(roas)}</span>}
-          </dd>
+          <dd className="num text-lg font-extrabold text-ink">{ratio(roas)}</dd>
         </div>
       </dl>
     </div>
@@ -83,7 +65,7 @@ export function IncrementalityPage({ meta, range, setRange }: { meta: MetaRespon
     <div>
       <PageHeader
         title="Incrementality"
-        subtitle="Would these purchases have happened without the ad? Meta's incremental attribution beside 7-day click and standard"
+        subtitle="Would these purchases have happened without the ad? Meta's incremental attribution beside 7-day click, as in Ads Manager's Compare attribution settings"
       >
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
@@ -102,40 +84,27 @@ export function IncrementalityPage({ meta, range, setRange }: { meta: MetaRespon
               right={
                 coverage != null && coverage < 0.995 && t.incremental
                   ? `Incremental data covers ${pct(coverage, 0)} of spend in this period`
-                  : "Meta · same spend for all three"
+                  : "Meta · same spend for both"
               }
             />
-            <div className="grid gap-0.5 border-2 border-divider bg-divider lg:grid-cols-[1fr_1fr_1fr_auto]">
-              <Group
-                title="Standard"
-                note="The ad set's own setting (used everywhere else in the hub)"
-                t={t.standard}
-                spend={t.spendCents}
-                banded
-                meta={meta}
-              />
-              <Group title="7-day click" note="Purchases within 7 days of a click" t={t.click7} spend={t.spendCents} banded={false} meta={meta} />
-              <Group
-                title="Incremental"
-                note="Only purchases Meta estimates wouldn't have happened without the ad"
-                t={t.incremental}
-                spend={t.spendCents}
-                banded={false}
-                meta={meta}
-              />
+            <div className="grid gap-0.5 border-2 border-divider bg-divider lg:grid-cols-[1fr_1fr_auto]">
+              <Group title="7-day click" note="Every purchase within 7 days of a click" t={t.click7} spend={t.spendCents} />
+              <Group title="Incremental" note="Purchases Meta's model says wouldn't have happened without the ad" t={t.incremental} spend={t.spendCents} />
               <div className="bg-page px-4 py-4 lg:w-56">
                 <div className="kicker">Incremental share</div>
                 <div className="num mt-1 text-[40px] leading-none font-extrabold text-ink">{pct(share, 0)}</div>
                 <p className="mt-2 text-xs text-ink-3">
                   {share == null
                     ? "Needs 7-day click and incremental data."
-                    : `Of 7-day-click purchases, about ${pct(share, 0)} were caused by the ads; the rest would likely have happened anyway.`}
+                    : share > 1.005
+                      ? "Meta credits more purchases as incremental than 7-day click counts: some come after a view or more than 7 days after a click."
+                      : `Meta counts about ${pct(share, 0)} of 7-day-click purchases as caused by the ads; the rest would likely have happened anyway.`}
                 </p>
               </div>
             </div>
             <p className="mt-2 text-xs text-ink-3">
-              Spend {money(t.spendCents)} (Meta). Target colors apply to Standard only: the ${meta.targets.targetCpa} / {meta.targets.targetRoas} targets were
-              set for it, so incremental CPA and ROAS are shown without good/bad color.
+              Spend {money(t.spendCents)} (Meta). Shown without good/bad colors: the ${meta.targets.targetCpa} / {meta.targets.targetRoas} targets are set on
+              the ad sets' own attribution setting, which the rest of the hub uses.
             </p>
           </section>
         )}
@@ -165,14 +134,11 @@ export function IncrementalityPage({ meta, range, setRange }: { meta: MetaRespon
           {data && rows.length === 0 && <Empty>No spend in this period.</Empty>}
           {rows.length > 0 && (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-sm">
+              <table className="w-full min-w-[760px] text-sm">
                 <thead className="kicker text-right">
                   <tr>
                     <th />
                     <th />
-                    <th colSpan={3} className="border-b border-divider pb-1 text-center font-normal">
-                      Standard
-                    </th>
                     <th colSpan={3} className="border-b border-divider pb-1 text-center font-normal">
                       7-day click
                     </th>
@@ -184,7 +150,7 @@ export function IncrementalityPage({ meta, range, setRange }: { meta: MetaRespon
                   <tr className="border-b-2 border-divider">
                     <th className="py-2 pr-3 text-left font-normal">{level === "pod" ? "Pod" : level === "concept" ? "Concept" : "Ad"}</th>
                     <th className="py-2 pr-3 font-normal">Spend</th>
-                    {[0, 1, 2].map((i) => (
+                    {[0, 1].map((i) => (
                       <Cols key={i} />
                     ))}
                     <th className="py-2 font-normal">Incr. share</th>
@@ -192,7 +158,7 @@ export function IncrementalityPage({ meta, range, setRange }: { meta: MetaRespon
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <Row key={r.key} r={r} level={level} meta={meta} />
+                    <Row key={r.key} r={r} level={level} />
                   ))}
                 </tbody>
               </table>
@@ -204,15 +170,19 @@ export function IncrementalityPage({ meta, range, setRange }: { meta: MetaRespon
           <SectionTitle title="How to read this" />
           <ul className="list-disc space-y-1 pl-5">
             <li>
-              <b>Standard</b> and <b>7-day click</b> count every purchase that followed the ad. <b>Incremental</b> is Meta's model of how many of those wouldn't
-              have happened without it, so it's always lower.
+              <b>7-day click</b> counts every purchase within 7 days of a click. <b>Incremental</b> is Meta's model of the purchases that wouldn't have happened
+              without the ad. The numbers match Ads Manager's Compare attribution settings.
             </li>
-            <li>A low incremental share means the ad mostly reached people who were going to buy anyway, such as retargeting or brand searchers.</li>
+            <li>
+              Incremental share = incremental ÷ 7-day click. A low share means the ad mostly reached people who were going to buy anyway, such as retargeting or
+              brand searchers. Near 100% means Meta counts almost every click-attributed purchase as caused by the ads. Over 100% happens when Meta also credits
+              purchases 7-day click doesn't count, such as ones after a view.
+            </li>
             <li>
               Incremental purchases are modelled and can be fractional. They come from Meta and are separate from Triple Whale; nothing here is blended with
               Triple Whale.
             </li>
-            <li>Hit rate and targets stay on Standard attribution.</li>
+            <li>Hit rate, targets and every other page stay on the ad sets' own attribution setting (usually 7-day click or 1-day view).</li>
           </ul>
         </section>
       </div>
@@ -230,25 +200,12 @@ function Cols() {
   );
 }
 
-function Row({ r, level, meta }: { r: AttributionRow; level: AttributionLevel; meta: MetaResponse }) {
-  const tg = meta.targets;
-  const cell = (t: AttributedTotals | null, banded: boolean) => (
+function Row({ r, level }: { r: AttributionRow; level: AttributionLevel }) {
+  const cell = (t: AttributedTotals | null) => (
     <>
       <td className="num py-2.5 pr-3 text-right text-ink">{fmtPurchases(t)}</td>
-      <td className="py-2.5 pr-3 text-right">
-        {banded ? (
-          <CpaValue value={attributedCpa(t, r.spendCents)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />
-        ) : (
-          <span className="num text-ink">{dollars(attributedCpa(t, r.spendCents))}</span>
-        )}
-      </td>
-      <td className="py-2.5 pr-3 text-right">
-        {banded ? (
-          <RoasValue value={attributedRoas(t, r.spendCents)} target={tg.targetRoas} />
-        ) : (
-          <span className="num text-ink">{ratio(attributedRoas(t, r.spendCents))}</span>
-        )}
-      </td>
+      <td className="num py-2.5 pr-3 text-right text-ink">{dollars(attributedCpa(t, r.spendCents))}</td>
+      <td className="num py-2.5 pr-3 text-right text-ink">{ratio(attributedRoas(t, r.spendCents))}</td>
     </>
   );
   return (
@@ -270,9 +227,8 @@ function Row({ r, level, meta }: { r: AttributionRow; level: AttributionLevel; m
         )}
       </td>
       <td className="num py-2.5 pr-3 text-right font-bold text-ink">{money(r.spendCents, { compact: true })}</td>
-      {cell(r.standard, true)}
-      {cell(r.click7, false)}
-      {cell(r.incremental, false)}
+      {cell(r.click7)}
+      {cell(r.incremental)}
       <td className="py-2.5 text-right">
         <Share v={incrementalShare(r.incremental, r.click7)} />
       </td>
@@ -292,10 +248,6 @@ function exportCsv(data: AttributionResponse, rows: AttributionRow[]) {
     [
       data.level === "pod" ? "Pod" : data.level === "concept" ? "Concept" : "Ad",
       "Spend (Meta, $)",
-      "Purchases (standard)",
-      "Revenue (standard, $)",
-      "CPA (standard, $)",
-      "ROAS (standard)",
       "Purchases (7-day click)",
       "Revenue (7-day click, $)",
       "CPA (7-day click, $)",
@@ -310,7 +262,6 @@ function exportCsv(data: AttributionResponse, rows: AttributionRow[]) {
     rows.map((r) => [
       r.label,
       plainDollars(r.spendCents),
-      ...block(r.standard, r.spendCents),
       ...block(r.click7, r.spendCents),
       ...block(r.incremental, r.spendCents),
       plain(incrementalShare(r.incremental, r.click7) == null ? null : incrementalShare(r.incremental, r.click7)! * 100, 1),

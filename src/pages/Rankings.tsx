@@ -342,6 +342,7 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
   const { data, error } = useApi<PostDetail>(`/api/posts/${encodeURIComponent(postId)}?${qs({ range })}`);
   const attr = useApi<AttributionResponse>(`/api/attribution?${qs({ range, level: "post", post: postId })}`);
   const inc = attr.data?.rows[0]?.incremental ?? null;
+  const click7 = attr.data?.rows[0]?.click7 ?? null;
   if (error) return <Empty>Couldn't load this ad: {error.message}</Empty>;
   if (!data || data.postId !== postId) return <Empty>Loading…</Empty>;
   const a = data.assignment;
@@ -456,12 +457,15 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
           </Cell>
         </div>
         <div className="mt-0.5 grid grid-cols-2 gap-0.5 border-2 border-t-0 border-divider bg-divider sm:grid-cols-3">
+          <Cell label="Purch. · 7-day click">{click7 ? int(click7.purchases) : "—"}</Cell>
+          <Cell label="CPA · 7-day click">{dollars(attributedCpa(click7, data.totals.spendCents))}</Cell>
+          <Cell label="ROAS · 7-day click">{ratio(attributedRoas(click7, data.totals.spendCents))}</Cell>
           <Cell label="Purch. · Incremental">{inc ? inc.purchases.toLocaleString("en-US", { maximumFractionDigits: 1 }) : "—"}</Cell>
           <Cell label="CPA · Incremental">{dollars(attributedCpa(inc, data.totals.spendCents))}</Cell>
           <Cell label="ROAS · Incremental">{ratio(attributedRoas(inc, data.totals.spendCents))}</Cell>
         </div>
         <div className="mt-1 text-xs text-ink-3">
-          Incremental = Meta's estimate of purchases that wouldn't have happened without this ad; no target colors (targets are set for standard).{" "}
+          Incremental = Meta's estimate of purchases that wouldn't have happened without this ad, beside 7-day click (as in Ads Manager); no target colors.{" "}
           <a href="#/incrementality" className="link">
             Compare →
           </a>
