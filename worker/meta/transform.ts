@@ -22,6 +22,8 @@ export interface GraphAd {
 interface GraphAction {
   action_type: string;
   value: string;
+  /** Per-window values when action_attribution_windows is requested, e.g. "7d_click", "incrementality". */
+  [window: string]: string | undefined;
 }
 
 export interface GraphInsight {
@@ -114,4 +116,40 @@ export function isoTime(t: string | undefined): string | null {
   if (!t) return null;
   const d = new Date(t.replace(/([+-]\d{2})(\d{2})$/, "$1:$2"));
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/** The windows requested in the attribution comparison pull. */
+export const COMPARE_WINDOWS = ["7d_click", "incrementality"] as const;
+
+/** First purchase action type present, read under one attribution window; null if Meta didn't report that window. */
+export function pickWindow(list: GraphAction[] | undefined, window: string): number | null {
+  for (const type of PURCHASE_TYPES) {
+    const hit = list?.find((a) => a.action_type === type);
+    if (hit) return hit[window] == null ? null : Number(hit[window]) || 0;
+  }
+  return list ? 0 : null;
+}
+
+export interface WindowRow {
+  adId: string;
+  date: string;
+  purchases7dc: number | null;
+  revenue7dcCents: number | null;
+  purchasesIncMilli: number | null;
+  revenueIncCents: number | null;
+}
+
+export function insightToWindows(r: GraphInsight): WindowRow {
+  const p7 = pickWindow(r.actions, "7d_click");
+  const v7 = pickWindow(r.action_values, "7d_click");
+  const pi = pickWindow(r.actions, "incrementality");
+  const vi = pickWindow(r.action_values, "incrementality");
+  return {
+    adId: r.ad_id,
+    date: r.date_start,
+    purchases7dc: p7 == null ? null : Math.round(p7),
+    revenue7dcCents: v7 == null ? null : Math.round(v7 * 100),
+    purchasesIncMilli: pi == null ? null : Math.round(pi * 1000),
+    revenueIncCents: vi == null ? null : Math.round(vi * 100),
+  };
 }

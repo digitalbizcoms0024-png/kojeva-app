@@ -8,6 +8,9 @@ import {
   twRoas,
   ctr,
   hitRate,
+  incrementalShare,
+  attributedCpa,
+  attributedRoas,
   lateHitWindow,
   hitStatus,
   judgingWindowEnd,
@@ -143,5 +146,21 @@ describe("lateHitWindow", () => {
 
   it("counts late hits in the hit rate", () => {
     expect(hitRate(["hit", "late_hit", "miss", "testing"])).toBeCloseTo(2 / 3);
+  });
+});
+
+describe("attribution comparison", () => {
+  const click7 = { purchases: 40, revenueCents: 120000 };
+  const inc = { purchases: 14.5, revenueCents: 41000 };
+  it("computes the incremental share and per-setting CPA and ROAS on the same spend", () => {
+    expect(incrementalShare(inc, click7)).toBeCloseTo(0.3625);
+    expect(attributedCpa(inc, 56000)).toBeCloseTo(38.62, 2);
+    expect(attributedRoas(click7, 56000)).toBeCloseTo(2.14, 2);
+  });
+  it("is missing, not zero, without data", () => {
+    expect(incrementalShare(null, click7)).toBeNull();
+    expect(incrementalShare(inc, { purchases: 0, revenueCents: 0 })).toBeNull();
+    expect(attributedCpa({ purchases: 0, revenueCents: 0 }, 1000)).toBeNull();
+    expect(attributedRoas(null, 1000)).toBeNull();
   });
 });

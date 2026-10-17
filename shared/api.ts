@@ -1,6 +1,6 @@
 // Response shapes shared by the Worker API and the React app.
 import type { Fatigue } from "./fatigue.ts";
-import type { HitStatus, Targets, Totals, TwTotals } from "./metrics.ts";
+import type { AttributedTotals, HitStatus, Targets, Totals, TwTotals } from "./metrics.ts";
 
 export type RangeKey = "week" | "month" | "all" | "custom";
 export type SortKey = "spend" | "purchases" | "roas" | "cpa" | "ctr";
@@ -285,4 +285,30 @@ export interface LaunchesResponse {
   /** Monday of each week, oldest first; the last one is the current week (the week of the latest synced day). */
   weeks: string[];
   rows: { podId: string; name: string; kind: "pod" | "agency"; counts: number[] }[];
+}
+
+export type AttributionLevel = "pod" | "concept" | "post";
+
+/** One row of the attribution comparison: same Meta spend, three ways of counting purchases. */
+export interface AttributionRow {
+  key: string;
+  label: string;
+  podId: string | null;
+  spendCents: number;
+  /** The ad set's own setting (what the rest of the hub shows). */
+  standard: AttributedTotals;
+  /** Null when no day in the period has 7-day-click data. */
+  click7: AttributedTotals | null;
+  /** Null when no day in the period has incremental data. */
+  incremental: AttributedTotals | null;
+  /** Spend on days that have incremental data (the share of spend the comparison covers). */
+  coveredSpendCents: number;
+}
+
+export interface AttributionResponse {
+  from: string;
+  to: string;
+  level: AttributionLevel;
+  total: AttributionRow;
+  rows: AttributionRow[];
 }

@@ -339,3 +339,51 @@ describe("guards", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("attribution comparison (7-day click and incremental)", () => {
+  // With action_attribution_windows, Meta adds a key per window to each action.
+  const windowed = (url: URL): GraphInsight[] =>
+    url.searchParams.has("action_attribution_windows")
+      ? [
+          {
+            ad_id: "120250321798060075",
+            date_start: "2026-10-08",
+            actions: [{ action_type: "omni_purchase", value: "8", "7d_click": "6", incrementality: "2.5" }],
+            action_values: [{ action_type: "omni_purchase", value: "190", "7d_click": "150", incrementality: "61.2" }],
+          },
+          // No default row exists for this one, so it's ignored.
+          { ad_id: "424242", date_start: "2026-10-08", actions: [{ action_type: "omni_purchase", value: "1", "7d_click": "1", incrementality: "1" }] },
+        ]
+      : insights();
+
+  it("stores both windows beside the default numbers, from a separate request, and re-syncs with 0 writes", async () => {
+    const meta = fakeMeta((url) => (url.pathname.endsWith(`${ACT}/insights`) ? { data: windowed(url) } : metaHandler()(url)));
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, meta);
+
+    const calls = meta.calls.filter((u) => u.pathname.endsWith("/insights"));
+    expect(calls.map((u) => u.searchParams.get("action_attribution_windows"))).toEqual([null, '["7d_click","incrementality"]']);
+    const [row] = await q<Record<string, number | null>>(
+      "SELECT purchases, revenue_cents, purchases_7dc, revenue_7dc_cents, purchases_inc_milli, revenue_inc_cents FROM ad_daily WHERE ad_id = '120250321798060075'",
+    );
+    expect(row).toEqual({ purchases: 8, revenue_cents: 19000, purchases_7dc: 6, revenue_7dc_cents: 15000, purchases_inc_milli: 2500, revenue_inc_cents: 6120 });
+    // Ads Meta returned nothing for keep NULL (unknown), not 0.
+    const [other] = await q<{ purchases_inc_milli: number | null }>("SELECT purchases_inc_milli FROM ad_daily WHERE ad_id = '120250321829620075'");
+    expect(other!.purchases_inc_milli).toBeNull();
+
+    const again = await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: false }, meta);
+    expect(again.written).toBe(0);
+  });
+
+  it("keeps syncing when Meta refuses the comparison windows, and says so", async () => {
+    const meta = fakeMeta((url) =>
+      url.pathname.endsWith(`${ACT}/insights`) && url.searchParams.has("action_attribution_windows")
+        ? { error: { message: "Invalid parameter", code: 100 } }
+        : metaHandler()(url),
+    );
+    const result = await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, meta);
+    expect(result.ok).toBe(true);
+    const [run] = await q<{ status: string; message: string }>("SELECT status, message FROM sync_runs ORDER BY id DESC LIMIT 1");
+    expect(run!.status).toBe("ok");
+    expect(run!.message).toContain("7-day click / incremental not available");
+  });
+});

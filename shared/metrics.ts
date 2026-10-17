@@ -182,3 +182,28 @@ export function hitRate(statuses: HitStatus[]): number | null {
   const decided = hits + statuses.filter((s) => s === "miss").length;
   return decided > 0 ? hits / decided : null;
 }
+
+/** Purchases and revenue under one Meta attribution setting. */
+export interface AttributedTotals {
+  /** Fractional under incremental attribution. */
+  purchases: number;
+  revenueCents: number;
+}
+
+/**
+ * Share of 7-day-click purchases Meta estimates would not have happened without the ad:
+ * incremental ÷ 7-day click. Null when either is missing or there were no 7-day-click purchases.
+ */
+export function incrementalShare(inc: AttributedTotals | null, click7: AttributedTotals | null): number | null {
+  return inc && click7 && click7.purchases > 0 ? inc.purchases / click7.purchases : null;
+}
+
+/** CPA in dollars under an attribution setting; null without purchases or data. */
+export function attributedCpa(t: AttributedTotals | null, spendCents: number): number | null {
+  return t && t.purchases > 0 ? spendCents / 100 / t.purchases : null;
+}
+
+/** ROAS under an attribution setting; null without spend or data. */
+export function attributedRoas(t: AttributedTotals | null, spendCents: number): number | null {
+  return t && spendCents > 0 ? t.revenueCents / spendCents : null;
+}

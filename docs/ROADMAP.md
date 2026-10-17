@@ -63,6 +63,10 @@ attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ 
 - Late hits (rolling 7-day second look for day-3 misses still spending), Spend by pod for the selected range, concepts
   launched per Monday–Sunday week per pod, and a Custom date range.
 
+## Incrementality ✅ (built; confirmed on first live sync)
+- Standard vs 7-day click vs Meta's incremental attribution per pod, concept and ad, on its own page and in the ad detail.
+  Report only (hit rate stays on standard). Needs a one-time 90-day backfill after deploy.
+
 ## Out of scope: managing ads
 The hub reports and analyses; it never changes campaigns. Meta access stays read-only (`ads_read`).
 Copying winners, pausing losers and other ad-management work stay in Ads Manager.

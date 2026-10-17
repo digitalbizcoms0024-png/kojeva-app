@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import type { MetaResponse, PodsResponse, PostDetail, PostSummary, RankingsResponse, SortKey } from "../../shared/api.ts";
-import { cpa, ctr, roas, twCpa, twRoas, type Targets, type Totals } from "../../shared/metrics.ts";
+import type { AttributionResponse, MetaResponse, PodsResponse, PostDetail, PostSummary, RankingsResponse, SortKey } from "../../shared/api.ts";
+import { attributedCpa, attributedRoas, cpa, ctr, roas, twCpa, twRoas, type Targets, type Totals } from "../../shared/metrics.ts";
 import { ANGLES, FORMATS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { DailyCharts } from "../components/DailyCharts.tsx";
 import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb } from "../components/ui.tsx";
-import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate, TW_MODEL_LABEL, twCoverageNote } from "../format.ts";
+import { dollars, downloadCsv, int, money, pct, plain, plainDollars, ratio, shortDate, TW_MODEL_LABEL, twCoverageNote } from "../format.ts";
 import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
 
@@ -340,6 +340,8 @@ const ATRIA_FIELDS = [
 
 function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: string; range: Range; targets: Targets; rank: number; sortLabel: string }) {
   const { data, error } = useApi<PostDetail>(`/api/posts/${encodeURIComponent(postId)}?${qs({ range })}`);
+  const attr = useApi<AttributionResponse>(`/api/attribution?${qs({ range, level: "post", post: postId })}`);
+  const inc = attr.data?.rows[0]?.incremental ?? null;
   if (error) return <Empty>Couldn't load this ad: {error.message}</Empty>;
   if (!data || data.postId !== postId) return <Empty>Loading…</Empty>;
   const a = data.assignment;
@@ -452,6 +454,17 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
           <Cell label="ROAS · TW">
             <RoasValue value={twRoas(data.tw, data.totals.spendCents)} target={targets.targetRoas} />
           </Cell>
+        </div>
+        <div className="mt-0.5 grid grid-cols-2 gap-0.5 border-2 border-t-0 border-divider bg-divider sm:grid-cols-3">
+          <Cell label="Purch. · Incremental">{inc ? inc.purchases.toLocaleString("en-US", { maximumFractionDigits: 1 }) : "—"}</Cell>
+          <Cell label="CPA · Incremental">{dollars(attributedCpa(inc, data.totals.spendCents))}</Cell>
+          <Cell label="ROAS · Incremental">{ratio(attributedRoas(inc, data.totals.spendCents))}</Cell>
+        </div>
+        <div className="mt-1 text-xs text-ink-3">
+          Incremental = Meta's estimate of purchases that wouldn't have happened without this ad; no target colors (targets are set for standard).{" "}
+          <a href="#/incrementality" className="link">
+            Compare →
+          </a>
         </div>
         <div className="mt-1 text-xs text-ink-3">
           TW = Triple Whale pixel, {TW_MODEL_LABEL}, on Meta's spend. Shown beside Meta's numbers, never added to them.

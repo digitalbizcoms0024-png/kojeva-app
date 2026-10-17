@@ -7,7 +7,7 @@ import { podByCode, type PodCode } from "../../shared/taxonomy.ts";
 import { decrypt } from "../crypto.ts";
 import type { Env } from "../env.ts";
 import { GraphError, graphClient, type GraphClient } from "./graph.ts";
-import { assetIdFor, insightToDaily, isoTime, mediaTypeFor, postIdFor, thumbnailFor, type GraphAd, type GraphInsight } from "./transform.ts";
+import { assetIdFor, COMPARE_WINDOWS, insightToDaily, insightToWindows, isoTime, mediaTypeFor, postIdFor, thumbnailFor, type GraphAd, type GraphInsight } from "./transform.ts";
 
 const AD_FIELDS =
   "id,name,status,effective_status,created_time,adset{id,name},campaign{id,name}," +
@@ -417,6 +417,68 @@ export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, si
   return { rows: daily.length, written: stmts.length + placeholderStmts.length };
 }
 
+type WindowDbRow = {
+  ad_id: string;
+  date: string;
+  purchases_7dc: number | null;
+  revenue_7dc_cents: number | null;
+  purchases_inc_milli: number | null;
+  revenue_inc_cents: number | null;
+};
+const WINDOW_COLS = ["purchases_7dc", "revenue_7dc_cents", "purchases_inc_milli", "revenue_inc_cents"] as const;
+
+/**
+ * Purchases and revenue under 7-day click and Meta's incremental attribution, for comparison.
+ * A separate request, so the default numbers are never affected. Only updates rows that exist in
+ * ad_daily and changed. If Meta refuses the windows, the columns stay NULL ("—" in the app).
+ */
+export async function syncAttributionWindows(env: Env, db: D1Database, gc: GraphClient, since: string, until: string) {
+  const rows: GraphInsight[] = [];
+  try {
+    for await (const page of gc.pages<GraphInsight>(`${env.META_AD_ACCOUNT_ID}/insights`, {
+      level: "ad",
+      time_increment: "1",
+      time_range: JSON.stringify({ since, until }),
+      fields: "ad_id,actions,action_values",
+      action_attribution_windows: JSON.stringify(COMPARE_WINDOWS),
+      limit: "250",
+    }))
+      rows.push(...page);
+  } catch (e) {
+    if (e instanceof GraphError && e.needsReconnect) throw e;
+    return { rows: 0, written: 0, error: e instanceof Error ? e.message : String(e) };
+  }
+  const { results } = await db
+    .prepare(`SELECT ad_id, date, ${WINDOW_COLS.join(", ")} FROM ad_daily WHERE date BETWEEN ?1 AND ?2`)
+    .bind(since, until)
+    .all<WindowDbRow>();
+  const stored = new Map(results.map((r) => [`${r.ad_id}|${r.date}`, r]));
+  const stmts: D1PreparedStatement[] = [];
+  for (const w of rows.map(insightToWindows)) {
+    const prev = stored.get(`${w.adId}|${w.date}`);
+    if (!prev) continue; // no default row for that day (no spend): nothing to compare against
+    const next: WindowDbRow = {
+      ad_id: w.adId,
+      date: w.date,
+      purchases_7dc: w.purchases7dc,
+      revenue_7dc_cents: w.revenue7dcCents,
+      purchases_inc_milli: w.purchasesIncMilli,
+      revenue_inc_cents: w.revenueIncCents,
+    };
+    if (same(prev, next, WINDOW_COLS)) continue;
+    stmts.push(
+      db
+        .prepare(
+          `UPDATE ad_daily SET purchases_7dc = ?3, revenue_7dc_cents = ?4, purchases_inc_milli = ?5, revenue_inc_cents = ?6
+           WHERE ad_id = ?1 AND date = ?2`,
+        )
+        .bind(next.ad_id, next.date, next.purchases_7dc, next.revenue_7dc_cents, next.purchases_inc_milli, next.revenue_inc_cents),
+    );
+  }
+  await runBatched(db, stmts);
+  return { rows: rows.length, written: stmts.length };
+}
+
 export function utcDay(offset = 0, from = new Date()): string {
   const d = new Date(from);
   d.setUTCDate(d.getUTCDate() + offset);
@@ -464,9 +526,12 @@ export async function runSync(
     const i = await syncInsights(env, db, gc, opts.since, opts.until);
     result.rows = i.rows;
     result.written = (result.written ?? 0) + i.written;
+    const w = await syncAttributionWindows(env, db, gc, opts.since, opts.until);
+    result.written += w.written;
     await finish(
       "ok",
-      `${opts.since} → ${opts.until} · ${result.rows} rows${opts.ads ? ` · ${result.ads} ads` : ""} · ${result.written} changed`,
+      `${opts.since} → ${opts.until} · ${result.rows} rows${opts.ads ? ` · ${result.ads} ads` : ""} · ${result.written} changed` +
+        (w.error ? ` · 7-day click / incremental not available: ${w.error}` : ""),
     );
     return result;
   } catch (e) {
