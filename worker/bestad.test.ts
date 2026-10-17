@@ -32,6 +32,8 @@ beforeEach(async () => {
       "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time, concept_id) VALUES (?1, ?1, ?2, 's3', 'IH | Harris | KOJEVA 3 | STATIC | Scarcity', 'PAUSED', '2026-09-17T00:00:00Z', 'k3')",
     ).bind(id, name);
   await env.DB.batch([
+    // The combined numbers hit on ROAS under the default "either" rule; "both" isolates the best-ad case.
+    env.DB.prepare("UPDATE settings SET value = json_set(value, '$.hitRule', 'both') WHERE key = 'targets'"),
     env.DB.prepare(
       "INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES ('k3', 's3', 'IH | Harris | KOJEVA 3 | STATIC | Scarcity', 'KOJEVA 3', 'harris')",
     ),
@@ -75,6 +77,14 @@ describe("best ad decides", () => {
 
     const harris = (await get<PodsResponse>("/api/pods?range=all")).rows.find((r) => r.podId === "harris")!;
     expect(harris).toMatchObject({ hits: 1, misses: 0 });
+  });
+
+  it("uses Kojeva's either rule once migrations have run", async () => {
+    const fresh = await testDb();
+    const meta = (await (
+      await app.fetch(new Request("https://hub.test/api/meta", { headers: person }), { ...env, DB: fresh }, {} as ExecutionContext)
+    ).json()) as { targets: { hitRule: string } };
+    expect(meta.targets.hitRule).toBe("either");
   });
 
   it("ranks results hit > late hit > testing > miss > ineligible", () => {

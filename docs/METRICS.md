@@ -36,14 +36,13 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - Status:
   - **testing**: the judging window hasn't passed yet
   - **No ad at $100** (`ineligible`): window passed and no ad has reached $100; not counted
-  - **hit**: window CPA ≤ $14 **and** window ROAS ≥ 1.7 (`hitRule: "either"` allows either one)
+  - **hit**: window CPA ≤ $14 **or** window ROAS ≥ 1.7 (Kojeva's rule, `hitRule: "either"`; Settings can switch to "both")
   - **miss**: otherwise (including zero purchases)
 - **Hit rate** = hits ÷ (hits + misses).
 - A concept counts toward the period in which it **first spent**.
 - An ad's "Hit" badge in Rankings shows the result of the concept it was tested in.
 
 ## Pending confirmation
-- Hit rule: both targets, or either? (default: both)
 - Minimum test spend (default: $100)
 - Should the test window only count the testing campaign (ABO)? (default: all copies)
 

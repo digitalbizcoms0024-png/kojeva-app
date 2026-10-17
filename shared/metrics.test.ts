@@ -72,15 +72,19 @@ describe("hitStatus", () => {
     expect(hitStatus(t(240, 24, 600), { qualified: false, complete: true }, T)).toBe("ineligible");
   });
 
-  it("needs both CPA ≤ $14 and ROAS ≥ 1.7 by default", () => {
-    expect(hitStatus(t(140, 10, 240), done, T)).toBe("hit");
-    expect(hitStatus(t(140, 10, 200), done, T)).toBe("miss"); // ROAS 1.43
-    expect(hitStatus(t(150, 10, 300), done, T)).toBe("miss"); // CPA $15
+  it("hits on CPA ≤ $14 or ROAS ≥ 1.7 by default (Kojeva's rule)", () => {
+    expect(T.hitRule).toBe("either");
+    expect(hitStatus(t(140, 10, 200), done, T)).toBe("hit"); // CPA $14, ROAS 1.43
+    expect(hitStatus(t(220, 10, 380), done, T)).toBe("hit"); // CPA $22, ROAS 1.73
+    expect(hitStatus(t(150, 10, 200), done, T)).toBe("miss"); // CPA $15, ROAS 1.33
     expect(hitStatus(t(150, 0, 0), done, T)).toBe("miss"); // no purchases
   });
 
-  it("supports an either-target rule", () => {
-    expect(hitStatus(t(140, 10, 200), done, { ...T, hitRule: "either" })).toBe("hit");
+  it("supports a both-targets rule", () => {
+    const both = { ...T, hitRule: "both" as const };
+    expect(hitStatus(t(140, 10, 240), done, both)).toBe("hit");
+    expect(hitStatus(t(140, 10, 200), done, both)).toBe("miss"); // ROAS 1.43
+    expect(hitStatus(t(150, 10, 300), done, both)).toBe("miss"); // CPA $15
   });
 });
 

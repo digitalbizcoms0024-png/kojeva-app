@@ -81,7 +81,7 @@ export const DEFAULT_TARGETS: Targets = {
   targetRoas: 1.7,
   testWindowDays: 3,
   minTestSpend: 100,
-  hitRule: "both",
+  hitRule: "either",
   cpaWarnMax: null,
   lateWindowDays: 7,
 };
