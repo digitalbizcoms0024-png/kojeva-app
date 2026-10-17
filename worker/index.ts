@@ -569,6 +569,21 @@ app.route("/", editing);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 
+// Errors come back as JSON the page can show. D1's free-plan daily limits get a plain explanation.
+app.onError((err, c) => {
+  const msg = err instanceof Error ? err.message : String(err);
+  const limit = /limit|exceeded|quota/i.test(msg) && /D1|row|read|write|operation/i.test(msg);
+  console.error(err);
+  return c.json(
+    {
+      error: limit
+        ? "The database's free daily limit is used up (Cloudflare D1). It resets at 00:00 UTC; the hub works again after that."
+        : `Server error: ${msg || "unknown"}`,
+    },
+    limit ? 503 : 500,
+  );
+});
+
 export default {
   fetch: app.fetch,
   /** Nightly: refresh ads and re-pull the last 7 days (Meta keeps revising recent days). */

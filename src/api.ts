@@ -14,7 +14,7 @@ export function useApi<T>(path: string | null) {
     fetch(path)
       .then(async (r) => {
         const body = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error((body as { error?: string }).error ?? r.statusText);
+        if (!r.ok) throw new Error((body as { error?: string }).error || r.statusText || `HTTP ${r.status}`);
         return body as T;
       })
       .then((d) => alive && setData(d))

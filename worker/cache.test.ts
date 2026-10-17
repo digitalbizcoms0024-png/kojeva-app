@@ -68,3 +68,16 @@ describe("read cache", () => {
     expect(((await (await call("/api/meta", person)).json()) as { lastSync: { message: string } }).lastSync.message).toBe("done");
   });
 });
+
+describe("errors", () => {
+  it("explains a D1 daily limit instead of failing silently", async () => {
+    const broken = {
+      prepare: () => {
+        throw new Error("D1_ERROR: Exceeded maximum rows read for the day");
+      },
+    } as unknown as D1Database;
+    const res = await app.fetch(new Request("https://hub.test/api/rankings", { headers: person }), { ...env, DB: broken }, {} as ExecutionContext);
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { error: string }).error).toMatch(/free daily limit.*00:00 UTC/);
+  });
+});
