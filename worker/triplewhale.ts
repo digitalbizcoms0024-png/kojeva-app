@@ -1,6 +1,7 @@
 // Triple Whale pixel attribution per Meta ad and day. Triple Whale is read through Claude's
 // connector, so a scheduled Claude task pulls it and pushes it here, signed in with the same
 // Access service token as the Atria task. See docs/TRIPLE_WHALE.md.
+import { bumpVersion } from "./cache.ts";
 import { Hono } from "hono";
 import { requireService } from "./access.ts";
 import type { AppEnv } from "./env.ts";
@@ -137,6 +138,7 @@ tripleWhale.post("/", async (c) => {
       );
   }
   for (let i = 0; i < stmts.length; i += 200) await db.batch(stmts.slice(i, i + 200));
+  if (stmts.length) await bumpVersion(db);
   return c.json({
     ok: true,
     days: days.length,

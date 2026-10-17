@@ -25,6 +25,7 @@ import { ZERO_TOTALS, ZERO_TW, addTotals, addTw, cpa, ctr, hitRate, roas, type T
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware } from "./access.ts";
+import { bumpVersion, cachedResponse, cacheResponse, dataVersion } from "./cache.ts";
 import type { AppEnv, Env } from "./env.ts";
 import { loadAlerts, loadSuggestions } from "./alerts.ts";
 import { atria } from "./atria.ts";
@@ -39,6 +40,33 @@ import { tripleWhale, twStatus } from "./triplewhale.ts";
 const app = new Hono<AppEnv>().basePath("/api");
 
 app.use("*", accessMiddleware);
+
+// Read routes are served from memory until the data changes; any successful write marks the
+// data as changed. Connection, sync and ingest routes are never cached. See worker/cache.ts.
+const UNCACHED = /^\/api\/(connection|sync|ingest)(\/|$)/;
+// Syncs and ingest pushes mark changes themselves, only when they wrote rows.
+const SELF_BUMPING = /^\/api\/(sync|ingest)(\/|$)/;
+app.use("*", async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  if (c.req.method !== "GET") {
+    await next();
+    if (c.res.status < 400 && !SELF_BUMPING.test(path)) await bumpVersion(c.env.DB).catch(() => undefined);
+    return;
+  }
+  if (UNCACHED.test(path)) return next();
+  // /meta includes who is signed in and the latest sync's status, so both go into its key.
+  const extra =
+    path === "/api/meta"
+      ? `${c.get("userEmail") ?? ""}|${
+          (await c.env.DB.prepare("SELECT id || ':' || status AS s FROM sync_runs ORDER BY id DESC LIMIT 1").first<{ s: string }>())?.s ?? ""
+        }`
+      : "";
+  const key = `${await dataVersion(c.env.DB)}|${c.req.url}|${extra}`;
+  const hit = cachedResponse(key);
+  if (hit !== undefined) return c.body(hit, 200, { "Content-Type": "application/json; charset=UTF-8", "X-Cache": "hit" });
+  await next();
+  if (c.res.status === 200) cacheResponse(key, await c.res.clone().text());
+});
 app.route("/connection", connection);
 app.route("/sync", sync);
 app.route("/ingest/atria", atria);

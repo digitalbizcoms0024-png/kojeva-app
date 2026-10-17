@@ -4,6 +4,7 @@
 import { Hono } from "hono";
 import { requireService } from "./access.ts";
 import type { AppEnv } from "./env.ts";
+import { bumpVersion } from "./cache.ts";
 import { cleanPersona, confirmed, loadPersonas, MAX_PERSONAS, newPersonaId, nextSort } from "./personas.ts";
 import { getLatestDate, shiftDay } from "./queries.ts";
 
@@ -116,6 +117,14 @@ atria.post("/", async (c) => {
           .bind(r.assetId, r.status, r.tags, now);
   });
   await db.batch(stmts);
+  // Only new or changed tags change what the hub shows (fetched_at alone doesn't).
+  if (
+    rows.some((r) => {
+      const o = stored.get(r.assetId);
+      return !o || o.status !== r.status || o.tags !== r.tags;
+    })
+  )
+    await bumpVersion(db);
   return c.json({ ok: true, received: rows.length, tagged: rows.filter((r) => r.status === "tagged").length });
 });
 
@@ -260,7 +269,10 @@ atria.post("/labels", async (c) => {
         .bind(r.assetId, r.awareness, r.belief, r.beliefGroup, now, r.offer, r.persona ? 1 : 0, r.persona?.id ?? null),
     );
   }
-  if (stmts.length) await db.batch(stmts);
+  if (stmts.length) {
+    await db.batch(stmts);
+    await bumpVersion(db);
+  }
   return c.json({ ok: true, received: rows.length, written: stmts.length, unknown });
 });
 
@@ -333,5 +345,6 @@ atria.post("/personas", async (c) => {
       ),
     );
   }
+  if (fresh.length) await bumpVersion(db);
   return c.json({ ok: true, added: fresh.length, as: drafting ? "draft" : "suggested", skipped: clean.length - fresh.length });
 });

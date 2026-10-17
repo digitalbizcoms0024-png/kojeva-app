@@ -1,4 +1,5 @@
 // Pulls ads and daily insights from Meta into D1. See docs/ROADMAP.md → Phase 1.
+import { bumpVersion } from "../cache.ts";
 import { attributePod, DEFAULT_ATTRIBUTION, detectPodsStart, type AttributionSettings } from "../../shared/attribution.ts";
 import { classify } from "../../shared/classify.ts";
 import { buildConcepts } from "../../shared/concepts.ts";
@@ -509,7 +510,13 @@ export async function runSync(
     .prepare("INSERT INTO sync_runs (source, started_at, status, message) VALUES ('meta', ?1, 'running', ?2) RETURNING id")
     .bind(started, `${opts.since} → ${opts.until}`)
     .first<{ id: number }>();
-  const finish = (status: string, message: string) =>
+  // Marks the data as changed only when the sync wrote something (an unchanged re-sync still
+  // writes 0 data rows); /api/meta keys its cache on the latest run, so the status stays current.
+  const finish = async (status: string, message: string, changed: boolean) => {
+    await finishRun(status, message);
+    if (changed) await bumpVersion(db).catch(() => undefined);
+  };
+  const finishRun = (status: string, message: string) =>
     db
       .prepare("UPDATE sync_runs SET finished_at = ?1, status = ?2, message = ?3 WHERE id = ?4")
       .bind(new Date().toISOString(), status, message, run!.id)
@@ -533,11 +540,12 @@ export async function runSync(
       "ok",
       `${opts.since} → ${opts.until} · ${result.rows} rows${opts.ads ? ` · ${result.ads} ads` : ""} · ${result.written} changed` +
         (w.error ? ` · 7-day click / incremental not available: ${w.error}` : ""),
+      result.written > 0,
     );
     return result;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    await finish("error", message);
+    await finish("error", message, true);
     return { ok: false, error: message, reconnect: e instanceof GraphError && e.needsReconnect };
   }
 }

@@ -1,5 +1,6 @@
 import type { Assignment, ConceptResult, PostSummary, TwCoverage } from "../shared/api.ts";
 import { classify } from "../shared/classify.ts";
+import { memoize } from "./cache.ts";
 import { loadFatigue } from "./fatigue.ts";
 import {
   bestStatus,
@@ -172,8 +173,12 @@ async function judgeAds(db: D1Database, targets: Targets, latest: string | null)
   return verdicts.map(({ lastDate: _, ...v }) => v);
 }
 
-/** Every concept with its test-window totals and hit status. */
-export async function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
+/** Every concept with its test-window totals and hit status (computed once per data version). */
+export function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
+  return memoize(db, "concepts", () => computeConcepts(db));
+}
+
+async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
   const [targets, latest] = await Promise.all([getTargets(db), getLatestDate(db)]);
   const [bounds, all] = await Promise.all([
     // First spend, and the first day any single ad's running spend reached the minimum.
