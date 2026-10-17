@@ -3,7 +3,7 @@ import type { MetaResponse } from "../../shared/api.ts";
 import { RANGE_LABELS } from "../api.ts";
 import { dateTime, shortDate } from "../format.ts";
 
-/** "week" | "month" | "all", or a custom range written as "custom:YYYY-MM-DD:YYYY-MM-DD". */
+/** "week" | "month" | "mtd" | "all", or a custom range written as "custom:YYYY-MM-DD:YYYY-MM-DD". */
 export type Range = keyof typeof RANGE_LABELS | `custom:${string}:${string}`;
 
 export function customRange(r: Range): { from: string; to: string } | null {
@@ -11,11 +11,11 @@ export function customRange(r: Range): { from: string; to: string } | null {
   return m ? { from: m[1]!, to: m[2]! } : null;
 }
 
-/** Short label for headings: "this week", "Oct 1 – Oct 15", … */
+/** Short label for headings: "in the last 7 days", "Oct 1 – Oct 15", … */
 export function rangeLabel(r: Range): string {
   const c = customRange(r);
   if (c) return `${shortDate(c.from)} – ${shortDate(c.to)}`;
-  return r === "week" ? "this week" : r === "month" ? "this month" : "of all time";
+  return r === "week" ? "in the last 7 days" : r === "month" ? "in the last 30 days" : r === "mtd" ? "this month to date" : "of all time";
 }
 
 export function shiftDay(day: string, delta: number): string {
@@ -32,8 +32,15 @@ export function previousPeriod(range: Range, latest: string | null): { from: str
     return { from: shiftDay(custom.from, -days), to: shiftDay(custom.from, -1), label: `vs previous ${days} days` };
   }
   if (!latest || range === "all") return null;
+  if (range === "mtd") {
+    // The same days of the previous month (Oct 1–16 → Sep 1–16), clamped to that month's end.
+    const [y, m, d] = latest.split("-").map(Number) as [number, number, number];
+    const prevFirst = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10);
+    const prevLast = new Date(Date.UTC(y, m - 1, 0)).getUTCDate();
+    return { from: prevFirst, to: `${prevFirst.slice(0, 8)}${String(Math.min(d, prevLast)).padStart(2, "0")}`, label: "vs same days last month" };
+  }
   const days = range === "week" ? 7 : 30;
-  return { from: shiftDay(latest, -2 * days + 1), to: shiftDay(latest, -days), label: range === "week" ? "vs last week" : "vs last 30 days" };
+  return { from: shiftDay(latest, -2 * days + 1), to: shiftDay(latest, -days), label: range === "week" ? "vs previous 7 days" : "vs previous 30 days" };
 }
 
 function RangeSwitch({ range, setRange, latest }: { range: Range; setRange: (r: Range) => void; latest: string | null }) {

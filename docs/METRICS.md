@@ -94,7 +94,7 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   day ("This week"). The Dashboard pod cards show this week's count. `/api/launches`.
 
 ## Date range
-- This week (last 7 synced days) · This month (last 30) · All time · Custom (any from–to). Every page follows it.
+- Last 7 days · Last 30 days (both end on the latest synced day) · Month to date (from the 1st of that day's month, same as Ads Manager's "This month") · All time · Custom (any from–to). Every page follows it. Deltas compare with the period before; month to date compares with the same days of the previous month.
 
 ## Creative Insights dimensions
 | Panel | Source |

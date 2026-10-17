@@ -43,8 +43,10 @@ export function qs(params: Record<string, string | number | undefined>): string 
   return p.toString();
 }
 
+/** Rolling windows end on the latest synced day; "Month to date" matches Ads Manager's "This month". */
 export const RANGE_LABELS: Record<Exclude<RangeKey, "custom">, string> = {
-  week: "This week",
-  month: "This month",
+  week: "Last 7 days",
+  month: "Last 30 days",
+  mtd: "Month to date",
   all: "All time",
 };

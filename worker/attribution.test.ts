@@ -60,6 +60,24 @@ describe("attribution comparison", () => {
     expect(r.rows.find((x) => x.key === "p2")!.incremental).toEqual({ purchases: 2, revenueCents: 6000 });
   });
 
+  it("keeps a group that has a zero-spend ad-day", async () => {
+    // Paused or capped ads leave zero-spend days; the group must still show by its total.
+    await env.DB.prepare(
+      "INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES ('a1', '2026-10-01', 0, 0, 0), ('a2', '2026-10-01', 0, 0, 0)",
+    ).run();
+    const r = await get("range=all&level=pod");
+    expect(r.rows.map((x) => [x.label, x.spendCents])).toEqual([
+      ["Harris", 100000],
+      ["Dhia", 20000],
+    ]);
+  });
+
+  it("reads month to date from the 1st of the latest synced day's month", async () => {
+    await env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES ('a1', '2026-09-30', 99900, 1, 100)").run();
+    const r = await get("range=mtd&level=pod");
+    expect([r.from, r.to, r.total.spendCents]).toEqual(["2026-10-01", "2026-10-15", 120000]);
+  });
+
   it("narrows the post level to one post", async () => {
     const r = await get("range=all&level=post&post=p2");
     expect(r.rows.map((x) => x.key)).toEqual(["p2"]);

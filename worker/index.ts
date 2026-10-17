@@ -62,6 +62,7 @@ async function resolveRange(db: D1Database, q: (k: string) => string | undefined
     return { from, to };
   }
   if (range === "week") return { from: shiftDay(latest, -6), to: latest };
+  if (range === "mtd") return { from: `${latest.slice(0, 7)}-01`, to: latest };
   if (range === "all") return { from: "2000-01-01", to: latest };
   return { from: shiftDay(latest, -29), to: latest };
 }
@@ -431,12 +432,14 @@ app.get("/attribution", async (c) => {
   const post = level === "post" ? (c.req.query("post") ?? null) : null;
   const [total, grouped, labels] = await Promise.all([
     db.prepare(`SELECT ${ATTR_SQL} FROM ad_daily d WHERE d.date BETWEEN ?1 AND ?2`).bind(range.from, range.to).first<Record<string, unknown>>(),
+    // SUM() in HAVING/ORDER BY on purpose: SQLite reads a bare spend_cents there as one row's
+    // column, not the alias, which dropped any group with a zero-spend day.
     db
       .prepare(
         `SELECT ${group} AS k, MAX(s.pod_id) AS pod_id, ${ATTR_SQL}
          FROM ad_daily d JOIN ads a ON a.id = d.ad_id LEFT JOIN assignments s ON s.post_id = a.post_id
          WHERE d.date BETWEEN ?1 AND ?2 ${level === "concept" ? "AND a.concept_id IS NOT NULL" : ""} ${post ? "AND a.post_id = ?3" : ""}
-         GROUP BY k HAVING spend_cents > 0 ORDER BY spend_cents DESC ${level === "post" ? "LIMIT 200" : ""}`,
+         GROUP BY k HAVING SUM(d.spend_cents) > 0 ORDER BY SUM(d.spend_cents) DESC ${level === "post" ? "LIMIT 200" : ""}`,
       )
       .bind(...(post ? [range.from, range.to, post] : [range.from, range.to]))
       .all<Record<string, unknown>>(),
