@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import type { AttributionResponse, MetaResponse, PodsResponse, PostDetail, PostSummary, RankingsResponse, SortKey } from "../../shared/api.ts";
-import { attributedCpa, attributedRoas, cpa, ctr, roas, twCpa, twRoas, type Targets, type Totals } from "../../shared/metrics.ts";
+import { attributedCpa, attributedRoas, cpa, ctr, roas, type Targets, type Totals } from "../../shared/metrics.ts";
 import { ANGLES, FORMATS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { DailyCharts } from "../components/DailyCharts.tsx";
 import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb } from "../components/ui.tsx";
-import { dollars, downloadCsv, int, money, pct, plain, plainDollars, ratio, shortDate, TW_MODEL_LABEL, twCoverageNote } from "../format.ts";
+import { dollars, downloadCsv, int, money, pct, plain, plainDollars, ratio, shortDate } from "../format.ts";
 import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
 
@@ -132,13 +132,6 @@ export function RankingsPage({
                     </b>{" "}
                     · CPA <b className="text-ink">{dollars(cpa(rankings.data.totals))}</b> · ROAS{" "}
                     <b className="text-ink">{roas(rankings.data.totals)?.toFixed(2) ?? "—"}</b> · targets ${meta.targets.targetCpa} / {meta.targets.targetRoas}
-                    {rankings.data.tw && (
-                      <>
-                        {" "}
-                        · ROAS · TW <b className="text-ink">{twRoas(rankings.data.tw, rankings.data.totals.spendCents)?.toFixed(2) ?? "—"}</b>
-                      </>
-                    )}
-                    {twCoverageNote(rankings.data.twCoverage) && ` · ${twCoverageNote(rankings.data.twCoverage)}`}
                   </p>
                   <CsvButton disabled={items.length === 0} onClick={() => exportRankings(items, rankings.data!.from, rankings.data!.to)} />
                 </div>
@@ -222,10 +215,6 @@ function exportRankings(items: PostSummary[], from: string, to: string) {
       "CPA (Meta, $)",
       "ROAS (Meta)",
       "Link CTR (%)",
-      "Purchases (Triple Whale)",
-      "Revenue (Triple Whale, $)",
-      "CPA (Triple Whale, $)",
-      "ROAS (Triple Whale)",
       "Concept result",
       "Fatigue",
       "Angle",
@@ -248,10 +237,6 @@ function exportRankings(items: PostSummary[], from: string, to: string) {
       plain(cpa(p.totals)),
       plain(roas(p.totals)),
       plain(ctr(p.totals) == null ? null : ctr(p.totals)! * 100),
-      plain(p.tw?.purchases, 1),
-      plainDollars(p.tw?.revenueCents),
-      plain(twCpa(p.tw, p.totals.spendCents)),
-      plain(twRoas(p.tw, p.totals.spendCents)),
       p.hit,
       p.fatigue?.status,
       p.assignment.angle,
@@ -298,7 +283,7 @@ function RankCard({ post, rank, targets, active, onSelect }: { post: PostSummary
             <FatigueTag f={post.fatigue} />
             <HitBadge status={post.hit} />
           </div>
-          <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-2 border-t border-divider pt-2 2xl:grid-cols-6">
+          <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-2 border-t border-divider pt-2 2xl:grid-cols-5">
             <Metric label="Spend">{money(post.totals.spendCents)}</Metric>
             <Metric label="Purchases">{int(post.totals.purchases)}</Metric>
             <Metric label="Link CTR">{pct(ctr(post.totals))}</Metric>
@@ -307,9 +292,6 @@ function RankCard({ post, rank, targets, active, onSelect }: { post: PostSummary
             </Metric>
             <Metric label="ROAS · Meta">
               <RoasValue value={roas(post.totals)} target={targets.targetRoas} />
-            </Metric>
-            <Metric label="ROAS · TW">
-              <RoasValue value={twRoas(post.tw, post.totals.spendCents)} target={targets.targetRoas} />
             </Metric>
           </div>
         </div>
@@ -441,27 +423,11 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
           </Cell>
           <Cell label="Link CTR">{pct(ctr(data.totals))}</Cell>
           <Cell label="CPM">{dollars(cpm(data.totals))}</Cell>
-          <Cell label="Purchases · TW">
-            {data.tw
-              ? data.tw.purchases.toLocaleString("en-US", {
-                  maximumFractionDigits: 1,
-                })
-              : "—"}
-          </Cell>
-          <Cell label="CPA · TW">
-            <CpaValue value={twCpa(data.tw, data.totals.spendCents)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
-          </Cell>
-          <Cell label="ROAS · TW">
-            <RoasValue value={twRoas(data.tw, data.totals.spendCents)} target={targets.targetRoas} />
-          </Cell>
         </div>
         <div className="mt-0.5 grid grid-cols-2 gap-0.5 border-2 border-t-0 border-divider bg-divider sm:grid-cols-3">
           <Cell label="Purch. · 7-day click">{click7 ? int(click7.purchases) : "—"}</Cell>
           <Cell label="CPA · 7-day click">{dollars(attributedCpa(click7, data.totals.spendCents))}</Cell>
           <Cell label="ROAS · 7-day click">{ratio(attributedRoas(click7, data.totals.spendCents))}</Cell>
-        </div>
-        <div className="mt-1 text-xs text-ink-3">
-          TW = Triple Whale pixel, {TW_MODEL_LABEL}, on Meta's spend. Shown beside Meta's numbers, never added to them.
         </div>
         <div className="num mt-2 text-xs text-ink-3">
           All time: {money(data.allTime.spendCents)} spend · {int(data.allTime.purchases)} purchases · ROAS {roas(data.allTime)?.toFixed(2) ?? "—"}

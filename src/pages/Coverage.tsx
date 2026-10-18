@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { CoverageCell, CoverageResponse, MetaResponse } from "../../shared/api.ts";
-import { cpa, roas, twRoas } from "../../shared/metrics.ts";
+import { cpa, roas } from "../../shared/metrics.ts";
 import { AWARENESS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
@@ -254,7 +254,6 @@ function CellAds({ data, open, meta }: { data: CoverageResponse; open: { persona
             <th className="py-2 pr-3 text-right font-normal">Spend</th>
             <th className="py-2 pr-3 text-right font-normal">CPA · Meta</th>
             <th className="py-2 pr-3 text-right font-normal">ROAS · Meta</th>
-            <th className="py-2 pr-3 text-right font-normal">ROAS · TW</th>
             <th className="py-2 pr-3 font-normal">Offer</th>
             <th className="py-2 font-normal">Test</th>
           </tr>
@@ -280,9 +279,6 @@ function CellAds({ data, open, meta }: { data: CoverageResponse; open: { persona
               <td className="py-2 pr-3 text-right">
                 <RoasValue value={roas(p.totals)} target={t.targetRoas} />
               </td>
-              <td className="py-2 pr-3 text-right">
-                <RoasValue value={twRoas(p.tw, p.totals.spendCents)} target={t.targetRoas} />
-              </td>
               <td className="py-2 pr-3 text-ink-2">{p.offer == null ? "—" : p.offer ? "Discount / offer" : "No offer"}</td>
               <td className="py-2">
                 <HitBadge status={p.hit} />
@@ -307,7 +303,6 @@ function exportCsv(data: CoverageResponse, nameOf: (id: string | null) => string
       "Share of spend (%)",
       "CPA (Meta, $)",
       "ROAS (Meta)",
-      "ROAS (Triple Whale)",
       "Offer share of spend (%)",
       "Concepts tested (all time)",
       "Hits",
@@ -325,7 +320,6 @@ function exportCsv(data: CoverageResponse, nameOf: (id: string | null) => string
         plain(total > 0 ? (c.totals.spendCents / total) * 100 : null, 1),
         plain(cpa(c.totals)),
         plain(roas(c.totals)),
-        plain(twRoas(c.tw, c.totals.spendCents)),
         plain(c.offerKnownSpendCents > 0 ? (c.offerSpendCents / c.offerKnownSpendCents) * 100 : null, 1),
         c.concepts,
         c.hits,

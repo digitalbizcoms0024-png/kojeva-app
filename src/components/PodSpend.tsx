@@ -1,5 +1,5 @@
 import type { PodRow, PodsResponse } from "../../shared/api.ts";
-import { cpa, roas, twRoas, type Targets } from "../../shared/metrics.ts";
+import { cpa, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { GROUPS } from "../../shared/taxonomy.ts";
 import { downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
@@ -107,7 +107,7 @@ export function PodSpend({ range, latest, targets, compact = false }: { range: R
               onClick={() =>
                 downloadCsv(
                   `kojeva-spend-by-pod-${now.data?.from === "2000-01-01" ? "all" : now.data?.from}-to-${now.data?.to}.csv`,
-                  ["Group", "Spend (Meta, $)", "Share (%)", "Spend previous period (Meta, $)", "Purchases (Meta)", "CPA (Meta, $)", "ROAS (Meta)", "ROAS (Triple Whale)"],
+                  ["Group", "Spend (Meta, $)", "Share (%)", "Spend previous period (Meta, $)", "Purchases (Meta)", "CPA (Meta, $)", "ROAS (Meta)"],
                   rows.map((r) => [
                     r.name,
                     plainDollars(r.totals.spendCents),
@@ -116,7 +116,6 @@ export function PodSpend({ range, latest, targets, compact = false }: { range: R
                     r.totals.purchases,
                     plain(cpa(r.totals)),
                     plain(roas(r.totals)),
-                    plain(twRoas(r.tw, r.totals.spendCents)),
                   ]),
                 )
               }
@@ -135,8 +134,7 @@ export function PodSpend({ range, latest, targets, compact = false }: { range: R
               <th className="py-2 pr-3 text-right font-normal">{prev ? prev.label : "Change"}</th>
               <th className="py-2 pr-3 text-right font-normal">Purchases</th>
               <th className="py-2 pr-3 text-right font-normal">CPA · Meta</th>
-              <th className="py-2 pr-3 text-right font-normal">ROAS · Meta</th>
-              <th className="py-2 text-right font-normal">ROAS · TW</th>
+              <th className="py-2 text-right font-normal">ROAS · Meta</th>
             </tr>
           </thead>
           <tbody>
@@ -153,11 +151,8 @@ export function PodSpend({ range, latest, targets, compact = false }: { range: R
                 <td className="py-2.5 pr-3 text-right">
                   <CpaValue value={cpa(r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
                 </td>
-                <td className="py-2.5 pr-3 text-right">
-                  <RoasValue value={roas(r.totals)} target={targets.targetRoas} />
-                </td>
                 <td className="py-2.5 text-right">
-                  <RoasValue value={twRoas(r.tw, r.totals.spendCents)} target={targets.targetRoas} />
+                  <RoasValue value={roas(r.totals)} target={targets.targetRoas} />
                 </td>
               </tr>
             ))}
@@ -168,7 +163,7 @@ export function PodSpend({ range, latest, targets, compact = false }: { range: R
               <td className="py-2.5 pr-3 text-right">
                 {prev ? <Change now={total} before={[...prevBy.values()].reduce((n, v) => n + v, 0) || undefined} /> : "—"}
               </td>
-              <td colSpan={4} />
+              <td colSpan={3} />
             </tr>
           </tbody>
         </table>

@@ -27,7 +27,7 @@ name; see `NAMING.md` for the attribution rules.
 | Min test spend | $100 (proposed, pending confirmation) |
 
 ## v1 scope (Phases 0–2)
-- **Dashboard**: KPIs (Meta and Triple Whale side by side), pod leaderboard, top ads, alerts.
+- **Dashboard**: KPIs (Meta), pod leaderboard, top ads, alerts.
 - **Ad Rankings**: Ads / Pods / Editors tabs; rank by spend, purchases, ROAS, CPA, CTR;
   filters for pod, status, search; date range (week / month / all / custom). Detail panel with
   preview, pod/editor/tags, results across all copies, daily charts, list of copies.
@@ -36,10 +36,9 @@ name; see `NAMING.md` for the attribution rules.
 - **Settings**: targets, pods and editors, data-source connections and sync status.
 
 ## Later
-Creative Insights (by angle/format/hook, AI write-ups) → Triple Whale columns and fatigue
-analytics.
+Creative Insights (by angle/format/hook, AI write-ups) → fatigue analytics. (Triple Whale was
+added in Phase 4 and removed in Oct 2026.)
 
 ## Non-goals for v1
 - No changes to campaigns, automated or approved: the hub is read-only on Meta (`ads_read`). Ad management stays in Ads Manager.
-- No blended "single source of truth" ROAS. Meta and Triple Whale stay separate.
 - No native app; responsive web only.

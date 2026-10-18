@@ -21,7 +21,7 @@ import type {
   TrendGrain,
   TrendsResponse,
 } from "../shared/api.ts";
-import { ZERO_TOTALS, ZERO_TW, addTotals, addTw, cpa, ctr, hitRate, roas, type Totals, type TwTotals } from "../shared/metrics.ts";
+import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, roas, type Totals } from "../shared/metrics.ts";
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware } from "./access.ts";
@@ -32,12 +32,11 @@ import { atria } from "./atria.ts";
 import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
-import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL, toTw, twCoverage } from "./queries.ts";
+import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
 import { loadAddedPods } from "./pods.ts";
 import { ensureAttributed } from "./rules.ts";
 import { loadPersonas } from "./personas.ts";
-import { tripleWhale, twStatus } from "./triplewhale.ts";
 
 const app = new Hono<AppEnv>().basePath("/api");
 
@@ -76,7 +75,6 @@ app.use("*", async (c, next) => {
 app.route("/connection", connection);
 app.route("/sync", sync);
 app.route("/ingest/atria", atria);
-app.route("/ingest/tw", tripleWhale);
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -116,7 +114,7 @@ const SORTERS: Record<SortKey, (t: Totals) => number | null> = {
 
 app.get("/meta", async (c) => {
   const db = c.env.DB;
-  const [targets, latestDate, lastRun, pods, live, conn, attr, detected, editors, untagged, tw, personas] = await Promise.all([
+  const [targets, latestDate, lastRun, pods, live, conn, attr, detected, editors, untagged, personas] = await Promise.all([
     getTargets(db),
     getLatestDate(db),
     db
@@ -136,7 +134,6 @@ app.get("/meta", async (c) => {
          WHERE d.date >= date((SELECT MAX(date) FROM ad_daily), '-29 days') AND d.spend_cents > 0 AND s.pod_id IS NULL`,
       )
       .first<{ n: number }>(),
-    twStatus(db),
     loadPersonas(db),
   ]);
   const attribution = { ...DEFAULT_ATTRIBUTION, ...(attr ? (JSON.parse(attr.value) as Partial<AttributionSettings>) : {}) };
@@ -158,7 +155,6 @@ app.get("/meta", async (c) => {
     canEdit: accessConfigured(c.env),
     viewer: c.get("userEmail"),
     needsTagging: Number(untagged?.n ?? 0),
-    tripleWhale: tw,
     personas,
   };
   return c.json(body);
@@ -209,12 +205,9 @@ app.get("/rankings", async (c) => {
     return vb - va || b.totals.spendCents - a.totals.spendCents;
   });
 
-  const sumTw = (list: typeof items): TwTotals | null => (list.some((p) => p.tw) ? list.reduce((acc, p) => addTw(acc, p.tw ?? ZERO_TW), ZERO_TW) : null);
   const body: RankingsResponse = {
     ...range,
     totals: items.reduce((acc, p) => addTotals(acc, p.totals), ZERO_TOTALS),
-    tw: sumTw(items),
-    twCoverage: await twCoverage(c.env.DB, range.from, range.to),
     count: items.length,
     items: items.slice(0, limit),
   };
@@ -326,11 +319,10 @@ app.get("/pods", async (c) => {
       hitRate: hitRate(statuses),
       editors: [...editors.values()].sort((a, b) => b.totals.spendCents - a.totals.spendCents),
       spark: sparkDays.map((d) => spendOn.get(`${g.podId ?? ""}|${d}`) ?? 0),
-      tw: mine.some((p) => p.tw) ? mine.reduce((acc, p) => addTw(acc, p.tw ?? ZERO_TW), ZERO_TW) : null,
     };
   });
 
-  const body: PodsResponse = { ...range, rows, twCoverage: await twCoverage(db, range.from, range.to) };
+  const body: PodsResponse = { ...range, rows };
   return c.json(body);
 });
 
@@ -380,7 +372,7 @@ app.get("/insights", async (c) => {
 
 /**
  * Spend, purchases and revenue over time, by day or week (Monday start), for the account or one
- * pod (?pod=<id> or ?pod=unassigned). Triple Whale comes back separately per bucket.
+ * pod (?pod=<id> or ?pod=unassigned).
  */
 app.get("/trends", async (c) => {
   const db = c.env.DB;
@@ -393,39 +385,19 @@ app.get("/trends", async (c) => {
   const bucket = (col: string) => (grain === "week" ? `date(${col}, 'weekday 0', '-6 days')` : col);
   const podSql = pod === "unassigned" ? "AND s.pod_id IS NULL" : pod ? "AND s.pod_id = ?3" : "";
   const binds = pod && pod !== "unassigned" ? [range.from, range.to, pod] : [range.from, range.to];
-  const [meta, tw, twDays] = await Promise.all([
-    db
-      .prepare(
-        `SELECT ${bucket("d.date")} AS b, ${TOTALS_SQL}
-         FROM ad_daily d JOIN ads a ON a.id = d.ad_id LEFT JOIN assignments s ON s.post_id = a.post_id
-         WHERE d.date BETWEEN ?1 AND ?2 ${podSql} GROUP BY b ORDER BY b`,
-      )
-      .bind(...binds)
-      .all<Record<string, unknown>>(),
-    db
-      .prepare(
-        `SELECT ${bucket("t.date")} AS b, SUM(t.orders_milli) AS orders_milli, SUM(t.revenue_cents) AS revenue_cents
-         FROM tw_daily t JOIN ads a ON a.id = t.ad_id LEFT JOIN assignments s ON s.post_id = a.post_id
-         WHERE t.date BETWEEN ?1 AND ?2 ${podSql} GROUP BY b`,
-      )
-      .bind(...binds)
-      .all<Record<string, unknown>>(),
-    db
-      .prepare(`SELECT DISTINCT ${bucket("date")} AS b FROM tw_days WHERE date BETWEEN ?1 AND ?2`)
-      .bind(range.from, range.to)
-      .all<{ b: string }>(),
-  ]);
-  const twBy = new Map(tw.results.map((r) => [String(r.b), toTw(r)]));
-  const synced = new Set(twDays.results.map((r) => r.b));
+  const meta = await db
+    .prepare(
+      `SELECT ${bucket("d.date")} AS b, ${TOTALS_SQL}
+       FROM ad_daily d JOIN ads a ON a.id = d.ad_id LEFT JOIN assignments s ON s.post_id = a.post_id
+       WHERE d.date BETWEEN ?1 AND ?2 ${podSql} GROUP BY b ORDER BY b`,
+    )
+    .bind(...binds)
+    .all<Record<string, unknown>>();
   const body: TrendsResponse = {
     ...range,
     grain,
     pod,
-    points: meta.results.map((r) => ({
-      start: String(r.b),
-      totals: toTotals(r),
-      tw: synced.has(String(r.b)) ? (twBy.get(String(r.b)) ?? toTw(undefined)) : null,
-    })),
+    points: meta.results.map((r) => ({ start: String(r.b), totals: toTotals(r) })),
   };
   return c.json(body);
 });

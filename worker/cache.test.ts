@@ -27,7 +27,7 @@ beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("INSERT INTO posts (id, media_type) VALUES ('p1', 'video')"),
     env.DB.prepare(
-      "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time) VALUES ('111', 'p1', 'HxM-1', 's1', 'IH | Harris | KOJEVA 1', 'ACTIVE', '2026-10-01T00:00:00Z')",
+      "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time, asset_id) VALUES ('111', 'p1', 'HxM-1', 's1', 'IH | Harris | KOJEVA 1', 'ACTIVE', '2026-10-01T00:00:00Z', 'v:1')",
     ),
     env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES ('111', '2026-10-10', 10000, 5, 20000)"),
   ]);
@@ -55,10 +55,10 @@ describe("read cache", () => {
   });
 
   it("doesn't count an unchanged ingest push as a change", async () => {
-    const body = JSON.stringify({ model: "Clicks & Views", days: [{ date: "2026-10-10", ads: [{ adId: "111", orders: 2, revenue: 40 }] }] });
-    await call("/api/ingest/tw", service, { method: "POST", body });
+    const body = JSON.stringify({ assets: [{ assetId: "v:1", status: "tagged", tags: { theme: ["Product Demo"] } }] });
+    expect((await call("/api/ingest/atria", service, { method: "POST", body })).status).toBe(200);
     const v = await version();
-    await call("/api/ingest/tw", service, { method: "POST", body });
+    await call("/api/ingest/atria", service, { method: "POST", body });
     expect(await version()).toBe(v);
   });
 

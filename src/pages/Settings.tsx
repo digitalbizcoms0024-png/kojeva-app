@@ -4,7 +4,7 @@ import { useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
 import { PageHeader, PodChip, SectionTitle } from "../components/ui.tsx";
 import { POD_SLOTS } from "../../shared/taxonomy.ts";
-import { dateTime, shortDate, TW_MODEL_LABEL } from "../format.ts";
+import { dateTime, shortDate } from "../format.ts";
 
 function utcDay(offset: number): string {
   const d = new Date();
@@ -838,25 +838,6 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
               {meta.lastSync?.message && ` Last message: ${meta.lastSync.message}.`}
             </p>
             <MetaPanel onSynced={onSynced} />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-divider py-4">
-            <div>
-              <h3 className="text-lg font-extrabold text-ink">Triple Whale</h3>
-              <p className="text-sm text-ink-3">
-                Pixel-attributed orders and revenue per ad ({TW_MODEL_LABEL}, lifetime window), pushed nightly by a scheduled Claude task. Shown beside Meta's
-                numbers as "· TW", never added to them.
-              </p>
-            </div>
-            <span className="inline-flex items-center gap-2 text-sm text-ink-2">
-              {meta.tripleWhale ? (
-                <>
-                  <span className="size-2 bg-good" aria-hidden />✓ {meta.tripleWhale.days} days · through {shortDate(meta.tripleWhale.latestDate)} · last new
-                  day {dateTime(meta.tripleWhale.lastSync)}
-                </>
-              ) : (
-                "Not synced yet"
-              )}
-            </span>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-divider py-4">
             <div>

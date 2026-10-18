@@ -5,7 +5,7 @@ import { LaunchCadence, type LaunchCell } from "../components/LaunchCadence.tsx"
 import { PodSpend } from "../components/PodSpend.tsx";
 import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { addTotals, cpa, roas, twRoas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
+import { addTotals, cpa, roas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
 import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
@@ -69,7 +69,6 @@ function PodColumn({
     ["Spend", money(r.totals.spendCents, { compact: true })],
     ["CPA · Meta", <CpaValue key="c" value={cpa(r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />],
     ["ROAS · Meta", <RoasValue key="r" value={roas(r.totals)} target={targets.targetRoas} />],
-    ["ROAS · Triple Whale", <RoasValue key="t" value={twRoas(r.tw, r.totals.spendCents)} target={targets.targetRoas} />],
     ["Best angle", best(mine, "angle") ?? "—"],
     ["Best format", best(mine, "format") ?? "—"],
   ];
@@ -388,8 +387,6 @@ export function PodsTable({ data, error, targets }: Props) {
                 "Purchases (Meta)",
                 "CPA (Meta, $)",
                 "ROAS (Meta)",
-                "Purchases (Triple Whale)",
-                "ROAS (Triple Whale)",
                 "Hit rate (%)",
                 "Hits",
                 "Decided",
@@ -402,8 +399,6 @@ export function PodsTable({ data, error, targets }: Props) {
                 r.totals.purchases,
                 plain(cpa(r.totals)),
                 plain(roas(r.totals)),
-                plain(r.tw?.purchases, 1),
-                plain(twRoas(r.tw, r.totals.spendCents)),
                 plain(r.hitRate == null ? null : r.hitRate * 100, 1),
                 r.hits,
                 r.hits + r.misses,
@@ -423,7 +418,6 @@ export function PodsTable({ data, error, targets }: Props) {
               <th className="py-2 pr-3 text-right font-normal">Purchases</th>
               <th className="py-2 pr-3 text-right font-normal">CPA · Meta</th>
               <th className="py-2 pr-3 text-right font-normal">ROAS · Meta</th>
-              <th className="py-2 pr-3 text-right font-normal">ROAS · TW</th>
               <th className="py-2 pr-3 text-right font-normal">Hit rate</th>
               <th className="py-2 text-right font-normal">Concepts</th>
             </tr>
@@ -442,9 +436,6 @@ export function PodsTable({ data, error, targets }: Props) {
                 </td>
                 <td className="py-2.5 pr-3 text-right">
                   <RoasValue value={roas(r.totals)} target={targets.targetRoas} />
-                </td>
-                <td className="py-2.5 pr-3 text-right">
-                  <RoasValue value={twRoas(r.tw, r.totals.spendCents)} target={targets.targetRoas} />
                 </td>
                 <td className="num py-2.5 pr-3 text-right text-ink">
                   {pct(r.hitRate, 0)}{" "}

@@ -28,8 +28,6 @@ beforeEach(async () => {
        ('a1', '2026-10-11', 10000, 5, 20000), ('a1', '2026-10-12', 10000, 4, 18000),
        ('a1', '2026-10-15', 10000, 6, 24000), ('a2', '2026-10-15', 5000, 1, 3000)`,
     ),
-    env.DB.prepare("INSERT INTO tw_daily (ad_id, date, orders_milli, revenue_cents) VALUES ('a1', '2026-10-15', 4500, 15000)"),
-    env.DB.prepare("INSERT INTO tw_days (date, model, synced_at) VALUES ('2026-10-15', 'Clicks & Views', '2026-10-16T10:40:00Z')"),
   ]);
   await attribute(env.DB);
 });
@@ -38,13 +36,13 @@ const get = async (q: string) =>
   (await (await app.fetch(new Request(`https://hub.test/api/trends?${q}`, { headers: person }), env, {} as ExecutionContext)).json()) as TrendsResponse;
 
 describe("trends", () => {
-  it("buckets by day, with Triple Whale only on synced days", async () => {
+  it("buckets by day", async () => {
     const r = await get("range=week");
     expect(r.grain).toBe("day");
-    expect(r.points.map((p) => [p.start, p.totals.spendCents, p.tw])).toEqual([
-      ["2026-10-11", 10000, null],
-      ["2026-10-12", 10000, null],
-      ["2026-10-15", 15000, { purchases: 4.5, revenueCents: 15000 }],
+    expect(r.points.map((p) => [p.start, p.totals.spendCents])).toEqual([
+      ["2026-10-11", 10000],
+      ["2026-10-12", 10000],
+      ["2026-10-15", 15000],
     ]);
   });
 

@@ -32,7 +32,7 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
 - Date ranges: Last 7 days / Last 30 days / Month to date / All time / Custom.
 - Incrementality page compares **7-day click vs incremental only**; numbers matched Ads Manager's
   Compare attribution settings (incremental ≈ 7-day click for this account). Report-only.
-- Triple Whale: model "Clicks & Views" (deterministic views), lifetime window, never blended.
+- **Triple Whale removed** (owner, Oct 18): route, UI and tables gone (migration 0014); nightly task deleted.
 - The hub is permanently read-only on Meta (no ad management).
 
 ## Harris's two hits (settled Oct 18)
@@ -46,9 +46,7 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
 ## Scheduled tasks (claude.ai)
 - "Kojeva Hub · Atria tag sync" (daily 10:07 UTC, Atria connector): tags, awareness/belief/offer
   labels, persona drafts and placement. Prompt documented in `docs/ATRIA.md`.
-- "Kojeva Hub · Triple Whale sync" (daily 10:37 UTC, Triple Whale connector): pushes to
-  `/api/ingest/tw`. First successful run Oct 17 (1,762 rows).
-- Both reach the hub through the environment network secret "Kojeva Hub ingest"
+- It reaches the hub through the environment network secret "Kojeva Hub ingest"
   (host kojeva-hub…, path `/api/ingest/`, CF-Access-Client-Id/Secret headers).
 - Reminder Oct 23: parked "Why it works" AI notes (needs an ANTHROPIC_API_KEY Worker secret).
 

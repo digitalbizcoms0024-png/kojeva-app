@@ -66,16 +66,9 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - **Medium:** the ad name contains exactly one roster editor's name (as a whole word), and that editor has a pod.
 - Never applied automatically; accepting one sets the pod by hand (`manual`).
 
-## Triple Whale (`shared/metrics.ts`, `docs/TRIPLE_WHALE.md`)
-- **ROAS · TW** = Triple Whale attributed revenue ÷ Meta spend. **CPA · TW** = Meta spend ÷ Triple Whale
-  attributed orders (fractional under this model). Same color bands as Meta's values.
-- Model: Clicks & deterministic views (`Clicks & Views` in Triple Whale's data), lifetime window.
-- Never summed with Meta's purchases or revenue. "—" when no day in the period is synced.
-- Hit rate and concepts stay on Meta's numbers.
-
 ## Trends (`/api/trends`)
 - Spend (Meta), CPA and ROAS by day or by Monday-start week, for the account, one pod or unassigned ads. Defaults to weekly
-  for ranges over ~2 months. Meta solid, Triple Whale dashed (only in buckets with a synced Triple Whale day).
+  for ranges over ~2 months.
 
 ## CSV export
 - Rankings (current filters), Concepts and the Pods table. Money in plain dollars, every value labelled with its source;
@@ -136,8 +129,7 @@ Personas down the side, the five awareness levels across the top. Defaults to th
 - **Running ad** = a post (copies grouped) with spend in the selected period.
 - **Placement**: persona = hand-set, else Claude's label for the post's creative; same for awareness and
   offer. Posts missing either sit in "No persona yet" / "Not labelled" and count as **not on the map**.
-- **Cell**: running ads, spend, share of all spend in the period, CPA/ROAS (Meta; TW beside it in the
-  cell detail), offer share = spend on ads with a discount/offer ÷ spend on ads whose offer is known.
+- **Cell**: running ads, spend, share of all spend in the period, CPA/ROAS (Meta), offer share = spend on ads with a discount/offer ÷ spend on ads whose offer is known.
 - **Hit rate in a cell** is every concept ever tested there (all time), placed by the concept's persona
   (hand-set on any of its ads, else the most common Claude label) and awareness. So an empty cell can
   still show "tested before".

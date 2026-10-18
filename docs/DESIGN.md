@@ -9,7 +9,7 @@
 - All colors are tokens in `src/index.css`, with light and dark values. Dark follows the OS until someone uses
   the sidebar toggle (stored per browser as `data-theme`).
 - Accent text (links) uses `--accent-ink`; the bright accent only fills buttons and the selected range.
-- Parts of the design that need data we don't have yet (Triple Whale columns, AI insight, hook types, video
+- Parts of the design that need data we don't have yet (AI insight, hook types, video
   player, thumbstop) are left out until they're built, not shown as placeholders.
 
 ## Pod colors

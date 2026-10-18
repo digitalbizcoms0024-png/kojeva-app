@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { TrendPoint } from "../../shared/api.ts";
-import { cpa, roas, twCpa, twRoas } from "../../shared/metrics.ts";
+import { cpa, roas } from "../../shared/metrics.ts";
 import { dollars, money, ratio, shortDate } from "../format.ts";
 
 const W = 380;
@@ -135,16 +135,13 @@ function Chart({
 
 /**
  * Spend, CPA and ROAS over time as three aligned charts (one y-axis each) sharing one hover.
- * Meta is the solid line, Triple Whale the dashed one; they're never combined.
  */
 export function TrendCharts({ points, targetCpa, targetRoas }: { points: TrendPoint[]; targetCpa: number; targetRoas: number }) {
   const [hover, setHover] = useState<number | null>(null);
   if (points.length === 0) return <p className="py-6 text-sm text-ink-3">No spend in this period.</p>;
-  const hasTw = points.some((p) => p.tw);
   const meta = (key: string, values: (number | null)[]): Series => ({ key: `meta-${key}`, label: "Meta", values, color: "var(--chart-line)" });
-  const tw = (key: string, values: (number | null)[]): Series => ({ key: `tw-${key}`, label: "Triple Whale", values, color: "var(--ink-2)", dash: "6 4" });
-  const cpaLines = [meta("cpa", points.map((p) => cpa(p.totals))), ...(hasTw ? [tw("cpa", points.map((p) => twCpa(p.tw, p.totals.spendCents)))] : [])];
-  const roasLines = [meta("roas", points.map((p) => roas(p.totals))), ...(hasTw ? [tw("roas", points.map((p) => twRoas(p.tw, p.totals.spendCents)))] : [])];
+  const cpaLines = [meta("cpa", points.map((p) => cpa(p.totals)))];
+  const roasLines = [meta("roas", points.map((p) => roas(p.totals)))];
   const h = hover != null ? points[hover]! : null;
 
   return (
@@ -157,10 +154,10 @@ export function TrendCharts({ points, targetCpa, targetRoas }: { points: TrendPo
               Spend <b className="text-ink">{money(h.totals.spendCents)}</b>
             </span>
             <span>
-              CPA <b className="text-ink">{dollars(cpa(h.totals))}</b> Meta{hasTw && <> · <b className="text-ink">{dollars(twCpa(h.tw, h.totals.spendCents))}</b> TW</>}
+              CPA <b className="text-ink">{dollars(cpa(h.totals))}</b> Meta
             </span>
             <span>
-              ROAS <b className="text-ink">{ratio(roas(h.totals))}</b> Meta{hasTw && <> · <b className="text-ink">{ratio(twRoas(h.tw, h.totals.spendCents))}</b> TW</>}
+              ROAS <b className="text-ink">{ratio(roas(h.totals))}</b> Meta
             </span>
           </span>
         ) : (

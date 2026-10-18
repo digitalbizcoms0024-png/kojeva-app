@@ -31,7 +31,7 @@ people can't call them, and the token can't call anything else.
    - Network access → **Custom**, Allowed domains `kojeva-hub.digitalbizcoms0024.workers.dev`, keep
      "Also include default list of common package managers" ticked.
    - Network secrets → Add secret: Allowed websites `kojeva-hub.digitalbizcoms0024.workers.dev`, Path
-     prefix `/api/ingest` (covers the Triple Whale route too), custom headers `CF-Access-Client-Id` and `CF-Access-Client-Secret`
+     prefix `/api/ingest`, custom headers `CF-Access-Client-Id` and `CF-Access-Client-Secret`
      (no prefix). Sessions get the headers added automatically and never see the values.
 5. **Schedule the task**: "Kojeva Hub · Atria tag sync", daily 10:07 UTC (after the 09:17 Meta sync),
    fresh session per run. Add the **Atria connector** to it in claude.ai's scheduled tasks.

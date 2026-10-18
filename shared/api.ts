@@ -1,6 +1,6 @@
 // Response shapes shared by the Worker API and the React app.
 import type { Fatigue } from "./fatigue.ts";
-import type { AttributedTotals, HitStatus, Targets, Totals, TwTotals } from "./metrics.ts";
+import type { AttributedTotals, HitStatus, Targets, Totals } from "./metrics.ts";
 
 /** week / month = the last 7 / 30 synced days; mtd = from the 1st of the latest synced day's month. */
 export type RangeKey = "week" | "14d" | "month" | "mtd" | "all" | "custom";
@@ -77,8 +77,6 @@ export interface MetaResponse {
   viewer: string | null;
   /** Posts with spend in the last 30 days that no pod or the agency is credited with. */
   needsTagging: number;
-  /** Triple Whale sync state; null until the first push. */
-  tripleWhale: { lastSync: string; latestDate: string; days: number; model: string } | null;
   /** Personas in display order (drafts, active and Claude's suggestions; dismissed ones left out). */
   personas: Persona[];
 }
@@ -124,27 +122,16 @@ export interface PostSummary {
   hit: HitStatus | null;
   /** Atria's tags for the post's creative, by category (theme, core_desire, …); null if untagged. */
   atria: Record<string, string[]> | null;
-  /** Triple Whale results over the same days; null when none of those days is synced from Triple Whale. */
-  tw: TwTotals | null;
   /** Last 3 days vs the first week; null when not spending, too new, or nothing flagged. */
   fatigue: Fatigue | null;
   /** Claude's labels; the hand-set values in `assignment` win over these. */
   labels: CreativeLabels;
 }
 
-/** How many of the period's days (with Meta data) Triple Whale has been synced for. */
-export interface TwCoverage {
-  days: number;
-  covered: number;
-  model: string | null;
-}
-
 export interface RankingsResponse {
   from: string;
   to: string;
   totals: Totals;
-  tw: TwTotals | null;
-  twCoverage: TwCoverage;
   count: number;
   items: PostSummary[];
 }
@@ -180,7 +167,6 @@ export interface PodRow {
   editors: { editorId: string | null; name: string; totals: Totals; concepts: number }[];
   /** Daily spend in cents for the last 7 synced days, oldest first (0 on days without spend). */
   spark: number[];
-  tw: TwTotals | null;
 }
 
 export interface ConceptResult {
@@ -261,7 +247,6 @@ export interface PodsResponse {
   from: string;
   to: string;
   rows: PodRow[];
-  twCoverage: TwCoverage;
 }
 
 /** Something on the dashboard worth a look. Tone follows the status colors (always shown with an icon). */
@@ -298,8 +283,6 @@ export interface TrendPoint {
   /** First day of the bucket (weeks start on Monday). */
   start: string;
   totals: Totals;
-  /** Null when no day in the bucket is synced from Triple Whale. */
-  tw: TwTotals | null;
 }
 
 export interface TrendsResponse {
@@ -351,7 +334,6 @@ export interface CoveragePost {
   mediaType: string;
   podId: string | null;
   totals: Totals;
-  tw: TwTotals | null;
   personaId: string | null;
   awareness: string | null;
   offer: boolean | null;
@@ -365,7 +347,6 @@ export interface CoverageCell {
   /** Posts running in the period (spent in it). */
   ads: number;
   totals: Totals;
-  tw: TwTotals | null;
   /** Spend on ads labelled with a discount/offer, and on ads whose offer label is known. */
   offerSpendCents: number;
   offerKnownSpendCents: number;

@@ -23,8 +23,7 @@ Browser ──► Cloudflare Access (Google login for the team)
 | `settings` | key | targets, legacy prefix map (JSON) |
 | `sync_runs` | sync attempt | source, status, timestamps; drives the "last synced" banner |
 
-`meta_connections` (migration 0002) holds at most one encrypted Meta token with its expiry. Phase 4
-adds `tw_ad_daily` so Triple Whale numbers never mix with Meta's.
+`meta_connections` (migration 0002) holds at most one encrypted Meta token with its expiry.
 
 ## API
 | Route | Returns |
@@ -75,8 +74,9 @@ users → add → assign the ad account (View performance) and the app → gener
 
 The app supports both; B wins when present.
 
-## Triple Whale (Phase 4)
-API key from Triple Whale → Settings → API Keys, stored as a Worker secret.
+## Triple Whale (removed)
+Triple Whale numbers were pushed nightly to `/api/ingest/tw` (migration 0006) until Oct 2026. The owner
+dropped it: the route, UI and tables are gone (migration 0014). Meta is the only performance source.
 
 ## Atria (Phase 3)
 Atria is only reachable through its MCP connector inside Claude, not from the Worker. A scheduled

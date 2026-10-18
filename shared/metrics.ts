@@ -41,29 +41,6 @@ export function ctr(t: Totals): number | null {
   return t.impressions > 0 ? t.linkClicks / t.impressions : null;
 }
 
-/** Triple Whale pixel-attributed results. Never added to Meta's numbers; shown beside them. */
-export interface TwTotals {
-  /** Attributed orders; fractional under multi-touch models. */
-  purchases: number;
-  revenueCents: number;
-}
-
-export const ZERO_TW: TwTotals = { purchases: 0, revenueCents: 0 };
-
-export function addTw(a: TwTotals, b: TwTotals): TwTotals {
-  return { purchases: a.purchases + b.purchases, revenueCents: a.revenueCents + b.revenueCents };
-}
-
-/** Triple Whale ROAS: attributed revenue over Meta spend (Triple Whale uses the platform's spend too). */
-export function twRoas(tw: TwTotals | null, spendCents: number): number | null {
-  return tw && spendCents > 0 ? tw.revenueCents / spendCents : null;
-}
-
-/** Triple Whale CPA in dollars: Meta spend over attributed orders. */
-export function twCpa(tw: TwTotals | null, spendCents: number): number | null {
-  return tw && tw.purchases > 0 ? spendCents / 100 / tw.purchases : null;
-}
-
 export interface Targets {
   targetCpa: number;
   targetRoas: number;

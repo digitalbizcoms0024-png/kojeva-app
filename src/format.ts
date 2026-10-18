@@ -47,16 +47,6 @@ export function dateTime(iso: string | null | undefined): string {
   });
 }
 
-/** The Triple Whale model the hub stores ("Clicks & Views" in Triple Whale's data). */
-export const TW_MODEL_LABEL = "Clicks & deterministic views";
-
-/** Short note on how much of a period Triple Whale covers, or null when it covers all of it. */
-export function twCoverageNote(c: { days: number; covered: number } | null | undefined): string | null {
-  if (!c || c.days === 0) return null;
-  if (c.covered === 0) return "Triple Whale not synced for these days";
-  return c.covered < c.days ? `Triple Whale: ${c.covered} of ${c.days} days synced` : null;
-}
-
 /** Plain dollars for exports: 1234.5 → "1234.50" (no symbol or separators). */
 export function plainDollars(cents: number | null | undefined): string {
   return cents == null ? "" : (cents / 100).toFixed(2);

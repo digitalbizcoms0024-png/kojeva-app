@@ -1,7 +1,7 @@
 // The coverage map: every running ad placed by persona × awareness level, with each cell's
 // spend, results and all-time concept track record. Read-only.
 import type { ConceptResult, CoverageCell, CoveragePost, CoverageResponse, Persona, PostSummary } from "../shared/api.ts";
-import { addTotals, addTw, hitRate, ZERO_TOTALS, ZERO_TW } from "../shared/metrics.ts";
+import { addTotals, hitRate, ZERO_TOTALS } from "../shared/metrics.ts";
 import { AWARENESS } from "../shared/taxonomy.ts";
 import { loadPersonas } from "./personas.ts";
 import { loadConcepts, loadPosts } from "./queries.ts";
@@ -24,7 +24,6 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
       mediaType: p.mediaType,
       podId: p.assignment.podId,
       totals: p.totals,
-      tw: p.tw,
       personaId: persona(p.assignment.personaId ?? p.labels.personaId),
       awareness: level(p.assignment.awareness ?? p.labels.awareness),
       offer: p.assignment.offer ?? p.labels.offer,
@@ -42,7 +41,6 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
         awareness,
         ads: 0,
         totals: ZERO_TOTALS,
-        tw: null,
         offerSpendCents: 0,
         offerKnownSpendCents: 0,
         concepts: 0,
@@ -59,7 +57,6 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
     const c = cell(p.personaId, p.awareness);
     c.ads++;
     c.totals = addTotals(c.totals, p.totals);
-    if (p.tw) c.tw = addTw(c.tw ?? ZERO_TW, p.tw);
     if (p.offer != null) c.offerKnownSpendCents += p.totals.spendCents;
     if (p.offer) c.offerSpendCents += p.totals.spendCents;
   }

@@ -179,8 +179,7 @@ export function IncrementalityPage({ meta, range, setRange }: { meta: MetaRespon
               purchases 7-day click doesn't count, such as ones after a view.
             </li>
             <li>
-              Incremental purchases are modelled and can be fractional. They come from Meta and are separate from Triple Whale; nothing here is blended with
-              Triple Whale.
+              Incremental purchases are modelled and can be fractional. They come from Meta.
             </li>
             <li>Hit rate, targets and every other page stay on the ad sets' own attribution setting (usually 7-day click or 1-day view).</li>
           </ul>

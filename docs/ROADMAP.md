@@ -53,11 +53,11 @@ attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ 
   generated names in the Naming Tool (per browser).
 
 ## Phase 4: Triple Whale + analytics ✅
-- ✅ (app side) Triple Whale attributed orders/revenue per ad and day ("Clicks & deterministic views",
-  lifetime), pushed nightly by a Claude task to `/api/ingest/tw` (`docs/TRIPLE_WHALE.md`). Shown as
+- Removed Oct 2026 (owner: not needed; migration 0014 drops the tables). Was: Triple Whale attributed orders/revenue per ad and day ("Clicks & deterministic views",
+  lifetime), pushed nightly by a Claude task to `/api/ingest/tw`. Shown as
   separate "· TW" values: Dashboard ROAS tile, ranking cards, ad detail, Pods page and table.
 - ✅ Fatigue signals (frequency ↑, CTR ↓, CPA ↑ vs the ad's first week; reach stored from migration 0007), dashboard
-  trend charts (spend / CPA / ROAS, Meta and Triple Whale), CSV export on Rankings, Concepts and Pods.
+  trend charts (spend / CPA / ROAS, Meta), CSV export on Rankings, Concepts and Pods.
 
 ## Pod reporting ✅
 - Late hits (rolling 7-day second look for day-3 misses still spending), Spend by pod for the selected range, concepts

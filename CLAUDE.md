@@ -23,7 +23,7 @@ for which phase we're in.
 Before pushing: `npm run typecheck && npm test && npm run build` must all pass.
 
 ## Rules that matter
-- **Never blend Meta and Triple Whale numbers.** Show them side by side, always labelled with the source.
+- **Meta is the only performance source.** Triple Whale was removed (Oct 2026, migration 0014); don't add it back without the owner asking.
 - **Missing is not zero.** Ratios return `null` when the denominator is 0 and render as "—".
 - **Money is integer cents** in the DB and API; convert only in `src/format.ts`.
 - **Rank by post, not by ad.** Copies of an ad share a post (`effective_object_story_id`) and are grouped.
@@ -40,10 +40,9 @@ Before pushing: `npm run typecheck && npm test && npm run build` must all pass.
 - Meta sync lives in `worker/meta/` (Graph API v26.0). Test against fake Graph responses with `worker/testing/db.ts` (sql.js D1); this sandbox can't reach graph.facebook.com.
 - **Coverage map**: running ads by persona × awareness (`worker/coverage.ts`). Personas live in `personas`; Claude only drafts and suggests them (`/api/ingest/atria/personas`), people confirm in Settings, and Claude assigns ads only after that. Hand-set persona/offer in `assignments` win. See `docs/ATRIA.md`.
 - Incrementality: Meta's 7-day click and incremental attribution sit in extra `ad_daily` columns (synced by a second request) and are only compared on the Incrementality page and the ad detail. They're report-only: hit rate and targets stay on the standard numbers. See `docs/METRICS.md`.
-- Triple Whale numbers arrive via `/api/ingest/tw` from a nightly Claude task (same service token as Atria); stored in `tw_daily`, shown as "· TW" beside Meta's. See `docs/TRIPLE_WHALE.md`.
 - Atria tags arrive via `/api/ingest/atria` from a nightly Claude task signed in with an Access service token (`requireService`); service tokens can't use any other write route. See `docs/ATRIA.md`.
 - Connection, sync and editing routes require Cloudflare Access (`worker/access.ts`, `requireAccess` on each write route). Don't weaken that.
 - D1 allows at most **100 bound values per statement**; chunk anything built from a list. `worker/testing/sqljs-d1.ts` enforces it in tests.
 - **Read-only on Meta, permanently** (`ads_read`). The hub reports and analyses; it never creates, edits or pauses ads. Ad management is out of scope.
-- Secrets (`META_APP_SECRET`, `TOKEN_KEY`, Triple Whale key) are Worker secrets, never in code or `wrangler.jsonc`. The Meta user token is stored encrypted in D1.
+- Secrets (`META_APP_SECRET`, `TOKEN_KEY`) are Worker secrets, never in code or `wrangler.jsonc`. The Meta user token is stored encrypted in D1.
 - Sample data (`scripts/gen-sample.ts`) is fake. The UI shows the "Sample data" banner until a Meta sync succeeds; the first connection wipes it. Never reseed a live database.
