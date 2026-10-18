@@ -35,6 +35,7 @@ import { runSync, utcDay } from "./meta/sync.ts";
 import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL, toTw, twCoverage } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
 import { loadAddedPods } from "./pods.ts";
+import { ensureAttributed } from "./rules.ts";
 import { loadPersonas } from "./personas.ts";
 import { tripleWhale, twStatus } from "./triplewhale.ts";
 
@@ -51,6 +52,8 @@ app.use("*", async (c, next) => {
   const path = new URL(c.req.url).pathname;
   // Pods added in Settings, for name matching and validation in this request.
   await loadAddedPods(c.env.DB);
+  // After a deploy that changed how ads are credited, re-credit once before answering.
+  if (c.req.method === "GET" && !UNCACHED.test(path)) await ensureAttributed(c.env.DB);
   if (c.req.method !== "GET") {
     await next();
     if (c.res.status < 400 && !SELF_BUMPING.test(path)) await bumpVersion(c.env.DB).catch(() => undefined);

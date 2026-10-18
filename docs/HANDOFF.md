@@ -39,8 +39,9 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
 - They are "ST _ Scarcity _ Almost Sold Out _ V1" (hit) and "ST _ Scarcity _ Get It or Regret It _ V1"
   (late hit, Sep 21–27 ROAS 2.06), not "Gua Sha vs Kojeva". Both sit in one ad set, "IH | Harris |
   KOJEVA 3 | STATIC | Scarcity", but the owner says they're separate concepts grouped only at launch:
-  that ad set alone is split per static (`ONE_CONCEPT_PER_AD` in `shared/concepts.ts`). Takes effect
-  on the next sync (concepts are rebuilt on every sync).
+  that ad set alone is split per static (`ONE_CONCEPT_PER_AD` in `shared/concepts.ts`).
+- Rule changes like this one take effect by themselves after deploy: `worker/rules.ts` re-credits once
+  when the crediting/concept rules or the pods change. No "Sync last 7 days" needed for that.
 
 ## Scheduled tasks (claude.ai)
 - "Kojeva Hub · Atria tag sync" (daily 10:07 UTC, Atria connector): tags, awareness/belief/offer

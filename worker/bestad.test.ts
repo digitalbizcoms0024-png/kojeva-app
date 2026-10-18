@@ -29,13 +29,13 @@ beforeEach(async () => {
   env = { DB: await testDb(), META_APP_ID: "x", META_AD_ACCOUNT_ID: "act_1", META_GRAPH_VERSION: "v26.0", ACCESS_TEAM_DOMAIN: TEST_TEAM };
   const ad = (id: string, name: string) =>
     env.DB.prepare(
-      "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time, concept_id) VALUES (?1, ?1, ?2, 's3', 'IH | Harris | KOJEVA 3 | STATIC | Scarcity', 'PAUSED', '2026-09-17T00:00:00Z', 'k3')",
+      "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time, concept_id) VALUES (?1, ?1, ?2, 's3', 'IH | Harris | KOJEVA 3 | STATIC | Scarcity', 'PAUSED', '2026-09-17T00:00:00Z', 's3')",
     ).bind(id, name);
   await env.DB.batch([
     // The combined numbers hit on ROAS under the default "either" rule; "both" isolates the best-ad case.
     env.DB.prepare("UPDATE settings SET value = json_set(value, '$.hitRule', 'both') WHERE key = 'targets'"),
     env.DB.prepare(
-      "INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES ('k3', 's3', 'IH | Harris | KOJEVA 3 | STATIC | Scarcity', 'KOJEVA 3', 'harris')",
+      "INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES ('s3', 's3', 'IH | Harris | KOJEVA 3 | STATIC | Scarcity', 'KOJEVA 3', 'harris')",
     ),
     env.DB.prepare("INSERT INTO posts (id, media_type) VALUES ('sold', 'image'), ('regret', 'image')"),
     ad("sold", "ST _ Scarcity _ Almost Sold Out _ V1"),
@@ -66,7 +66,7 @@ const get = async <T>(path: string) =>
 describe("best ad decides", () => {
   it("makes a concept a hit when one ad hits on its own numbers, and says which ad", async () => {
     const { rows } = await get<ConceptsResponse>("/api/concepts?range=all");
-    const k = rows.find((r) => r.conceptId === "k3")!;
+    const k = rows.find((r) => r.conceptId === "s3")!;
     // The concept's combined days 1–3 miss on CPA…
     expect(k.window.purchases).toBe(18);
     expect(k.window.spendCents / 100 / k.window.purchases).toBeGreaterThan(14);

@@ -77,4 +77,27 @@ describe("added pods", () => {
     expect(await podOf("p1")).toBeNull();
     expect((await json<MetaResponse>(call("/api/meta"))).pods.some((p) => p.id === "trybe")).toBe(false);
   });
+
+  it("re-credits once by itself after a deploy changes the rules, not on every request", async () => {
+    const addAd = (id: string) =>
+      env.DB.batch([
+        env.DB.prepare("INSERT INTO posts (id, media_type) VALUES (?1, 'video')").bind(`p${id}`),
+        env.DB.prepare(
+          "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time) VALUES (?1, ?2, 'clip', 's9', 'TRYBE | Mia K | Puffy', 'ACTIVE', '2026-10-05T00:00:00Z')",
+        ).bind(id, `p${id}`),
+        env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES (?1, '2026-10-10', 1000, 1, 2000)").bind(id),
+      ]);
+    // First request after "deploy": no stored fingerprint, so everything is re-credited once.
+    await addAd("8");
+    expect(await podOf("p8")).toBe("trybe");
+    // Same rules: a new ad waits for the next sync instead of re-crediting on every request.
+    await addAd("9");
+    await env.DB.prepare("UPDATE settings SET value = value WHERE key = 'data_version'").run();
+    await call("/api/posts/p3/assignment", { method: "PATCH", body: JSON.stringify({ angle: "Scarcity" }) });
+    expect(await podOf("p9")).toBeNull();
+    // A changed rule set (simulated by a different stored fingerprint) re-credits again.
+    await env.DB.prepare("UPDATE settings SET value = 'old' WHERE key = 'rules_fingerprint'").run();
+    await call("/api/posts/p3/assignment", { method: "PATCH", body: JSON.stringify({ angle: "Comparison" }) });
+    expect(await podOf("p9")).toBe("trybe");
+  });
 });

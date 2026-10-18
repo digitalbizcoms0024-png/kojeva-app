@@ -18,8 +18,8 @@ async function concept(id: string, pod: string, days: number, purchases: (i: num
     env.DB.prepare("INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES (?1, ?1, ?2, ?3, ?4)").bind(id, `IH | ${pod} | ${id}`, id, pod),
     env.DB.prepare("INSERT INTO posts (id, media_type) VALUES (?1, 'video')").bind(`p_${id}`),
     env.DB.prepare(
-      "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time, concept_id) VALUES (?1, ?2, ?1, ?3, 'x', 'ACTIVE', '2026-10-01T00:00:00Z', ?3)",
-    ).bind(`a_${id}`, `p_${id}`, id),
+      "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time, concept_id) VALUES (?1, ?2, ?1, ?3, ?4, 'ACTIVE', '2026-10-01T00:00:00Z', ?3)",
+    ).bind(`a_${id}`, `p_${id}`, id, `IH | ${pod} | ${id}`),
     env.DB.prepare("INSERT INTO assignments (post_id, pod_id, pod_source) VALUES (?1, ?2, 'adset')").bind(`p_${id}`, pod),
     ...Array.from({ length: days }, (_, i) =>
       env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES (?1, ?2, 10000, ?3, ?4)").bind(
