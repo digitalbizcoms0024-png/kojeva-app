@@ -139,9 +139,10 @@ const addDays = (day: string, n: number) => {
 };
 
 /**
- * Second look at a concept that missed its day-3 test: the first run of `lateWindowDays`
- * consecutive days (counted from first spend, days without spend included) that ends after the
- * judging window, has at least `minTestSpend` of spend, and meets the targets. Null if none.
+ * Second look at a concept that missed its day-3 test and kept spending: its totals **since launch**
+ * (first spend through day D, the bad first days included) on the first day D that is at least
+ * `lateWindowDays` days in (day 7 by default), after the judging window and by the latest synced
+ * day, with at least `minTestSpend` spent, that meet the targets. Null if no such day.
  * @param daily the concept's totals per day with spend, any order
  */
 export function lateHitWindow(
@@ -153,29 +154,17 @@ export function lateHitWindow(
 ): { from: string; to: string; totals: Totals } | null {
   const n = t.lateWindowDays;
   if (n <= 0) return null;
-  const byDay = new Map(daily.map((d) => [d.date, d]));
-  // Windows [from, from + n - 1] that end after the judging window and by the latest synced day.
-  for (let from = firstSpend; addDays(from, n - 1) <= latest; from = addDays(from, 1)) {
-    const to = addDays(from, n - 1);
-    if (to <= judgingEnd) continue;
-    let w = ZERO_TOTALS;
-    for (let d = from; d <= to; d = addDays(d, 1)) {
-      const v = byDay.get(d);
-      if (v) w = addTotals(w, v);
-    }
-    if (w.spendCents >= t.minTestSpend * 100 && meetsTargets(w, t)) return { from, to, totals: w };
+  const sorted = [...daily].sort((a, b) => a.date.localeCompare(b.date));
+  const firstDay = addDays(firstSpend, n - 1);
+  let w = ZERO_TOTALS;
+  let i = 0;
+  for (let to = firstSpend; to <= latest; to = addDays(to, 1)) {
+    while (i < sorted.length && sorted[i]!.date <= to) w = addTotals(w, sorted[i++]!);
+    if (to < firstDay || to <= judgingEnd) continue;
+    if (w.spendCents >= t.minTestSpend * 100 && meetsTargets(w, t)) return { from: firstSpend, to, totals: w };
+    if (i >= sorted.length) break; // nothing after this day changes the totals
   }
   return null;
-}
-
-const STATUS_RANK: Record<HitStatus, number> = { hit: 0, late_hit: 1, testing: 2, miss: 3, ineligible: 4 };
-
-/**
- * A concept's result from its own verdict and its ads' verdicts ("best ad decides"): a hit if
- * anything hit, else a late hit, else still testing while any of them is, else a miss.
- */
-export function bestStatus(statuses: HitStatus[]): HitStatus {
-  return statuses.reduce<HitStatus>((best, s) => (STATUS_RANK[s] < STATUS_RANK[best] ? s : best), "ineligible");
 }
 
 /** Last day of the judging window: day N from first spend, or the qualifying day if later. */

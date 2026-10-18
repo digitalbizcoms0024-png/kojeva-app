@@ -31,12 +31,7 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - It's **judged** on all its ads combined, from its first day of spend to day `testWindowDays` (3) or
   the day it qualified, whichever is later. A slow CBO concept that qualifies on day 6 is judged on
   days 1–6.
-- **Best ad decides**: every ad in the concept is also judged on its own the same way (its first spend
-  to day 3 or the day *it* reached $100, plus its own late-hit look). The concept takes the best result
-  of itself and its ads (hit > late hit > testing > miss > not at $100; `bestStatus`), and records the
-  ad that decided it (`decidedBy`, shown as "via <ad name>"). Example: under the "both" rule
-  a concept that missed combined (CPA $17.14) still hit through an ad that hit on its own (CPA $12.60,
-  ROAS 2.47).
+- The concept is judged as a whole; single ads inside it are not judged on their own.
 - Status:
   - **testing**: the judging window hasn't passed yet
   - **No ad at $100** (`ineligible`): window passed and no ad has reached $100; not counted
@@ -87,12 +82,14 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   missing values are empty cells, never 0.
 
 ## Late hits (`shared/metrics.ts` → `lateHitWindow`)
-- A concept that **missed** its day-3 test but **kept spending after** its judging window gets a second look: if any run of
-  `lateWindowDays` consecutive days (default 7, Settings → "Late-hit window"; 0 turns it off) from first spend onward, ending
-  after the judging window, has at least the qualifying spend ($100) and meets the targets, it becomes a **Late hit**.
+- A concept that **missed** its day-3 test but **kept spending after** its judging window gets a second look on its
+  **totals since launch**: first spend through day D, where D is day `lateWindowDays` (default 7, Settings → "Late hit from
+  day"; 0 turns it off) or later and after the judging window. The bad first days stay in. If on any such day D the totals
+  since launch have at least the qualifying spend ($100) and meet the targets, it becomes a **Late hit** (window shown as
+  first spend → D).
 - Late hits count in the hit rate (hits + late hits ÷ decided) and are shown split out: "7 hits from 20 decided (2 late)".
-- Until then it stays a **Miss**; one still spending in the last 3 days is labelled "Miss · still running". Once any window hits,
-  the late hit is permanent (more days can only add windows).
+- Until then it stays a **Miss**; one still spending in the last 3 days is labelled "Miss · still running". Once the totals hit on a day,
+  the late hit is permanent.
 
 ## Spend by pod
 - Pods page section (and a share bar on the Dashboard): spend per pod, the agency and unassigned for the global range, share of

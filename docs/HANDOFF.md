@@ -26,9 +26,9 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
 
 ## Decisions made with the owner (don't re-ask)
 - **Hit rule = either**: CPA ≤ $14 **or** ROAS ≥ 1.7 (migration 0011 sets it).
-- **Best ad decides**: a concept is a hit if the concept or any single ad in it hits on its own
-  window (`judgeAds` in `worker/queries.ts`, `decidedBy` shown as "via <ad>").
-- Late hits: rolling 7-day window after the judging window, counted in hit rate.
+- **Best ad decides is off** (owner, Oct 18): a concept is judged only as a whole, never through one ad.
+- Late hits: totals **since launch** (first spend → day D, D ≥ day 7 and after the judging window) meet
+  the targets with ≥ $100 spend; counted in hit rate.
 - Date ranges: Last 7 days / Last 30 days / Month to date / All time / Custom.
 - Incrementality page compares **7-day click vs incremental only**; numbers matched Ads Manager's
   Compare attribution settings (incremental ≈ 7-day click for this account). Report-only.
@@ -37,7 +37,7 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
 
 ## Harris's two hits (settled Oct 18)
 - They are "ST _ Scarcity _ Almost Sold Out _ V1" (hit) and "ST _ Scarcity _ Get It or Regret It _ V1"
-  (late hit, Sep 21–27 ROAS 2.06), not "Gua Sha vs Kojeva". Both sit in one ad set, "IH | Harris |
+  (late hit, since launch Sep 18–24, ROAS 1.81), not "Gua Sha vs Kojeva". Both sit in one ad set, "IH | Harris |
   KOJEVA 3 | STATIC | Scarcity", but the owner says they're separate concepts grouped only at launch:
   that ad set alone is split per static (`ONE_CONCEPT_PER_AD` in `shared/concepts.ts`).
 - Rule changes like this one take effect by themselves after deploy: `worker/rules.ts` re-credits once
@@ -53,4 +53,4 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
 - Reminder Oct 23: parked "Why it works" AI notes (needs an ANTHROPIC_API_KEY Worker secret).
 
 ## Checks before pushing
-`npm run typecheck && npm test && npm run build` (219 tests passing at handoff).
+`npm run typecheck && npm test && npm run build` (tests passing at handoff).

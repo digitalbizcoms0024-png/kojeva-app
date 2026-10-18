@@ -372,7 +372,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
             disabled={!meta.canEdit}
           />
         </Labeled>
-        <Labeled label="Late-hit window (days)" hint="0 turns late hits off">
+        <Labeled label="Late hit from day" hint="0 turns late hits off">
           <input
             id="t-late"
             type="number"

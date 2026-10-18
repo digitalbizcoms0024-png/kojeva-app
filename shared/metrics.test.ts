@@ -127,22 +127,53 @@ describe("lateHitWindow", () => {
     return { date, spendCents: 10000, impressions: 1000, linkClicks: 10, purchases, revenueCents: purchases * 2500 };
   });
 
-  it("finds the first rolling window that hits target after the judging window", () => {
-    // Oct 1–7: $700 / 58 purchases = $12.07 CPA, ROAS 2.07 → hits.
+  it("judges the totals since launch, from day 7 on", () => {
+    // Oct 1–7 since launch: $700 / 52 purchases = $13.46 CPA, ROAS 1.86 → hits on day 7.
     expect(lateHitWindow(daily, "2026-10-01", "2026-10-03", "2026-10-12", T)).toMatchObject({ from: "2026-10-01", to: "2026-10-07" });
   });
 
-  it("needs a full window of synced days", () => {
+  it("waits for day 7 to be synced", () => {
     expect(lateHitWindow(daily.slice(0, 6), "2026-10-01", "2026-10-03", "2026-10-06", T)).toBeNull();
   });
 
-  it("can find a later window when early days drag the first one down", () => {
+  it("keeps the bad first days in, so a late hit comes later or not at all", () => {
     const slow = daily.map((d, i) => (i < 5 ? { ...d, purchases: 2, revenueCents: 5000 } : d));
-    // Oct 1–7 has 5 slow days; the first window that hits starts Oct 4.
-    expect(lateHitWindow(slow, "2026-10-01", "2026-10-03", "2026-10-12", T)).toMatchObject({ from: "2026-10-04", to: "2026-10-10" });
+    // Since launch: Oct 1–8 is ROAS 1.41, CPA $20; Oct 1–12 is $1,200 / 80 purchases = $15 CPA, ROAS 1.67.
+    expect(lateHitWindow(slow, "2026-10-01", "2026-10-03", "2026-10-12", T)).toBeNull();
+    expect(lateHitWindow(slow, "2026-10-01", "2026-10-03", "2026-10-12", { ...T, hitRule: "either" as const, targetRoas: 1.6 })).toMatchObject({
+      to: "2026-10-12",
+    });
   });
 
-  it("counts days without spend as part of the window, and respects the minimum spend and switch-off", () => {
+  it("matches Harris KOJEVA 12 | WOMEN OVER 50 (miss) and Get It or Regret It (late hit), Meta, Sep–Oct 2026", () => {
+    // Revenue = spend × ROAS, or given directly for days with purchases but no spend (Meta shows no ROAS there).
+    const day = (date: string, spend: number, purchases: number, roas: number, revenue?: number) => ({
+      date,
+      spendCents: Math.round(spend * 100),
+      impressions: 0,
+      linkClicks: 0,
+      purchases,
+      revenueCents: Math.round((revenue ?? spend * roas) * 100),
+    });
+    const either = { ...T, hitRule: "either" as const };
+    const women = [day("2026-09-28", 118.35, 2, 0.552), day("2026-09-29", 81.45, 2, 0.893), day("2026-09-30", 129.96, 1, 0.177), day("2026-10-01", 87.14, 4, 2.195), day("2026-10-02", 41.24, 3, 2.368)];
+    expect(lateHitWindow(women, "2026-09-28", "2026-09-30", "2026-10-17", either)).toBeNull(); // since launch: ROAS 0.98, CPA $38
+    const regret = [
+      day("2026-09-18", 54.77, 3, 2.043),
+      day("2026-09-19", 78.17, 4, 1.462),
+      day("2026-09-20", 87.84, 3, 0.909),
+      day("2026-09-21", 17.81, 1, 3.608),
+      // The hub's Sep 18–24 (14 purchases, CPA $19.88, ROAS 1.81) puts these 3 purchases at ~$133.
+      day("2026-09-22", 0, 1, 0, 44.5),
+      day("2026-09-23", 0, 2, 0, 89),
+      day("2026-09-24", 39.69, 0, 0),
+      day("2026-09-25", 72.16, 3, 1.223),
+    ];
+    const w = lateHitWindow(regret, "2026-09-18", "2026-09-20", "2026-10-17", either);
+    expect(w).toMatchObject({ from: "2026-09-18", to: "2026-09-24" });
+  });
+
+  it("respects the minimum spend and the switch-off", () => {
     const sparse = [{ ...daily[0]!, date: "2026-10-05", spendCents: 5000, purchases: 5, revenueCents: 12500 }];
     expect(lateHitWindow(sparse, "2026-10-01", "2026-10-03", "2026-10-12", T)).toBeNull(); // $50 < $100 minimum
     expect(lateHitWindow(daily, "2026-10-01", "2026-10-03", "2026-10-12", { ...T, lateWindowDays: 0 })).toBeNull();

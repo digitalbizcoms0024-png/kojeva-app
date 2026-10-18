@@ -3,7 +3,6 @@ import { classify } from "../shared/classify.ts";
 import { memoize } from "./cache.ts";
 import { loadFatigue } from "./fatigue.ts";
 import {
-  bestStatus,
   DEFAULT_TARGETS,
   hitStatus,
   judgingWindowEnd,
@@ -113,64 +112,6 @@ function mode(values: string[]): string | null {
   let best: string | null = null;
   for (const [v, c] of n) if (best == null || c > n.get(best)!) best = v;
   return best;
-}
-
-type AdVerdict = { adId: string; conceptId: string; name: string; status: HitStatus; from: string; to: string; totals: Totals };
-
-/**
- * Each concept ad judged on its own, like a concept: from its first spend to day N or the day it
- * alone reached the minimum spend, whichever is later, with the same late-hit second look.
- */
-async function judgeAds(db: D1Database, targets: Targets, latest: string | null): Promise<AdVerdict[]> {
-  const { results } = await db
-    .prepare(
-      `WITH daily AS (
-         SELECT a.id AS ad_id, a.concept_id, d.date, d.spend_cents,
-           SUM(d.spend_cents) OVER (PARTITION BY d.ad_id ORDER BY d.date) AS running
-         FROM ad_daily d JOIN ads a ON a.id = d.ad_id
-         WHERE a.concept_id IS NOT NULL),
-       b AS (
-         SELECT ad_id, MAX(concept_id) AS concept_id,
-           MIN(CASE WHEN spend_cents > 0 THEN date END) AS first_date,
-           MAX(CASE WHEN spend_cents > 0 THEN date END) AS last_date,
-           MIN(CASE WHEN running >= ?1 THEN date END) AS qualified_on
-         FROM daily GROUP BY ad_id),
-       w AS (
-         SELECT b.*, MAX(date(first_date, '+' || (?2 - 1) || ' days'), COALESCE(qualified_on, '')) AS end_date
-         FROM b WHERE first_date IS NOT NULL)
-       SELECT w.ad_id, w.concept_id, w.first_date, w.last_date, w.qualified_on, w.end_date, x.name, ${TOTALS_SQL}
-       FROM w JOIN ads x ON x.id = w.ad_id
-       JOIN ad_daily d ON d.ad_id = w.ad_id AND d.date BETWEEN w.first_date AND w.end_date
-       GROUP BY w.ad_id`,
-    )
-    .bind(targets.minTestSpend * 100, targets.testWindowDays)
-    .all<Row>();
-  const verdicts = results.map((r) => {
-    const from = String(r.first_date);
-    const to = String(r.end_date);
-    const totals = toTotals(r);
-    const status = hitStatus(totals, { qualified: r.qualified_on != null, complete: latest != null && latest >= to }, targets);
-    return { adId: String(r.ad_id), conceptId: String(r.concept_id), name: String(r.name), status, from, to, totals, lastDate: String(r.last_date) };
-  });
-
-  // Late-hit second look for ads that missed and kept spending; 90 IDs per query (D1's 100-value limit).
-  const recheck = latest ? verdicts.filter((v) => v.status === "miss" && v.lastDate > v.to) : [];
-  for (let i = 0; i < recheck.length; i += 90) {
-    const chunk = recheck.slice(i, i + 90);
-    const { results: rows } = await db
-      .prepare(
-        `SELECT d.ad_id, d.date, ${TOTALS_SQL} FROM ad_daily d WHERE d.ad_id IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")}) GROUP BY d.ad_id, d.date`,
-      )
-      .bind(...chunk.map((v) => v.adId))
-      .all<Row>();
-    const days = new Map<string, ({ date: string } & Totals)[]>();
-    for (const row of rows) days.set(String(row.ad_id), [...(days.get(String(row.ad_id)) ?? []), { date: String(row.date), ...toTotals(row) }]);
-    for (const v of chunk) {
-      const w = lateHitWindow(days.get(v.adId) ?? [], v.from, v.to, latest!, targets);
-      if (w) Object.assign(v, { status: "late_hit" as const, from: w.from, to: w.to, totals: w.totals });
-    }
-  }
-  return verdicts.map(({ lastDate: _, ...v }) => v);
 }
 
 /** Every concept with its test-window totals and hit status (computed once per data version). */
@@ -283,22 +224,9 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
     }
   }
 
-  // "Best ad decides": a concept also counts as a hit when one of its ads hits on its own numbers.
-  const adsByConcept = new Map<string, AdVerdict[]>();
-  for (const v of await judgeAds(db, targets, latest)) adsByConcept.set(v.conceptId, [...(adsByConcept.get(v.conceptId) ?? []), v]);
-
   return base.map(({ r, firstSpend, qualifiedOn, windowEnd, window, status: own }) => {
-    const ownLate = late.get(String(r.id)) ?? null;
-    const ownStatus: HitStatus = ownLate ? "late_hit" : own;
-    const ads = adsByConcept.get(String(r.id)) ?? [];
-    const status = bestStatus([ownStatus, ...ads.map((a) => a.status)]);
-    // Credit an ad only when the concept's own numbers didn't already give this result.
-    const ad =
-      (status === "hit" || status === "late_hit") && ownStatus !== status
-        ? ads.filter((a) => a.status === status).sort((a, b) => b.totals.spendCents - a.totals.spendCents)[0]
-        : undefined;
-    const decidedBy = ad ? { adId: ad.adId, name: ad.name, from: ad.from, to: ad.to, totals: ad.totals, status: status as "hit" | "late_hit" } : null;
-    const lateWindow = status !== "late_hit" ? null : ad ? { from: ad.from, to: ad.to, totals: ad.totals } : ownLate;
+    const lateWindow = late.get(String(r.id)) ?? null;
+    const status: HitStatus = lateWindow ? "late_hit" : own;
     const manualAwareness = r.manual_awareness == null ? null : String(r.manual_awareness);
     const manualBelief = r.manual_belief == null ? null : String(r.manual_belief);
     const awareness = manualAwareness ?? mode(list(r.awareness_list));
@@ -333,7 +261,6 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
       allTime: allTime.get(String(r.id)) ?? window,
       status,
       lateWindow,
-      decidedBy,
       lastSpend,
       // Spent in the last 3 synced days.
       stillRunning: lastSpend != null && latest != null && lastSpend >= shiftDay(latest, -2),
