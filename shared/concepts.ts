@@ -22,9 +22,33 @@ export interface Concept {
 
 const SEP = /\s*(?:&|\+)\s*/;
 
+/**
+ * Testing ad sets that held several separate concepts, one per static, grouped only at launch
+ * (confirmed by the owner, Oct 2026). Each distinct static is its own concept there; V1/V2
+ * versions of the same static stay together.
+ */
+export const ONE_CONCEPT_PER_AD = new Set([
+  "120249807197790075", // IH | Harris | KOJEVA 3 | STATIC | Scarcity
+]);
+
+/** "ST _ Scarcity _ Almost Sold Out _ V1 | Post ID" → "Almost Sold Out". */
+export function staticTitle(adName: string): string {
+  const base = adName.split("|")[0]!.trim();
+  const parts = base
+    .split("_")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (/^ST$/i.test(parts[0] ?? "") && parts.length >= 3) parts.splice(0, 2);
+  if (parts.length > 1 && /^v\d+$/i.test(parts[parts.length - 1]!)) parts.pop();
+  return parts.join(" ") || base;
+}
+
 /** The ad set name minus team prefix and strategist: "IH | Harris | KOJEVA 3 | STATIC | Scarcity" → "KOJEVA 3 | STATIC | Scarcity". */
 export function conceptLabel(adsetName: string): string {
-  const segs = adsetName.split("|").map((s) => s.trim()).filter(Boolean);
+  const segs = adsetName
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean);
   let i = 0;
   if (segs[i] && /^[A-Z]{2}$/i.test(segs[i]!)) i++; // IH / ME / QW / TV / YD
   if (segs[i] && podFromAdSetName(segs[i]!)) i++;
@@ -33,7 +57,10 @@ export function conceptLabel(adsetName: string): string {
 
 /** "Batch 3 & 5" → ["Batch 3", "Batch 5"]; "Depuffing + Jawline" → ["Depuffing", "Jawline"]. */
 export function splitParts(segment: string): string[] {
-  const raw = segment.split(SEP).map((s) => s.trim()).filter(Boolean);
+  const raw = segment
+    .split(SEP)
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (raw.length < 2) return [segment.trim()];
   const prefix = /^(.*?\D)\s*#?\s*\d+$/.exec(raw[0]!)?.[1]?.trim();
   return raw.map((p, i) => (i > 0 && prefix && /^#?\d+$/.test(p) ? `${prefix} ${p.replace("#", "")}` : p));
@@ -93,6 +120,13 @@ export function buildConcepts(ads: ConceptAd[], settings: AttributionSettings = 
     const adsetName = list[0]!.adsetName!;
     const podCode = testingPod(adsetName, settings)!;
     const label = conceptLabel(adsetName);
+    if (ONE_CONCEPT_PER_AD.has(adsetId)) {
+      const byTitle = new Map<string, string[]>();
+      for (const ad of list) byTitle.set(staticTitle(ad.name), [...(byTitle.get(staticTitle(ad.name)) ?? []), ad.id]);
+      for (const [title, adIds] of byTitle)
+        out.push({ id: `${adsetId}#${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, adsetId, adsetName, label: `${label} | ${title}`, podCode, adIds });
+      continue;
+    }
     const segs = label.split("|").map((s) => s.trim());
     const combinedAt = segs.findIndex((s) => SEP.test(s) && splitParts(s).length > 1);
     if (combinedAt < 0) {
@@ -125,8 +159,7 @@ export function buildConcepts(ads: ConceptAd[], settings: AttributionSettings = 
     parts.forEach((p, i) => {
       if (buckets[i]!.length) out.push({ id: `${adsetId}#${i}`, adsetId, adsetName, label: partLabel(p), podCode, adIds: buckets[i]! });
     });
-    if (unmatched.length)
-      out.push({ id: `${adsetId}#rest`, adsetId, adsetName, label: `${label} (unsplit)`, podCode, adIds: unmatched });
+    if (unmatched.length) out.push({ id: `${adsetId}#rest`, adsetId, adsetName, label: `${label} (unsplit)`, podCode, adIds: unmatched });
   }
   return out;
 }

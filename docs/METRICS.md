@@ -23,6 +23,10 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - Older ad sets that combined concepts are split by ad name (`shared/concepts.ts`): "Batch 3 & 5" →
   Batch 3 ("batch 3a", "batch 3b") and Batch 5 ("batch5"); "Depuffing + Jawline" → by which word the
   ad's hook mentions. A "+" is only split when the ad names clearly name the parts.
+- **Exception, one concept per static**: ad sets listed in `ONE_CONCEPT_PER_AD` (`shared/concepts.ts`)
+  held several separate statics grouped only at launch, so each distinct static is its own concept
+  (V1/V2 versions together). Today only Harris "KOJEVA 3 | STATIC | Scarcity": Almost Sold Out
+  (hit), Get It or Regret It (late hit) and Empty Warehouse (under $100) are three concepts.
 - A concept **qualifies** once any single ad in it has spent `minTestSpend` ($100) in total.
 - It's **judged** on all its ads combined, from its first day of spend to day `testWindowDays` (3) or
   the day it qualified, whichever is later. A slow CBO concept that qualifies on day 6 is judged on
@@ -30,9 +34,9 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - **Best ad decides**: every ad in the concept is also judged on its own the same way (its first spend
   to day 3 or the day *it* reached $100, plus its own late-hit look). The concept takes the best result
   of itself and its ads (hit > late hit > testing > miss > not at $100; `bestStatus`), and records the
-  ad that decided it (`decidedBy`, shown as "via <ad name>"). Example: Harris "KOJEVA 3 | STATIC |
-  Scarcity" missed combined (days 1–3 CPA $17.14) but its "Almost Sold Out" ad hit on its own
-  (Sep 18–21, CPA $12.60, ROAS 2.47), so the concept is a hit.
+  ad that decided it (`decidedBy`, shown as "via <ad name>"). Example: under the "both" rule
+  a concept that missed combined (CPA $17.14) still hit through an ad that hit on its own (CPA $12.60,
+  ROAS 2.47).
 - Status:
   - **testing**: the judging window hasn't passed yet
   - **No ad at $100** (`ineligible`): window passed and no ad has reached $100; not counted
