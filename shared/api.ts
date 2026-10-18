@@ -3,7 +3,7 @@ import type { Fatigue } from "./fatigue.ts";
 import type { AttributedTotals, HitStatus, Targets, Totals, TwTotals } from "./metrics.ts";
 
 /** week / month = the last 7 / 30 synced days; mtd = from the 1st of the latest synced day's month. */
-export type RangeKey = "week" | "month" | "mtd" | "all" | "custom";
+export type RangeKey = "week" | "14d" | "month" | "mtd" | "all" | "custom";
 export type SortKey = "spend" | "purchases" | "roas" | "cpa" | "ctr";
 
 export interface ConnectionStatus {
