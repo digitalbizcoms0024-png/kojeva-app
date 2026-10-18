@@ -59,10 +59,13 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   spend first, at most 3.
 - **Hit** (✓): a concept whose judging window closed in the last 7 days as a hit.
 - **Needs a pod** (!): posts with spend in the last 7 days that no pod or the agency is credited with.
-- **Hit turned off** (!): a copy of a hit or late hit (same video/image by `asset_id`, else the same post, in any ad set) that
-  spent in the 7 days before the last 3 synced days and is now off: an off status in Meta (paused, ad set/campaign paused,
-  archived, deleted, disapproved, with issues) or no spend in the last 3 synced days (owner, Oct 18: any copy counts).
-  One alert per concept, at most 3; each turn-off shows for about a week. `hitsTurnedOff`.
+- **Hit turned off** (!): a hit or late hit that just stopped running **everywhere**: every copy of the creative (same
+  video/image by `asset_id`, else the same post, in any ad set) has an off status in Meta (paused, ad set/campaign paused,
+  archived, deleted, disapproved, with issues) or spent nothing in the last 3 synced days, and some copy spent in the 7 days
+  before that. Pausing the test ad after scaling doesn't count while a copy still runs (owner, Oct 18). One alert per
+  concept, at most 3; each shows for about a week (`worker/hitsoff.ts`).
+- **Rankings → Status → Hits turned off** lists every winner that is off everywhere now, however long ago it stopped, by its
+  test post (hit badge), whatever the range spent.
 - Computed on read from stored data; no D1 writes.
 
 ## Pod suggestions (Needs Tagging)

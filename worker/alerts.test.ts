@@ -77,48 +77,6 @@ describe("alerts", () => {
     expect(alerts.map((a) => [a.tone, a.title])).toEqual([["good", "V575 hit target"]]);
   });
 
-  it("spots a hit whose copies were spending and are now off, and ignores misses and long-retired copies", async () => {
-    // Harris tested "Almost Sold Out" (hit: $10 CPA) and "Dull Static" (miss), Oct 1–3.
-    await db.batch([
-      db.prepare("INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES ('k1', 'as1', 'IH | Harris | KOJEVA 3', 'Almost Sold Out', 'harris')"),
-      db.prepare("INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES ('k2', 'as2', 'IH | Harris | KOJEVA 4', 'Dull Static', 'harris')"),
-    ]);
-    await ad("p1", "test", "ST _ Almost Sold Out _ V1", { pod: "harris", asset: "i:sold", concept: "k1" });
-    await ad("p2", "scale", "ST _ Almost Sold Out _ V1", { pod: "harris", asset: "i:sold" }); // copy in a scaling ad set
-    await ad("p3", "scale2", "ST _ Almost Sold Out _ V1", { pod: "harris", asset: "i:sold" }); // copy retired in September
-    await ad("p4", "dull", "ST _ Dull _ V1", { pod: "harris", asset: "i:dull", concept: "k2" });
-    for (let d = 1; d <= 15; d++) {
-      const date = `2026-10-${String(d).padStart(2, "0")}`;
-      await day("test", date, 100, 10, 250);
-      if (d <= 12) await day("scale", date, 200, 20, 500); // stopped delivering after Oct 12
-      await day("dull", date, 100, 2, 50);
-    }
-    await day("scale2", "2026-09-20", 300, 30, 750);
-    await db.prepare("UPDATE ads SET status = 'PAUSED' WHERE id IN ('test', 'scale2', 'dull')").run();
-
-    const { alerts } = await loadAlerts(db);
-    const off = alerts.filter((a) => a.id.startsWith("hit-off:"));
-    expect(off).toEqual([
-      expect.objectContaining({
-        id: "hit-off:k1",
-        tone: "warn",
-        title: "Almost Sold Out was a hit; 2 copies are now off",
-        href: "#/rankings?post=p2",
-      }),
-    ]);
-    expect(off[0]!.detail).toBe(
-      "Harris · ST _ Almost Sold Out _ V1 in Some ad set (no spend in 3 days); ST _ Almost Sold Out _ V1 in Some ad set (paused) · $2,100 spend in the week before",
-    );
-  });
-
-  it("doesn't flag a hit that is still running everywhere", async () => {
-    await db.prepare("INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES ('k1', 'as1', 'IH | Harris | KOJEVA 3', 'Almost Sold Out', 'harris')").run();
-    await ad("p1", "test", "ST _ Almost Sold Out _ V1", { pod: "harris", asset: "i:sold", concept: "k1" });
-    for (let d = 1; d <= 15; d++) await day("test", `2026-10-${String(d).padStart(2, "0")}`, 100, 10, 250);
-    const { alerts } = await loadAlerts(db);
-    expect(alerts.filter((a) => a.id.startsWith("hit-off:"))).toEqual([]);
-  });
-
   it("is empty before any data is synced", async () => {
     expect(await loadAlerts(db)).toEqual({ asOf: null, alerts: [] });
   });

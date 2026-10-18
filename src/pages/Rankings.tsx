@@ -32,16 +32,18 @@ export function RankingsPage({
   range,
   setRange,
   initialPost,
+  initialStatus,
 }: {
   meta: MetaResponse;
   range: Range;
   setRange: (r: Range) => void;
   initialPost?: string | null;
+  initialStatus?: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("ads");
   const [sort, setSort] = useState<SortKey>("spend");
   const [pod, setPod] = useState("all");
-  const [status, setStatus] = useState("all");
+  const [status, setStatus] = useState(initialStatus ?? "all");
   const [format, setFormat] = useState("");
   const [angle, setAngle] = useState("");
   const [search, setSearch] = useState("");
@@ -55,6 +57,9 @@ export function RankingsPage({
   useEffect(() => {
     if (initialPost) setSelected(initialPost);
   }, [initialPost]);
+  useEffect(() => {
+    if (initialStatus) setStatus(initialStatus);
+  }, [initialStatus]);
 
   const rankings = useApi<RankingsResponse>(tab === "ads" ? `/api/rankings?${qs({ range, sort, pod, status, q, format, angle })}` : null);
   const pods = useApi<PodsResponse>(tab !== "ads" ? `/api/pods?${qs({ range })}` : null);
@@ -115,11 +120,19 @@ export function RankingsPage({
                     { value: "active", label: "Active" },
                     { value: "paused", label: "Paused" },
                     { value: "fatigued", label: "Fatigued or watch" },
+                    { value: "hits_off", label: "Hits turned off" },
                   ]}
                 />
                 <Select stacked label="Format" value={format} onChange={setFormat} options={vocab(FORMATS, "All formats")} />
                 <Select stacked label="Angle" value={angle} onChange={setAngle} options={vocab(ANGLES, "All angles")} />
               </div>
+              {status === "hits_off" && (
+                <p className="bg-warn-soft px-3 py-2 text-sm text-ink">
+                  ! Hits and late hits that no longer run anywhere: every copy of the creative is paused or off in Meta, or spent nothing in the
+                  last 3 synced days. Listed whatever the date range spent; results are for the range shown, so pick All time to see their full
+                  results.
+                </p>
+              )}
               {rankings.data && (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="num text-xs text-ink-3">
@@ -141,7 +154,9 @@ export function RankingsPage({
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <div className="min-w-0">
                 {rankings.error && <Empty>Couldn't load rankings: {rankings.error.message}</Empty>}
-                {rankings.data && items.length === 0 && <Empty>No ads with spend match these filters.</Empty>}
+                {rankings.data && items.length === 0 && (
+                  <Empty>{status === "hits_off" ? "No hits are turned off: every winner still has a copy running." : "No ads with spend match these filters."}</Empty>
+                )}
                 <ol className="flex flex-col gap-2">
                   {items.map((p, i) => (
                     <RankCard

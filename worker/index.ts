@@ -32,6 +32,7 @@ import { atria } from "./atria.ts";
 import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
+import { loadHitCreatives } from "./hitsoff.ts";
 import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
 import { loadAddedPods } from "./pods.ts";
@@ -183,7 +184,14 @@ app.get("/rankings", async (c) => {
   const search = (c.req.query("q") ?? "").trim().toLowerCase();
   const limit = Math.min(Number(c.req.query("limit") ?? 500) || 500, 2000);
 
-  let items = (await loadPosts(c.env.DB, range.from, range.to)).filter((p) => p.totals.spendCents > 0);
+  let items = await loadPosts(c.env.DB, range.from, range.to);
+  if (status === "hits_off") {
+    // Every winner that no longer runs anywhere, whatever the range spent (its test post, with the hit badge).
+    const latest = await getLatestDate(c.env.DB);
+    const off = latest ? (await loadHitCreatives(c.env.DB, await loadConcepts(c.env.DB), latest)).filter((h) => h.offEverywhere) : [];
+    const ids = new Set(off.flatMap((h) => h.testPosts));
+    items = items.filter((p) => ids.has(p.postId));
+  } else items = items.filter((p) => p.totals.spendCents > 0);
   if (pod === "unassigned") items = items.filter((p) => !p.assignment.podId);
   else if (pod !== "all") items = items.filter((p) => p.assignment.podId === pod);
   const format = c.req.query("format");

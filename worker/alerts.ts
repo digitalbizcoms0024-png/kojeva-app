@@ -6,6 +6,7 @@ import { AWARENESS, podById } from "../shared/taxonomy.ts";
 import { loadCoverage } from "./coverage.ts";
 import { confirmed, loadPersonas } from "./personas.ts";
 import { loadFatigue } from "./fatigue.ts";
+import { loadHitCreatives } from "./hitsoff.ts";
 import { getLatestDate, getTargets, loadConcepts, shiftDay } from "./queries.ts";
 
 /** Share of a week's spend in a single persona × awareness cell that raises an alert. */
@@ -18,7 +19,7 @@ const usd2 = (v: number) => `$${v.toFixed(2)}`;
  * Up to ~7 alerts, worst first:
  * - fatigue (shared/fatigue.ts): two or more signals vs the ad's first week, or a CPA rise on its own;
  * - concepts whose test window closed in the last 7 days as a hit;
- * - hits (and late hits) with a copy that was spending and is now off (`hitsTurnedOff`);
+ * - hits (and late hits) that just stopped running everywhere (`hitsTurnedOff`);
  * - spend in the last 7 days that no pod or the agency is credited with;
  * - over 60% of the week's spend in one persona × awareness cell (worker/coverage.ts).
  */
@@ -139,83 +140,27 @@ async function fatigueAlerts(db: D1Database, tired: Map<string, Fatigue>): Promi
     .map((x) => x.alert);
 }
 
-/** Meta statuses (effective_status) that mean the ad isn't delivering because someone or something turned it off. */
-const OFF_STATUSES: Record<string, string> = {
-  PAUSED: "paused",
-  ADSET_PAUSED: "ad set paused",
-  CAMPAIGN_PAUSED: "campaign paused",
-  ARCHIVED: "archived",
-  DELETED: "deleted",
-  DISAPPROVED: "disapproved",
-  WITH_ISSUES: "has issues",
-};
-
 /**
- * Winning creatives that were just turned off. A copy of a hit (the same video or image, in any ad
- * set, by `asset_id`, else the same post) counts when it spent in the 7 days before the last 3
- * synced days and now either has an off status in Meta or spent nothing in the last 3 days. Old
- * copies retired long ago don't count, so each turn-off is flagged for about a week.
- * One alert per concept, biggest spend before the turn-off first, at most 3.
+ * Winners that just stopped running everywhere: every copy of a hit or late hit is off in Meta or
+ * spent nothing in the last 3 synced days, and some copy was spending in the week before. Pausing
+ * the test ad after scaling doesn't count while a copy still runs (owner, Oct 18). One alert per
+ * concept, biggest spend before the turn-off first, at most 3; each shows for about a week.
  */
-export async function hitsTurnedOff(db: D1Database, concepts: ConceptResult[], latest: string): Promise<Alert[]> {
-  const hits = new Map(concepts.filter((k) => k.status === "hit" || k.status === "late_hit").map((k) => [k.conceptId, k]));
-  if (hits.size === 0) return [];
-  const recentFrom = shiftDay(latest, -2);
-  const beforeFrom = shiftDay(latest, -9);
-  // Only ads that spent in the week before (each ad's days read by key; see CLAUDE.md on D1 reads).
-  const { results } = await db
-    .prepare(
-      `SELECT a.id, a.post_id, a.asset_id, a.concept_id, a.name, a.campaign_name, a.adset_name, a.status,
-         (SELECT SUM(d.spend_cents) FROM ad_daily d WHERE d.ad_id = a.id AND d.date BETWEEN ?1 AND ?2) AS before_cents,
-         (SELECT SUM(d.spend_cents) FROM ad_daily d WHERE d.ad_id = a.id AND d.date >= ?3) AS recent_cents
-       FROM ads a`,
-    )
-    .bind(beforeFrom, shiftDay(recentFrom, -1), recentFrom)
-    .all<{
-      id: string;
-      post_id: string;
-      asset_id: string | null;
-      concept_id: string | null;
-      name: string;
-      campaign_name: string | null;
-      adset_name: string | null;
-      status: string;
-      before_cents: number | null;
-      recent_cents: number | null;
-    }>();
-  const creative = (r: { asset_id: string | null; post_id: string }) => r.asset_id ?? `post:${r.post_id}`;
-  // Each hit concept's creatives (from its testing ads), and which concept each creative won in.
-  const won = new Map<string, string>();
-  for (const r of results) if (r.concept_id && hits.has(r.concept_id)) won.set(creative(r), r.concept_id);
-
-  const off = new Map<string, { postId: string; name: string; where: string; why: string; beforeCents: number }[]>();
-  for (const r of results) {
-    const conceptId = won.get(creative(r));
-    const before = Number(r.before_cents ?? 0);
-    if (!conceptId || before <= 0) continue;
-    const why = OFF_STATUSES[r.status] ?? (Number(r.recent_cents ?? 0) > 0 ? null : "no spend in 3 days");
-    if (!why) continue;
-    const list = off.get(conceptId) ?? [];
-    list.push({ postId: r.post_id, name: r.name, where: r.campaign_name ?? r.adset_name ?? "", why, beforeCents: before });
-    off.set(conceptId, list);
-  }
-
-  return [...off]
-    .map(([conceptId, copies]) => {
-      const k = hits.get(conceptId)!;
-      copies.sort((a, b) => b.beforeCents - a.beforeCents);
+async function hitsTurnedOff(db: D1Database, concepts: ConceptResult[], latest: string): Promise<Alert[]> {
+  const off = (await loadHitCreatives(db, concepts, latest)).filter((h) => h.turnedOffRecently);
+  return off
+    .map(({ concept: k, copies }) => {
       const spend = copies.reduce((n, c) => n + c.beforeCents, 0);
-      const shown = copies
-        .slice(0, 2)
-        .map((c) => `${c.name}${c.where ? ` in ${c.where}` : ""} (${c.why})`)
-        .join("; ");
+      const why = new Map<string, number>();
+      for (const c of copies) why.set(c.off!, (why.get(c.off!) ?? 0) + 1);
+      const reasons = [...why].map(([w, n]) => (copies.length === 1 ? w : `${n} ${w}`)).join(", ");
       const alert: Alert = {
-        id: `hit-off:${conceptId}`,
+        id: `hit-off:${k.conceptId}`,
         tone: "warn",
-        title: `${k.label} was a ${k.status === "late_hit" ? "late hit" : "hit"}; ${copies.length === 1 ? "a copy is" : `${copies.length} copies are`} now off`,
-        detail: `${podById(k.podId)?.name ?? "Unassigned"} · ${shown}${copies.length > 2 ? ` and ${copies.length - 2} more` : ""} · ${usd(spend)} spend in the week before`,
-        href: `#/rankings?post=${encodeURIComponent(copies[0]!.postId)}`,
-        action: "View ad",
+        title: `${k.label} was a ${k.status === "late_hit" ? "late hit" : "hit"} and is now off everywhere`,
+        detail: `${podById(k.podId)?.name ?? "Unassigned"} · ${copies.length === 1 ? "its only copy" : `all ${copies.length} copies`}: ${reasons} · ${usd(spend)} spend in the week before`,
+        href: "#/rankings?status=hits_off",
+        action: "See hits turned off",
       };
       return { alert, spend };
     })

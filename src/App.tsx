@@ -199,7 +199,7 @@ export default function App() {
         )}
         {meta.error && <Empty>Couldn't reach the API: {meta.error.message}</Empty>}
         {m && path === "dashboard" && <DashboardPage meta={m} range={range} setRange={setRange} />}
-        {m && path === "rankings" && <RankingsPage meta={m} range={range} setRange={setRange} initialPost={route.params.get("post")} />}
+        {m && path === "rankings" && <RankingsPage meta={m} range={range} setRange={setRange} initialPost={route.params.get("post")} initialStatus={route.params.get("status")} />}
         {m && path === "pods" && <PodsPage meta={m} range={range} setRange={setRange} />}
         {m && path === "tagging" && <TaggingPage meta={m} onChanged={refresh} />}
         {m && path === "naming" && <NamingToolPage meta={m} />}
