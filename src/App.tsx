@@ -5,6 +5,7 @@ import type { Range } from "./components/HeaderControls.tsx";
 import { Empty, Icon, type IconName } from "./components/ui.tsx";
 import { shortDate } from "./format.ts";
 import { DashboardPage } from "./pages/Dashboard.tsx";
+import { applyAddedPods } from "./podColors.ts";
 import { CoveragePage } from "./pages/Coverage.tsx";
 import { IncrementalityPage } from "./pages/Incrementality.tsx";
 import { InsightsPage } from "./pages/Insights.tsx";
@@ -90,7 +91,9 @@ export default function App() {
   const [hideExpiry, setHideExpiry] = useState(false);
   const { theme, toggle } = useTheme();
   const meta = useApi<MetaResponse>(`/api/meta?v=${metaVersion}`);
+  // Pods added in Settings must be registered before any page renders them.
   const m = meta.data;
+  if (m) applyAddedPods(m.pods);
 
   useEffect(() => {
     const onHash = () => {

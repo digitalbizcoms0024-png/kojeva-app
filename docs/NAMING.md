@@ -8,6 +8,12 @@ Testing") just lead with the name ("Shameer | Static 3 | Negative Marketing #2")
 sets start with `ME`, `QW`, `TV` or `YD` ("ME | R2-S12 | Statics"). Ad names are mostly free-form
 and carry no meaning (e.g. "HxM").
 
+**Added pods** (Settings → Pods & agency → Added pods) are teams or partners beyond the four
+strategists, matched by a **prefix** that is one of the ad set name's `|` parts: Trybe's ad sets are
+`TRYBE | <creator> | <angle>` ("TRYBE | Larissa V | Jawline Angle"). They're counted like any pod.
+Up to three, each with a validated color (`POD_SLOTS` in `shared/taxonomy.ts`); adding or removing one
+re-credits every ad except hand-set ones.
+
 First match wins:
 1. **Set by hand** in the app. Never overwritten by a sync.
 2. **Pod code** in a standard ad name (`HAR-…`, `DHI-…`, `SHA-…`, `ALI-…`).

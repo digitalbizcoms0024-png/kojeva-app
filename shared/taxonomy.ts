@@ -1,21 +1,59 @@
 // Controlled vocabularies for creative tags. Keys are what appears in ad names;
 // values are display labels. Extend these as the team adds new angles/formats.
 
-export const PODS = [
+export interface Group {
+  id: string;
+  code: string;
+  name: string;
+  color: string;
+  /** Added pods only: the ad set name part that credits them ("TRYBE" in "TRYBE | Larissa V | …"). */
+  prefix?: string | null;
+  /** Added pods only: which of POD_SLOTS gives their color. */
+  slot?: number | null;
+}
+
+/** The four in-house pods, matched by strategist name in ad set names. */
+export const PODS: readonly Group[] = [
   { id: "harris", code: "HAR", name: "Harris", color: "#2a78d6" },
   { id: "dhia", code: "DHI", name: "Dhia", color: "#854494" },
   { id: "shameer", code: "SHA", name: "Shameer", color: "#25afd2" },
   { id: "ali", code: "ALI", name: "Ali", color: "#d6809c" },
+];
+
+/**
+ * Colors for pods added in Settings, in order (light / dark). Validated with the dataviz palette
+ * checker after the four built-in pods, both modes (Oct 2026). Never generated: when all are taken,
+ * no more pods can be added.
+ */
+export const POD_SLOTS = [
+  { light: "#6250d6", dark: "#9085e9" }, // violet
+  { light: "#1baf7a", dark: "#199e70" }, // aqua
+  { light: "#eb6834", dark: "#d95926" }, // orange
 ] as const;
 
 /** The agency that produced ads before the in-house pods started. Not a pod, but ranked beside them. */
-export const AGENCY = { id: "agency", code: "AGY", name: "Agency", color: "#7d7979" } as const;
+export const AGENCY: Group = { id: "agency", code: "AGY", name: "Agency", color: "#7d7979" };
 
-/** Everyone ads can be credited to: the 4 pods, then the agency. */
-export const GROUPS = [...PODS, AGENCY] as const;
+let added: Group[] = [];
 
-export type PodCode = (typeof GROUPS)[number]["code"];
-export type PodId = (typeof GROUPS)[number]["id"];
+/**
+ * Everyone ads can be credited to: the built-in pods, pods added in Settings, then the agency.
+ * Updated in place by setAddedPods (the Worker loads them per data version, the app from /api/meta).
+ */
+export const GROUPS: Group[] = [...PODS, AGENCY];
+
+export function setAddedPods(list: Group[]) {
+  added = [...list].sort((a, b) => (a.slot ?? 0) - (b.slot ?? 0));
+  GROUPS.splice(0, GROUPS.length, ...PODS, ...added, AGENCY);
+}
+
+/** Every pod (built-in and added), without the agency. */
+export function allPods(): Group[] {
+  return [...PODS, ...added];
+}
+
+export type PodCode = string;
+export type PodId = string;
 
 export function podByCode(code: string) {
   return GROUPS.find((p) => p.code === code.toUpperCase()) ?? null;

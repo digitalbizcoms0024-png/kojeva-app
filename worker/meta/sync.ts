@@ -1,5 +1,6 @@
 // Pulls ads and daily insights from Meta into D1. See docs/ROADMAP.md → Phase 1.
 import { bumpVersion } from "../cache.ts";
+import { loadAddedPods } from "../pods.ts";
 import { attributePod, DEFAULT_ATTRIBUTION, detectPodsStart, type AttributionSettings } from "../../shared/attribution.ts";
 import { classify } from "../../shared/classify.ts";
 import { buildConcepts } from "../../shared/concepts.ts";
@@ -198,6 +199,7 @@ async function setSetting(db: D1Database, key: string, value: unknown) {
 
 /** Recomputes pod, tags and concepts for every post, never touching manual values. */
 export async function attribute(db: D1Database) {
+  await loadAddedPods(db);
   const [{ results: ads }, { results: stored }, prefix, attr] = await Promise.all([
     db.prepare("SELECT id, post_id, name, adset_id, adset_name, created_time, concept_id FROM ads").all<{
       id: string;

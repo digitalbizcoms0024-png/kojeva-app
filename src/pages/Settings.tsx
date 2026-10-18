@@ -3,6 +3,7 @@ import type { ConnectionStatus, MetaResponse, Persona } from "../../shared/api.t
 import { useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
 import { PageHeader, PodChip, SectionTitle } from "../components/ui.tsx";
+import { POD_SLOTS } from "../../shared/taxonomy.ts";
 import { dateTime, shortDate, TW_MODEL_LABEL } from "../format.ts";
 
 function utcDay(offset: number): string {
@@ -420,6 +421,73 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
   );
 }
 
+/** Pods beyond the built-in four, matched by an ad set name part; up to POD_SLOTS.length. */
+function AddedPods({ meta, onSaved }: { meta: MetaResponse; onSaved: () => void }) {
+  const [name, setName] = useState("");
+  const [prefix, setPrefix] = useState("");
+  const { busy, run, note } = useSave(onSaved);
+  const added = meta.pods.filter((p) => p.prefix);
+  const full = added.length >= POD_SLOTS.length;
+  const add = async () => {
+    if (await run("/api/pods", "POST", { name: name.trim(), prefix: prefix.trim() }, `Added ${name.trim()}; its ads have been credited.`)) {
+      setName("");
+      setPrefix("");
+    }
+  };
+  return (
+    <div className="mt-5 border-t border-divider pt-4">
+      <h3 className="font-extrabold text-ink">Added pods</h3>
+      <p className="mb-2 max-w-[70ch] text-xs text-ink-3">
+        For teams or partners beyond the four strategists. Ad sets with the prefix as one of their parts ("TRYBE | Larissa V | …") are credited to the pod
+        and counted like any pod. Up to {POD_SLOTS.length}, each with its own tested color.
+      </p>
+      {added.length > 0 && (
+        <ul className="mb-3 flex flex-col gap-1.5">
+          {added.map((p) => (
+            <li key={p.id} className="flex flex-wrap items-center gap-3 text-sm">
+              <PodChip podId={p.id} />
+              <span className="text-ink-3">ad sets with "{p.prefix}" · code {p.code}</span>
+              <button
+                className="btn btn-ghost py-0 text-sm text-bad"
+                disabled={busy || !meta.canEdit}
+                onClick={() => {
+                  if (confirm(`Remove ${p.name}? Its ads go back to automatic crediting (or Needs Tagging).`))
+                    void run(`/api/pods/${p.id}`, "DELETE", {}, `Removed ${p.name}.`);
+                }}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="flex flex-wrap items-start gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim() && prefix.trim()) void add();
+        }}
+      >
+        <input aria-label="Pod name" value={name} onChange={(e) => setName(e.target.value)} maxLength={30} placeholder="Name, e.g. Trybe" className={`${field} min-w-44`} disabled={!meta.canEdit || full} />
+        <input
+          aria-label="Ad set prefix"
+          value={prefix}
+          onChange={(e) => setPrefix(e.target.value.toUpperCase())}
+          maxLength={12}
+          placeholder="Ad set prefix, e.g. TRYBE"
+          className={`${field} min-w-52`}
+          disabled={!meta.canEdit || full}
+        />
+        <button className={secondary} disabled={!name.trim() || !prefix.trim() || busy || !meta.canEdit || full}>
+          Add pod
+        </button>
+        {full && <span className="self-center text-xs text-ink-3">All {POD_SLOTS.length} colors are in use; remove a pod to add another.</span>}
+      </form>
+      <div className="mt-2">{note}</div>
+    </div>
+  );
+}
+
 function AttributionCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => void }) {
   const a = meta.attribution;
   const [codes, setCodes] = useState(a.agencyPrefixes.join(", "));
@@ -448,10 +516,11 @@ function AttributionCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () =>
         {meta.pods.map((p) => (
           <span key={p.id} className="flex items-center gap-2">
             <PodChip podId={p.id} />
-            <span className="num text-xs text-ink-3">{p.code}</span>
+            <span className="num text-xs text-ink-3">{p.prefix ? `ad sets with "${p.prefix}"` : p.code}</span>
           </span>
         ))}
       </div>
+      <AddedPods meta={meta} onSaved={onSaved} />
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <Labeled label="Agency ad set codes" hint="First part of the ad set name, comma separated.">
           <input id="a-codes" value={codes} onChange={(e) => setCodes(e.target.value)} className={field} disabled={!meta.canEdit} />

@@ -72,6 +72,7 @@ describe("launches per week", () => {
       ["dhia", [1, 0, 0]],
       ["shameer", [0, 0, 0]],
       ["ali", [0, 0, 0]],
+      ["trybe", [0, 0, 0]],
       ["agency", [0, 0, 0]],
     ]);
   });

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { MetaResponse } from "../../shared/api.ts";
 import { buildAdName, parseAdName, validateNameFields, type NameFields } from "../../shared/naming.ts";
-import { ANGLES, FORMATS, HOOKS, LANDING_PAGES, PODS, podByCode, type PodCode } from "../../shared/taxonomy.ts";
+import { allPods, ANGLES, FORMATS, HOOKS, LANDING_PAGES, podByCode, type PodCode } from "../../shared/taxonomy.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
 import { Icon, PageHeader, PodSwatch, SectionTitle, Segmented } from "../components/ui.tsx";
 
@@ -108,7 +108,7 @@ export function NamingToolPage({ meta }: { meta: MetaResponse }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Pod">
               <select value={f.podCode} onChange={(e) => set("podCode", e.target.value as PodCode)} className="field">
-                {PODS.map((p) => (
+                {allPods().map((p) => (
                   <option key={p.code} value={p.code}>
                     {p.name} → {p.code}
                   </option>

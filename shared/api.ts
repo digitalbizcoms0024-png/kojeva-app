@@ -67,7 +67,8 @@ export interface MetaResponse {
   lastSync: { source: string; finishedAt: string | null; status: string; message: string | null } | null;
   latestDate: string | null;
   targets: Targets;
-  pods: { id: string; code: string; name: string; color: string; kind: "pod" | "agency" }[];
+  /** Built-in pods, pods added in Settings (with their ad set prefix and color slot), then the agency. */
+  pods: { id: string; code: string; name: string; color: string; kind: "pod" | "agency"; prefix: string | null; slot: number | null }[];
   attribution: { agencyPrefixes: string[]; podsStartDate: string | null; detected: boolean };
   editors: Editor[];
   /** Whether the signed-in viewer can make changes (Cloudflare Access is on). */

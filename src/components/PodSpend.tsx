@@ -1,12 +1,16 @@
 import type { PodRow, PodsResponse } from "../../shared/api.ts";
 import { cpa, roas, twRoas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
+import { GROUPS } from "../../shared/taxonomy.ts";
 import { downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
 import { previousPeriod, type Range } from "./HeaderControls.tsx";
 import { CpaValue, CsvButton, PodChip, RoasValue, SectionTitle } from "./ui.tsx";
 
-const ORDER = ["harris", "dhia", "shameer", "ali", "agency"];
-const order = (r: PodRow) => (r.podId ? (ORDER.indexOf(r.podId) + 1 || ORDER.length) : ORDER.length + 1);
+// Built-in pods, added pods, the agency, then unassigned.
+const order = (r: PodRow) => {
+  const i = r.podId ? GROUPS.findIndex((g) => g.id === r.podId) : -1;
+  return i < 0 ? GROUPS.length : i;
+};
 
 /** Pods, the agency and unassigned spend for the selected range, in a fixed order. */
 function rowsOf(data: PodsResponse | null): PodRow[] {

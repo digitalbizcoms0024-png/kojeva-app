@@ -1,7 +1,7 @@
 // Decides which pod (or the agency) a post belongs to.
 // See docs/NAMING.md → "How a post gets its pod".
 import { parseAdName, suggestPodCode } from "./naming.ts";
-import { AGENCY, PODS, type PodCode } from "./taxonomy.ts";
+import { AGENCY, allPods, type PodCode } from "./taxonomy.ts";
 
 export type PodSource = "manual" | "name" | "adset" | "era";
 
@@ -23,11 +23,15 @@ export const DEFAULT_ATTRIBUTION: AttributionSettings = {
   podsStartDate: null,
 };
 
-/** Strategist named in an ad set, as a separate word: "IH | Harris | KOJEVA 3" → HAR. */
+/**
+ * Pod named in an ad set: a built-in strategist as a separate word ("IH | Harris | KOJEVA 3" → HAR),
+ * or an added pod's prefix as one of the "|" parts ("TRYBE | Larissa V | Jawline Angle" → Trybe).
+ */
 export function podFromAdSetName(adsetName: string | null): PodCode | null {
   if (!adsetName) return null;
   const words = new Set(adsetName.toUpperCase().split(/[^A-Z]+/).filter(Boolean));
-  const found = PODS.filter((p) => words.has(p.name.toUpperCase()));
+  const parts = new Set(adsetName.split("|").map((s) => s.trim().toUpperCase()).filter(Boolean));
+  const found = allPods().filter((p) => (p.prefix ? parts.has(p.prefix.toUpperCase()) : words.has(p.name.toUpperCase())));
   // Two strategists in one ad set name is ambiguous; leave it for a human.
   return found.length === 1 ? found[0]!.code : null;
 }

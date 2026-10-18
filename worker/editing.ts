@@ -4,11 +4,13 @@ import { Hono } from "hono";
 import type { AssignmentPatch, Editor } from "../shared/api.ts";
 import type { AttributionSettings } from "../shared/attribution.ts";
 import type { Targets } from "../shared/metrics.ts";
-import { ANGLES, FORMATS, GROUPS, HOOKS, LANDING_PAGES, AWARENESS } from "../shared/taxonomy.ts";
+import { ANGLES, FORMATS, GROUPS, HOOKS, LANDING_PAGES, AWARENESS, POD_SLOTS } from "../shared/taxonomy.ts";
 import { requireAccess } from "./access.ts";
 import { randomToken } from "./crypto.ts";
 import type { AppEnv } from "./env.ts";
+import { bumpVersion } from "./cache.ts";
 import { attribute } from "./meta/sync.ts";
+import { loadAddedPods } from "./pods.ts";
 import { cleanPersona, loadPersonas, MAX_PERSONAS, newPersonaId, nextSort, relabelUnplaced } from "./personas.ts";
 
 export const editing = new Hono<AppEnv>();
@@ -209,6 +211,63 @@ editing.delete("/editors/:id", requireAccess, async (c) => {
     db.prepare("UPDATE assignments SET editor_id = NULL WHERE editor_id = ?1").bind(id),
     db.prepare("DELETE FROM editors WHERE id = ?1").bind(id),
   ]);
+  return c.json({ ok: true });
+});
+
+// ---- Pods ----
+
+/**
+ * Adds a pod matched by an ad set name part ({ name, prefix }). It takes the next free color
+ * slot (shared/taxonomy.ts → POD_SLOTS); ads are re-credited right away, manual pods untouched.
+ */
+editing.post("/pods", requireAccess, async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json<{ name?: unknown; prefix?: unknown }>().catch(() => null);
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const prefix = typeof body?.prefix === "string" ? body.prefix.trim().toUpperCase() : "";
+  if (!/^[\p{L}\p{N} .'-]{2,30}$/u.test(name)) return c.json({ error: "Give the pod a name of 2–30 letters." }, 400);
+  if (!/^[A-Z0-9]{2,12}$/.test(prefix)) return c.json({ error: "The ad set prefix must be 2–12 letters or numbers, like TRYBE." }, 400);
+  const { results: pods } = await db.prepare("SELECT id, code, name, prefix, slot FROM pods").all<{ id: string; code: string; name: string; prefix: string | null; slot: number | null }>();
+  if (pods.some((p) => p.name.toLowerCase() === name.toLowerCase())) return c.json({ error: "A pod with that name exists." }, 400);
+  if (pods.some((p) => (p.prefix ?? p.name).toUpperCase() === prefix)) return c.json({ error: "Another pod already uses that prefix." }, 400);
+  const attr = await db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>();
+  const agency = (attr ? (JSON.parse(attr.value) as Partial<AttributionSettings>).agencyPrefixes : undefined) ?? ["ME", "QW", "TV", "YD"];
+  if (agency.some((a) => a.toUpperCase() === prefix)) return c.json({ error: `${prefix} is an agency code (Settings → Pods & agency).` }, 400);
+  const used = new Set(pods.map((p) => p.slot).filter((s) => s != null));
+  const slot = POD_SLOTS.findIndex((_, i) => !used.has(i));
+  if (slot < 0) return c.json({ error: `All ${POD_SLOTS.length} colors for added pods are in use; remove one first.` }, 400);
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `pod-${slot}`;
+  if (pods.some((p) => p.id === id)) return c.json({ error: "A pod with that name exists." }, 400);
+  const base = name.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase().padEnd(3, "X");
+  let code = base;
+  for (let n = 2; pods.some((p) => p.code === code); n++) code = `${base.slice(0, 2)}${n}`;
+  await db
+    .prepare("INSERT INTO pods (id, code, name, color, kind, prefix, slot) VALUES (?1, ?2, ?3, ?4, 'pod', ?5, ?6)")
+    .bind(id, code, name, POD_SLOTS[slot]!.light, prefix, slot)
+    .run();
+  await bumpVersion(db);
+  await loadAddedPods(db);
+  await attribute(db);
+  return c.json({ id, code, slot }, 201);
+});
+
+/** Removes an added pod: its ads go back to automatic crediting, its editors keep no pod. */
+editing.delete("/pods/:id", requireAccess, async (c) => {
+  const db = c.env.DB;
+  const id = c.req.param("id");
+  const row = await db.prepare("SELECT prefix FROM pods WHERE id = ?1").bind(id).first<{ prefix: string | null }>();
+  if (!row) return c.json({ error: "Not found" }, 404);
+  if (!row.prefix) return c.json({ error: "Built-in pods can't be removed." }, 400);
+  await db.batch([
+    db.prepare("UPDATE assignments SET pod_id = NULL, pod_source = NULL WHERE pod_id = ?1").bind(id),
+    db.prepare("UPDATE editors SET pod_id = NULL WHERE pod_id = ?1").bind(id),
+    db.prepare("DELETE FROM concepts WHERE pod_id = ?1").bind(id),
+    db.prepare("UPDATE ads SET concept_id = NULL WHERE concept_id NOT IN (SELECT id FROM concepts)"),
+    db.prepare("DELETE FROM pods WHERE id = ?1").bind(id),
+  ]);
+  await bumpVersion(db);
+  await loadAddedPods(db);
+  await attribute(db);
   return c.json({ ok: true });
 });
 

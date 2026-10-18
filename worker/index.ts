@@ -34,6 +34,7 @@ import { connection, sync } from "./meta/routes.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
 import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL, toTw, twCoverage } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
+import { loadAddedPods } from "./pods.ts";
 import { loadPersonas } from "./personas.ts";
 import { tripleWhale, twStatus } from "./triplewhale.ts";
 
@@ -48,6 +49,8 @@ const UNCACHED = /^\/api\/(connection|sync|ingest)(\/|$)/;
 const SELF_BUMPING = /^\/api\/(sync|ingest)(\/|$)/;
 app.use("*", async (c, next) => {
   const path = new URL(c.req.url).pathname;
+  // Pods added in Settings, for name matching and validation in this request.
+  await loadAddedPods(c.env.DB);
   if (c.req.method !== "GET") {
     await next();
     if (c.res.status < 400 && !SELF_BUMPING.test(path)) await bumpVersion(c.env.DB).catch(() => undefined);
@@ -115,7 +118,7 @@ app.get("/meta", async (c) => {
     db
       .prepare("SELECT source, finished_at, status, message FROM sync_runs ORDER BY id DESC LIMIT 1")
       .first<{ source: string; finished_at: string | null; status: string; message: string | null }>(),
-    db.prepare("SELECT id, code, name, color, kind FROM pods ORDER BY kind DESC, name").all<MetaResponse["pods"][number]>(),
+    db.prepare("SELECT id, code, name, color, kind, prefix, slot FROM pods ORDER BY kind DESC, name").all<MetaResponse["pods"][number]>(),
     db.prepare("SELECT 1 AS x FROM sync_runs WHERE source = 'meta' AND status = 'ok' LIMIT 1").first(),
     db.prepare("SELECT expires_at FROM meta_connections WHERE id = 1").first<{ expires_at: string | null }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),
