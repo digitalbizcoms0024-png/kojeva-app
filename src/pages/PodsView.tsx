@@ -209,13 +209,29 @@ export function ConceptsTable({
   title?: string;
 }) {
   const [pod, setPod] = useState(filter.pod ?? "");
-  const { data, error } = useApi<ConceptsResponse>(`/api/concepts?${qs({ ...filter, range, pod })}`);
+  const [result, setResult] = useState("");
+  const { data: all, error } = useApi<ConceptsResponse>(`/api/concepts?${qs({ ...filter, range, pod })}`);
+  const keep = (s: string) =>
+    !result || (result === "hits" ? s === "hit" || s === "late_hit" : result === "ineligible" ? s === "ineligible" : s === result);
+  const data = all && { ...all, rows: all.rows.filter((k) => keep(k.status)) };
   return (
     <section>
       <SectionTitle
         title={`${title}${data ? ` · ${data.rows.length}` : ""}`}
         right={
           <span className="flex flex-wrap items-center gap-3">
+            <Select
+              label="Result"
+              value={result}
+              onChange={setResult}
+              options={[
+                { value: "", label: "All" },
+                { value: "hits", label: "Hits & late hits" },
+                { value: "miss", label: "Misses" },
+                { value: "testing", label: "Testing" },
+                { value: "ineligible", label: "Not at $100 yet" },
+              ]}
+            />
             <Select
               label="Pod"
               value={pod}
