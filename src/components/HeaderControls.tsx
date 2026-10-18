@@ -3,7 +3,7 @@ import type { MetaResponse } from "../../shared/api.ts";
 import { RANGE_LABELS } from "../api.ts";
 import { dateTime, shortDate } from "../format.ts";
 
-/** "week" | "month" | "mtd" | "all", or a custom range written as "custom:YYYY-MM-DD:YYYY-MM-DD". */
+/** "week" | "14d" | "month" | "mtd" | "all", or a custom range written as "custom:YYYY-MM-DD:YYYY-MM-DD". */
 export type Range = keyof typeof RANGE_LABELS | `custom:${string}:${string}`;
 
 export function customRange(r: Range): { from: string; to: string } | null {
@@ -15,7 +15,7 @@ export function customRange(r: Range): { from: string; to: string } | null {
 export function rangeLabel(r: Range): string {
   const c = customRange(r);
   if (c) return `${shortDate(c.from)} – ${shortDate(c.to)}`;
-  return r === "week" ? "in the last 7 days" : r === "month" ? "in the last 30 days" : r === "mtd" ? "this month to date" : "of all time";
+  return r === "week" ? "in the last 7 days" : r === "14d" ? "in the last 14 days" : r === "month" ? "in the last 30 days" : r === "mtd" ? "this month to date" : "of all time";
 }
 
 export function shiftDay(day: string, delta: number): string {
@@ -39,8 +39,8 @@ export function previousPeriod(range: Range, latest: string | null): { from: str
     const prevLast = new Date(Date.UTC(y, m - 1, 0)).getUTCDate();
     return { from: prevFirst, to: `${prevFirst.slice(0, 8)}${String(Math.min(d, prevLast)).padStart(2, "0")}`, label: "vs same days last month" };
   }
-  const days = range === "week" ? 7 : 30;
-  return { from: shiftDay(latest, -2 * days + 1), to: shiftDay(latest, -days), label: range === "week" ? "vs previous 7 days" : "vs previous 30 days" };
+  const days = range === "week" ? 7 : range === "14d" ? 14 : 30;
+  return { from: shiftDay(latest, -2 * days + 1), to: shiftDay(latest, -days), label: `vs previous ${days} days` };
 }
 
 function RangeSwitch({ range, setRange, latest }: { range: Range; setRange: (r: Range) => void; latest: string | null }) {

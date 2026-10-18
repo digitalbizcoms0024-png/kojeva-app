@@ -341,7 +341,6 @@ const ATRIA_FIELDS = [
 function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: string; range: Range; targets: Targets; rank: number; sortLabel: string }) {
   const { data, error } = useApi<PostDetail>(`/api/posts/${encodeURIComponent(postId)}?${qs({ range })}`);
   const attr = useApi<AttributionResponse>(`/api/attribution?${qs({ range, level: "post", post: postId })}`);
-  const inc = attr.data?.rows[0]?.incremental ?? null;
   const click7 = attr.data?.rows[0]?.click7 ?? null;
   if (error) return <Empty>Couldn't load this ad: {error.message}</Empty>;
   if (!data || data.postId !== postId) return <Empty>Loading…</Empty>;
@@ -460,15 +459,6 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
           <Cell label="Purch. · 7-day click">{click7 ? int(click7.purchases) : "—"}</Cell>
           <Cell label="CPA · 7-day click">{dollars(attributedCpa(click7, data.totals.spendCents))}</Cell>
           <Cell label="ROAS · 7-day click">{ratio(attributedRoas(click7, data.totals.spendCents))}</Cell>
-          <Cell label="Purch. · Incremental">{inc ? inc.purchases.toLocaleString("en-US", { maximumFractionDigits: 1 }) : "—"}</Cell>
-          <Cell label="CPA · Incremental">{dollars(attributedCpa(inc, data.totals.spendCents))}</Cell>
-          <Cell label="ROAS · Incremental">{ratio(attributedRoas(inc, data.totals.spendCents))}</Cell>
-        </div>
-        <div className="mt-1 text-xs text-ink-3">
-          Incremental = Meta's estimate of purchases that wouldn't have happened without this ad, beside 7-day click (as in Ads Manager); no target colors.{" "}
-          <a href="#/incrementality" className="link">
-            Compare →
-          </a>
         </div>
         <div className="mt-1 text-xs text-ink-3">
           TW = Triple Whale pixel, {TW_MODEL_LABEL}, on Meta's spend. Shown beside Meta's numbers, never added to them.

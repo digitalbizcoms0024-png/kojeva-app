@@ -78,6 +78,11 @@ describe("attribution comparison", () => {
     expect([r.from, r.to, r.total.spendCents]).toEqual(["2026-10-01", "2026-10-15", 120000]);
   });
 
+  it("reads the last 14 days ending on the latest synced day", async () => {
+    const r = await get("range=14d&level=pod");
+    expect([r.from, r.to]).toEqual(["2026-10-02", "2026-10-15"]);
+  });
+
   it("narrows the post level to one post", async () => {
     const r = await get("range=all&level=post&post=p2");
     expect(r.rows.map((x) => x.key)).toEqual(["p2"]);

@@ -93,6 +93,7 @@ async function resolveRange(db: D1Database, q: (k: string) => string | undefined
     return { from, to };
   }
   if (range === "week") return { from: shiftDay(latest, -6), to: latest };
+  if (range === "14d") return { from: shiftDay(latest, -13), to: latest };
   if (range === "mtd") return { from: `${latest.slice(0, 7)}-01`, to: latest };
   if (range === "all") return { from: "2000-01-01", to: latest };
   return { from: shiftDay(latest, -29), to: latest };
