@@ -59,6 +59,10 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   spend first, at most 3.
 - **Hit** (✓): a concept whose judging window closed in the last 7 days as a hit.
 - **Needs a pod** (!): posts with spend in the last 7 days that no pod or the agency is credited with.
+- **Hit turned off** (!): a copy of a hit or late hit (same video/image by `asset_id`, else the same post, in any ad set) that
+  spent in the 7 days before the last 3 synced days and is now off: an off status in Meta (paused, ad set/campaign paused,
+  archived, deleted, disapproved, with issues) or no spend in the last 3 synced days (owner, Oct 18: any copy counts).
+  One alert per concept, at most 3; each turn-off shows for about a week. `hitsTurnedOff`.
 - Computed on read from stored data; no D1 writes.
 
 ## Pod suggestions (Needs Tagging)
