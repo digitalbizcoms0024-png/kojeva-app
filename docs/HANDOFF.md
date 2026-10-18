@@ -23,6 +23,10 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
 3. **Personas**: the nightly Atria task drafts them; a person confirms in Settings → Personas. The
    Coverage Map stays empty until then.
 4. If reads still run out, the next step is Workers Paid ($5/mo). The owner chose to stay free.
+5. **Oct 18: limit hit again** after two 7-day syncs. Measured (`scripts/measure-reads.ts`, 52k
+   ad_daily rows): a cold Dashboard read 3.5M rows, because several queries re-scanned all of
+   ad_daily (first spend per post, concept bounds with a window function, fatigue's OR range,
+   a sub-select per post). Rewritten to read by key from `ads`: a cold Dashboard is now ~440k.
 
 ## Decisions made with the owner (don't re-ask)
 - **Hit rule = either**: CPA ≤ $14 **or** ROAS ≥ 1.7 (migration 0011 sets it).

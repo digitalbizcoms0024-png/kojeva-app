@@ -31,7 +31,7 @@ export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null;
     db
       .prepare(
         `SELECT COUNT(DISTINCT a.post_id) AS posts, COALESCE(SUM(d.spend_cents), 0) AS spend_cents
-         FROM ad_daily d JOIN ads a ON a.id = d.ad_id
+         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
          LEFT JOIN assignments s ON s.post_id = a.post_id
          WHERE d.date BETWEEN ?1 AND ?2 AND d.spend_cents > 0 AND s.pod_id IS NULL`,
       )

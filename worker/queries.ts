@@ -3,6 +3,7 @@ import { classify } from "../shared/classify.ts";
 import { memoize } from "./cache.ts";
 import { loadFatigue } from "./fatigue.ts";
 import {
+  addTotals,
   DEFAULT_TARGETS,
   hitStatus,
   judgingWindowEnd,
@@ -10,6 +11,7 @@ import {
   type HitStatus,
   type Targets,
   type Totals,
+  ZERO_TOTALS,
 } from "../shared/metrics.ts";
 
 type Row = Record<string, unknown>;
@@ -51,28 +53,69 @@ export async function getLatestDate(db: D1Database): Promise<string | null> {
   return row?.d ?? null;
 }
 
-/** Post-level facts that don't depend on the selected date range. */
-const POST_BASE_SQL = `
-  SELECT p.id AS post_id, p.media_type, p.thumbnail_url,
-    (SELECT x.name FROM ads x WHERE x.post_id = p.id ORDER BY x.created_time, x.id LIMIT 1) AS name,
-    (SELECT COUNT(*) FROM ads x WHERE x.post_id = p.id) AS copies,
-    (SELECT MAX(x.status = 'ACTIVE') FROM ads x WHERE x.post_id = p.id) AS active,
-    (SELECT MIN(x.created_time) FROM ads x WHERE x.post_id = p.id) AS launched,
-    (SELECT x.concept_id FROM ads x WHERE x.post_id = p.id ORDER BY x.created_time, x.id LIMIT 1) AS concept_id,
-    (SELECT x.adset_name FROM ads x WHERE x.post_id = p.id ORDER BY x.created_time, x.id LIMIT 1) AS adset_name,
-    (SELECT t.tags FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
-       WHERE x.post_id = p.id AND t.status = 'tagged' ORDER BY x.created_time, x.id LIMIT 1) AS atria_tags,
-    s.pod_id, s.pod_source, s.editor_id, e.name AS editor_name,
-    s.angle, s.format, s.hook, s.landing_page, s.tags_source, s.awareness, s.belief_group, s.persona_id, s.offer,
-    (SELECT t.awareness FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
-       WHERE x.post_id = p.id AND t.labeled_at IS NOT NULL ORDER BY x.created_time, x.id LIMIT 1) AS l_awareness,
-    (SELECT t.offer FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
-       WHERE x.post_id = p.id AND t.offer IS NOT NULL ORDER BY x.created_time, x.id LIMIT 1) AS l_offer,
-    (SELECT t.persona_id FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
-       WHERE x.post_id = p.id AND t.persona_id IS NOT NULL ORDER BY x.created_time, x.id LIMIT 1) AS l_persona
-  FROM posts p
-  LEFT JOIN assignments s ON s.post_id = p.id
-  LEFT JOIN editors e ON e.id = s.editor_id`;
+/**
+ * First day each post spent: per ad, the first spending row by the (ad_id, date) key, so it reads
+ * about one row per ad instead of every ad's whole history (D1 bills rows read; see cache.ts).
+ */
+export function postFirstSpendSql(where = "") {
+  return `SELECT a.post_id, MIN((SELECT d.date FROM ad_daily d WHERE d.ad_id = a.id AND d.spend_cents > 0 ORDER BY d.date LIMIT 1)) AS first_date
+    FROM ads a ${where} GROUP BY a.post_id HAVING first_date IS NOT NULL`;
+}
+
+/**
+ * Post-level facts that don't depend on the selected date range: the post, its assignment, and
+ * facts from its ads (the first ad by created time names it). Two flat reads, combined here; a
+ * sub-select per post costs D1 a dozen reads per post.
+ */
+async function loadPostBase(db: D1Database, postId?: string): Promise<Row[]> {
+  const where = postId ? "WHERE p.id = ?1" : "";
+  const [posts, ads] = await Promise.all([
+    db
+      .prepare(
+        `SELECT p.id AS post_id, p.media_type, p.thumbnail_url,
+           s.pod_id, s.pod_source, s.editor_id, e.name AS editor_name,
+           s.angle, s.format, s.hook, s.landing_page, s.tags_source, s.awareness, s.belief_group, s.persona_id, s.offer
+         FROM posts p
+         LEFT JOIN assignments s ON s.post_id = p.id
+         LEFT JOIN editors e ON e.id = s.editor_id ${where}`,
+      )
+      .bind(...(postId ? [postId] : []))
+      .all<Row>(),
+    db
+      .prepare(
+        `SELECT x.id, x.post_id, x.name, x.status, x.created_time, x.concept_id, x.adset_name,
+           t.status AS t_status, t.tags, t.labeled_at, t.awareness AS t_awareness, t.offer AS t_offer, t.persona_id AS t_persona
+         FROM ads x LEFT JOIN atria_assets t ON t.asset_id = x.asset_id ${postId ? "WHERE x.post_id = ?1" : ""}`,
+      )
+      .bind(...(postId ? [postId] : []))
+      .all<Row>(),
+  ]);
+  const byPost = new Map<string, Row[]>();
+  for (const ad of ads.results) {
+    const list = byPost.get(String(ad.post_id));
+    if (list) list.push(ad);
+    else byPost.set(String(ad.post_id), [ad]);
+  }
+  const order = (x: Row, y: Row) => String(x.created_time ?? "").localeCompare(String(y.created_time ?? "")) || String(x.id).localeCompare(String(y.id));
+  return posts.results.map((p) => {
+    const list = (byPost.get(String(p.post_id)) ?? []).sort(order);
+    const first = list[0];
+    const find = (ok: (ad: Row) => boolean) => list.find(ok);
+    return {
+      ...p,
+      name: first?.name ?? null,
+      copies: list.length,
+      active: list.some((ad) => ad.status === "ACTIVE") ? 1 : 0,
+      launched: list.find((ad) => ad.created_time != null)?.created_time ?? null,
+      concept_id: first?.concept_id ?? null,
+      adset_name: first?.adset_name ?? null,
+      atria_tags: find((ad) => ad.t_status === "tagged")?.tags ?? null,
+      l_awareness: find((ad) => ad.labeled_at != null)?.t_awareness ?? null,
+      l_offer: find((ad) => ad.t_offer != null)?.t_offer ?? null,
+      l_persona: find((ad) => ad.t_persona != null)?.t_persona ?? null,
+    };
+  });
+}
 
 /** Themes and core desires across a concept's Atria-tagged assets (GROUP_CONCAT of JSON, \x1e-separated). */
 function atriaUnion(raw: unknown): { atriaThemes: string[]; atriaDesires: string[]; atriaHooks: string[]; atriaPersonas: string[] } {
@@ -103,16 +146,11 @@ export function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
 
 async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
   const [targets, latest] = await Promise.all([getTargets(db), getLatestDate(db)]);
-  const [bounds, all] = await Promise.all([
-    // First spend, and the first day any single ad's running spend reached the minimum.
+  const minSpend = targets.minTestSpend * 100;
+  const [meta, rows] = await Promise.all([
     db
       .prepare(
-        `WITH daily AS (
-           SELECT a.concept_id, d.date, d.spend_cents,
-             SUM(d.spend_cents) OVER (PARTITION BY d.ad_id ORDER BY d.date) AS running
-           FROM ad_daily d JOIN ads a ON a.id = d.ad_id
-           WHERE a.concept_id IS NOT NULL)
-         SELECT c.id, c.pod_id, c.label, c.adset_name,
+        `SELECT c.id, c.pod_id, c.label, c.adset_name,
            (SELECT COUNT(*) FROM ads x WHERE x.concept_id = c.id) AS ads,
            (SELECT GROUP_CONCAT(x.name, char(10)) FROM ads x WHERE x.concept_id = c.id) AS ad_names,
            (SELECT GROUP_CONCAT(t.tags, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
@@ -134,76 +172,72 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
            (SELECT GROUP_CONCAT(t.persona_id, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
               WHERE x.concept_id = c.id AND t.persona_id IS NOT NULL) AS persona_list,
            (SELECT s.persona_id FROM ads x JOIN assignments s ON s.post_id = x.post_id
-              WHERE x.concept_id = c.id AND s.persona_id IS NOT NULL LIMIT 1) AS manual_persona,
-           MIN(CASE WHEN daily.spend_cents > 0 THEN daily.date END) AS first_date,
-           MAX(CASE WHEN daily.spend_cents > 0 THEN daily.date END) AS last_date,
-           MIN(CASE WHEN daily.running >= ?1 THEN daily.date END) AS qualified_on
-         FROM concepts c JOIN daily ON daily.concept_id = c.id
-         GROUP BY c.id
-         HAVING first_date IS NOT NULL`,
+              WHERE x.concept_id = c.id AND s.persona_id IS NOT NULL LIMIT 1) AS manual_persona
+         FROM concepts c`,
       )
-      .bind(targets.minTestSpend * 100)
       .all<Row>(),
+    // Every day of every ad in a concept, read once (ads first, then each ad's days by key; a window
+    // function or GROUP BY here costs D1 several reads per row). Everything below is computed from it.
     db
       .prepare(
-        `SELECT a.concept_id, ${TOTALS_SQL} FROM ad_daily d JOIN ads a ON a.id = d.ad_id
-         WHERE a.concept_id IS NOT NULL GROUP BY a.concept_id`,
+        `SELECT a.concept_id, a.id, d.date, d.spend_cents, d.impressions, d.link_clicks, d.purchases, d.revenue_cents
+         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
+         WHERE a.concept_id IS NOT NULL`,
       )
-      .all<Row>(),
+      .raw<[string, string, string, number, number, number, number, number]>(),
   ]);
-  const allTime = new Map(all.results.map((r) => [String(r.concept_id), toTotals(r)]));
-  const ends = bounds.results.map((r) => {
-    const firstSpend = String(r.first_date);
-    const qualifiedOn = r.qualified_on == null ? null : String(r.qualified_on);
-    return { r, firstSpend, qualifiedOn, windowEnd: judgingWindowEnd(firstSpend, qualifiedOn, targets) };
+
+  // Per concept: totals by day; per ad: running spend, for the day it reached the minimum.
+  const days = new Map<string, Map<string, Totals>>();
+  const adDays = new Map<string, { concept: string; days: [string, number][] }>();
+  for (const [conceptId, adId, date, spendCents, impressions, linkClicks, purchases, revenueCents] of rows) {
+    let byDay = days.get(conceptId);
+    if (!byDay) days.set(conceptId, (byDay = new Map()));
+    byDay.set(date, addTotals(byDay.get(date) ?? ZERO_TOTALS, { spendCents, impressions, linkClicks, purchases, revenueCents }));
+    let ad = adDays.get(adId);
+    if (!ad) adDays.set(adId, (ad = { concept: conceptId, days: [] }));
+    ad.days.push([date, spendCents]);
+  }
+  const qualified = new Map<string, string>();
+  for (const { concept, days: list } of adDays.values()) {
+    list.sort((x, y) => x[0].localeCompare(y[0]));
+    let running = 0;
+    for (const [date, spend] of list) {
+      running += spend;
+      if (running >= minSpend) {
+        const prev = qualified.get(concept);
+        if (!prev || date < prev) qualified.set(concept, date);
+        break;
+      }
+    }
+  }
+  const series = new Map<string, ({ date: string } & Totals)[]>();
+  for (const [id, byDay] of days) series.set(id, [...byDay].map(([date, t]) => ({ date, ...t })).sort((x, y) => x.date.localeCompare(y.date)));
+  const sum = (list: ({ date: string } & Totals)[], from = "", to = "9999-12-31") =>
+    list.reduce((acc, d) => (d.date >= from && d.date <= to ? addTotals(acc, d) : acc), ZERO_TOTALS);
+
+  const allTime = new Map([...series].map(([id, list]) => [id, sum(list)]));
+  const ends = meta.results.flatMap((r) => {
+    const spent = (series.get(String(r.id)) ?? []).filter((d) => d.spendCents > 0);
+    if (!spent.length) return [];
+    const firstSpend = spent[0]!.date;
+    r.last_date = spent[spent.length - 1]!.date;
+    const qualifiedOn = qualified.get(String(r.id)) ?? null;
+    return [{ r, firstSpend, qualifiedOn, windowEnd: judgingWindowEnd(firstSpend, qualifiedOn, targets) }];
   });
 
-  // Concept totals over each judging window. D1 allows at most 100 bound values per
-  // statement, so 3 values per concept → 33 concepts per query.
-  const windows = new Map<string, Totals>();
-  for (let i = 0; i < ends.length; i += 33) {
-    const chunk = ends.slice(i, i + 33);
-    const values = chunk.map((_, j) => `(?${j * 3 + 1}, ?${j * 3 + 2}, ?${j * 3 + 3})`).join(", ");
-    const { results } = await db
-      .prepare(
-        `WITH w(concept_id, first_date, end_date) AS (VALUES ${values})
-         SELECT w.concept_id, ${TOTALS_SQL}
-         FROM w JOIN ads a ON a.concept_id = w.concept_id
-         JOIN ad_daily d ON d.ad_id = a.id AND d.date BETWEEN w.first_date AND w.end_date
-         GROUP BY w.concept_id`,
-      )
-      .bind(...chunk.flatMap((e) => [String(e.r.id), e.firstSpend, e.windowEnd]))
-      .all<Row>();
-    for (const row of results) windows.set(String(row.concept_id), toTotals(row));
-  }
-
   const base = ends.map((e) => {
-    const window = windows.get(String(e.r.id)) ?? toTotals(undefined);
+    const window = sum(series.get(String(e.r.id)) ?? [], e.firstSpend, e.windowEnd);
     const status = hitStatus(window, { qualified: e.qualifiedOn != null, complete: latest != null && latest >= e.windowEnd }, targets);
     return { ...e, window, status };
   });
 
   // Second look for day-3 misses that kept spending after their judging window.
   const late = new Map<string, { from: string; to: string; totals: Totals }>();
-  const recheck = latest ? base.filter((b) => b.status === "miss" && String(b.r.last_date) > b.windowEnd) : [];
-  for (let i = 0; i < recheck.length; i += 90) {
-    const chunk = recheck.slice(i, i + 90);
-    const { results } = await db
-      .prepare(
-        `SELECT a.concept_id, d.date, ${TOTALS_SQL} FROM ad_daily d JOIN ads a ON a.id = d.ad_id
-         WHERE a.concept_id IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")}) GROUP BY a.concept_id, d.date`,
-      )
-      .bind(...chunk.map((b) => String(b.r.id)))
-      .all<Row>();
-    const days = new Map<string, ({ date: string } & Totals)[]>();
-    for (const row of results) {
-      const id = String(row.concept_id);
-      days.set(id, [...(days.get(id) ?? []), { date: String(row.date), ...toTotals(row) }]);
-    }
-    for (const b of chunk) {
-      const w = lateHitWindow(days.get(String(b.r.id)) ?? [], b.firstSpend, b.windowEnd, latest!, targets);
-      if (w) late.set(String(b.r.id), w);
-    }
+  for (const b of base) {
+    if (!latest || b.status !== "miss" || String(b.r.last_date) <= b.windowEnd) continue;
+    const w = lateHitWindow(series.get(String(b.r.id)) ?? [], b.firstSpend, b.windowEnd, latest, targets);
+    if (w) late.set(String(b.r.id), w);
   }
 
   return base.map(({ r, firstSpend, qualifiedOn, windowEnd, window, status: own }) => {
@@ -254,11 +288,7 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
 async function testWindows(db: D1Database, windowDays: number, postId?: string) {
   const { results } = await db
     .prepare(
-      `WITH first AS (
-         SELECT a.post_id, MIN(d.date) AS first_date
-         FROM ad_daily d JOIN ads a ON a.id = d.ad_id
-         WHERE d.spend_cents > 0 ${postId ? "AND a.post_id = ?2" : ""}
-         GROUP BY a.post_id)
+      `WITH first AS (${postFirstSpendSql(postId ? "WHERE a.post_id = ?2" : "")})
        SELECT f.post_id, f.first_date, ${TOTALS_SQL}
        FROM first f
        JOIN ads a ON a.post_id = f.post_id
@@ -294,27 +324,26 @@ function toAssignment(r: Row): Assignment {
 export async function loadPosts(db: D1Database, from: string, to: string, opts: { postId?: string; concepts?: ConceptResult[] } = {}): Promise<PostSummary[]> {
   const [targets, latest, concepts] = await Promise.all([getTargets(db), getLatestDate(db), opts.concepts ?? loadConcepts(db)]);
   const conceptStatus = new Map(concepts.map((c) => [c.conceptId, c.status]));
-  const where = opts.postId ? "WHERE p.id = ?1" : "";
   const [base, ranged, windows, fatigueByPost] = await Promise.all([
-    db
-      .prepare(`${POST_BASE_SQL} ${where}`)
-      .bind(...(opts.postId ? [opts.postId] : []))
-      .all<Row>(),
+    // The range-independent parts are computed once per data version (see cache.ts).
+    opts.postId ? loadPostBase(db, opts.postId) : memoize(db, "post-base", () => loadPostBase(db)),
     db
       .prepare(
         `SELECT a.post_id, ${TOTALS_SQL}
-         FROM ad_daily d JOIN ads a ON a.id = d.ad_id
+         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
          WHERE d.date BETWEEN ?1 AND ?2 ${opts.postId ? "AND a.post_id = ?3" : ""}
          GROUP BY a.post_id`,
       )
       .bind(...(opts.postId ? [from, to, opts.postId] : [from, to]))
       .all<Row>(),
-    testWindows(db, targets.testWindowDays, opts.postId),
+    opts.postId
+      ? testWindows(db, targets.testWindowDays, opts.postId)
+      : memoize(db, `post-windows-${targets.testWindowDays}`, () => testWindows(db, targets.testWindowDays)),
     loadFatigue(db, targets, latest),
   ]);
   const totalsByPost = new Map(ranged.results.map((r) => [String(r.post_id), toTotals(r)]));
 
-  return base.results.map((r) => {
+  return base.map((r) => {
     const postId = String(r.post_id);
     const w = windows.get(postId);
     // A post's badge shows how the concept it was tested in did.

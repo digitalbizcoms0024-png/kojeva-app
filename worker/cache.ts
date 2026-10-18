@@ -1,6 +1,6 @@
 // Read results kept in memory until the data changes. D1's free plan allows 5M rows read a day
-// and one uncached Dashboard view reads a few hundred thousand (every concept and ad window is
-// recomputed from ad_daily), so repeat views must not hit D1 again. The cache lives in the Worker
+// and one uncached Dashboard view reads ~440k on live-sized data (scripts/measure-reads.ts), so
+// repeat views must not hit D1 again. The cache lives in the Worker
 // isolate: free, and lost when the isolate is recycled, which only costs one recompute.
 // Every write bumps `data_version` (one row), which drops everything cached under the old one.
 

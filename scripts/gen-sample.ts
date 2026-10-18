@@ -99,7 +99,7 @@ interface PostPlan {
 const posts: PostPlan[] = [];
 
 let creative = 600;
-for (let i = 0; i < 64; i++) {
+for (let i = 0; i < Number(process.env.SAMPLE_POSTS ?? 64); i++) {
   const legacy = i < LEGACY_NAMES.length;
   const hinted = legacy ? parseAdName(LEGACY_NAMES[i]!).strategistHint : null;
   const pod = hinted ? PODS.find((p) => p.code === hinted)! : pick(PODS);

@@ -129,9 +129,10 @@ app.get("/meta", async (c) => {
     db
       .prepare(
         `SELECT COUNT(DISTINCT a.post_id) AS n
-         FROM ad_daily d JOIN ads a ON a.id = d.ad_id
-         LEFT JOIN assignments s ON s.post_id = a.post_id
-         WHERE d.date >= date((SELECT MAX(date) FROM ad_daily), '-29 days') AND d.spend_cents > 0 AND s.pod_id IS NULL`,
+         FROM ads a LEFT JOIN assignments s ON s.post_id = a.post_id
+         WHERE s.pod_id IS NULL AND EXISTS (
+           SELECT 1 FROM ad_daily d WHERE d.ad_id = a.id AND d.spend_cents > 0
+             AND d.date >= date((SELECT MAX(date) FROM ad_daily), '-29 days'))`,
       )
       .first<{ n: number }>(),
     loadPersonas(db),
@@ -235,13 +236,13 @@ app.get("/posts/:id", async (c) => {
     db
       .prepare(
         `SELECT d.date, ${TOTALS_SQL}
-         FROM ad_daily d JOIN ads a ON a.id = d.ad_id
+         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
          WHERE a.post_id = ?1 AND d.date BETWEEN ?2 AND ?3
          GROUP BY d.date ORDER BY d.date`,
       )
       .bind(postId, range.from, range.to)
       .all<Record<string, unknown>>(),
-    db.prepare(`SELECT ${TOTALS_SQL} FROM ad_daily d JOIN ads a ON a.id = d.ad_id WHERE a.post_id = ?1`).bind(postId).first<Record<string, unknown>>(),
+    db.prepare(`SELECT ${TOTALS_SQL} FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id WHERE a.post_id = ?1`).bind(postId).first<Record<string, unknown>>(),
   ]);
 
   const body: PostDetail = {
@@ -275,7 +276,7 @@ app.get("/pods", async (c) => {
     db
       .prepare(
         `SELECT s.pod_id, d.date, SUM(d.spend_cents) AS spend_cents
-         FROM ad_daily d JOIN ads a ON a.id = d.ad_id LEFT JOIN assignments s ON s.post_id = a.post_id
+         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id LEFT JOIN assignments s ON s.post_id = a.post_id
          WHERE d.date >= ?1 GROUP BY s.pod_id, d.date`,
       )
       .bind(sparkDays[0] ?? "9999-12-31")
@@ -388,7 +389,7 @@ app.get("/trends", async (c) => {
   const meta = await db
     .prepare(
       `SELECT ${bucket("d.date")} AS b, ${TOTALS_SQL}
-       FROM ad_daily d JOIN ads a ON a.id = d.ad_id LEFT JOIN assignments s ON s.post_id = a.post_id
+       FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id LEFT JOIN assignments s ON s.post_id = a.post_id
        WHERE d.date BETWEEN ?1 AND ?2 ${podSql} GROUP BY b ORDER BY b`,
     )
     .bind(...binds)
@@ -444,7 +445,7 @@ app.get("/attribution", async (c) => {
     db
       .prepare(
         `SELECT ${group} AS k, MAX(s.pod_id) AS pod_id, ${ATTR_SQL}
-         FROM ad_daily d JOIN ads a ON a.id = d.ad_id LEFT JOIN assignments s ON s.post_id = a.post_id
+         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id LEFT JOIN assignments s ON s.post_id = a.post_id
          WHERE d.date BETWEEN ?1 AND ?2 ${level === "concept" ? "AND a.concept_id IS NOT NULL" : ""} ${post ? "AND a.post_id = ?3" : ""}
          GROUP BY k HAVING SUM(d.spend_cents) > 0 ORDER BY SUM(d.spend_cents) DESC ${level === "post" ? "LIMIT 200" : ""}`,
       )

@@ -34,6 +34,9 @@ export function d1FromSqlJs(db: Database): D1Database {
     async first<T>() {
       return rows<T>(db, sql, params)[0] ?? null;
     },
+    async raw<T>() {
+      return rows<Record<string, unknown>>(db, sql, params).map((r) => Object.values(r)) as T[];
+    },
     async run() {
       rows(db, sql, params);
       return { results: [], success: true, meta: { changes: db.getRowsModified() } };
