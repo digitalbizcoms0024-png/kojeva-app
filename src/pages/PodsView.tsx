@@ -23,7 +23,7 @@ export const podOrder = (id: string | null) => {
 };
 
 export function hitRuleText(t: Targets): string {
-  return `A concept qualifies once one of its ads has spent $${t.minTestSpend}, and is judged from first spend to day ${t.testWindowDays} or the day it qualified, whichever is later. Hit = CPA ≤ $${t.targetCpa} ${t.hitRule === "both" ? "and" : "or"} ROAS ≥ ${t.targetRoas} (Meta) over that window.${t.lateWindowDays > 0 ? ` A miss that keeps spending becomes a late hit if its totals since launch reach target on day ${t.lateWindowDays} or later (at least $${t.minTestSpend} spent); late hits count in the hit rate.` : ""}`;
+  return `A concept qualifies once one of its ads has spent $${t.minTestSpend}, and is judged from first spend to day ${t.testWindowDays} or the day it qualified, whichever is later. Hit = CPA ≤ $${t.targetCpa} ${t.hitRule === "both" ? "and" : "or"} ROAS ≥ ${t.targetRoas} (Meta) over that window.${t.lateWindowDays > 0 ? ` A miss that keeps spending becomes a late hit if, from day ${t.lateWindowDays} on, its totals since launch or any ${t.lateWindowDays} days in a row reach target (at least $${t.minTestSpend} spent); late hits count in the hit rate.` : ""}`;
 }
 
 /** The tag value with the most hits among a pod's concepts (ties: more test spend). */

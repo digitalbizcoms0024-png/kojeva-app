@@ -120,16 +120,22 @@ describe("lateHitWindow", () => {
     expect(lateHitWindow(daily.slice(0, 6), "2026-10-01", "2026-10-03", "2026-10-06", T)).toBeNull();
   });
 
-  it("keeps the bad first days in, so a late hit comes later or not at all", () => {
+  it("also hits on any rolling 7 days, so bad first days can't hold back a recovery", () => {
     const slow = daily.map((d, i) => (i < 5 ? { ...d, purchases: 2, revenueCents: 5000 } : d));
-    // Since launch: Oct 1–8 is ROAS 1.41, CPA $20; Oct 1–12 is $1,200 / 80 purchases = $15 CPA, ROAS 1.67.
-    expect(lateHitWindow(slow, "2026-10-01", "2026-10-03", "2026-10-12", T)).toBeNull();
-    expect(lateHitWindow(slow, "2026-10-01", "2026-10-03", "2026-10-12", { ...T, hitRule: "either" as const, targetRoas: 1.6 })).toMatchObject({
-      to: "2026-10-12",
-    });
+    // Since launch never meets the targets (Oct 1–12: $15 CPA, ROAS 1.67), but Oct 4–10 does:
+    // 2×2 + 5×10 = 54 purchases on $700 = $12.96 CPA.
+    expect(lateHitWindow(slow, "2026-10-01", "2026-10-03", "2026-10-12", T)).toMatchObject({ from: "2026-10-04", to: "2026-10-10" });
   });
 
-  it("matches Harris KOJEVA 12 | WOMEN OVER 50 (miss) and Get It or Regret It (late hit), Meta, Sep–Oct 2026", () => {
+  it("lets a rolling window overlap the test days, but only one ending after the judging window", () => {
+    // Days 1–2 great, then flat: Oct 1–7 (since launch and rolling alike) is the first look.
+    const early = daily.map((d, i) => ({ ...d, purchases: i < 2 ? 30 : 4, revenueCents: (i < 2 ? 30 : 4) * 2500 }));
+    // With a judging window to Oct 8, the first look is Oct 9 (since launch: 88 purchases on $900).
+    expect(lateHitWindow(early, "2026-10-01", "2026-10-08", "2026-10-12", T)).toMatchObject({ from: "2026-10-01", to: "2026-10-09" });
+    expect(lateHitWindow(early, "2026-10-01", "2026-10-03", "2026-10-12", T)).toMatchObject({ from: "2026-10-01", to: "2026-10-07" });
+  });
+
+  it("matches Harris KOJEVA 12 | WOMEN OVER 50 and Get It or Regret It (both late hits), Meta, Sep–Oct 2026", () => {
     // Revenue = spend × ROAS, or given directly for days with purchases but no spend (Meta shows no ROAS there).
     const day = (date: string, spend: number, purchases: number, roas: number, revenue?: number) => ({
       date,
@@ -141,7 +147,8 @@ describe("lateHitWindow", () => {
     });
     const either = { ...T, hitRule: "either" as const };
     const women = [day("2026-09-28", 118.35, 2, 0.552), day("2026-09-29", 81.45, 2, 0.893), day("2026-09-30", 129.96, 1, 0.177), day("2026-10-01", 87.14, 4, 2.195), day("2026-10-02", 41.24, 3, 2.368)];
-    expect(lateHitWindow(women, "2026-09-28", "2026-09-30", "2026-10-17", either)).toBeNull(); // since launch: ROAS 0.98, CPA $38
+    // Since launch never hits (ROAS 0.98), but the rolling Oct 1–7 does: $128 spend, ROAS 2.25.
+    expect(lateHitWindow(women, "2026-09-28", "2026-09-30", "2026-10-17", either)).toMatchObject({ from: "2026-10-01", to: "2026-10-07" });
     const regret = [
       day("2026-09-18", 54.77, 3, 2.043),
       day("2026-09-19", 78.17, 4, 1.462),

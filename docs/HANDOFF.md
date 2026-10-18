@@ -31,8 +31,9 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
 ## Decisions made with the owner (don't re-ask)
 - **Hit rule = either**: CPA ≤ $14 **or** ROAS ≥ 1.7 (migration 0011 sets it).
 - **Best ad decides is off** (owner, Oct 18): a concept is judged only as a whole, never through one ad.
-- Late hits: totals **since launch** (first spend → day D, D ≥ day 7 and after the judging window) meet
-  the targets with ≥ $100 spend; counted in hit rate.
+- Late hits (owner, Oct 18): on a day D ≥ day 7 and after the judging window, **either** the totals since
+  launch **or** the rolling 7 days ending on D (may overlap the test) meet the targets with ≥ $100 spend;
+  counted in hit rate. So Harris "Women Over 50" is a late hit (rolling Oct 1–7) though since launch misses.
 - Date ranges: Last 7 days / Last 30 days / Month to date / All time / Custom.
 - Incrementality page compares **7-day click vs incremental only**; numbers matched Ads Manager's
   Compare attribution settings (incremental ≈ 7-day click for this account). Report-only.

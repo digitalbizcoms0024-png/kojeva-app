@@ -75,13 +75,15 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   missing values are empty cells, never 0.
 
 ## Late hits (`shared/metrics.ts` → `lateHitWindow`)
-- A concept that **missed** its day-3 test but **kept spending after** its judging window gets a second look on its
-  **totals since launch**: first spend through day D, where D is day `lateWindowDays` (default 7, Settings → "Late hit from
-  day"; 0 turns it off) or later and after the judging window. The bad first days stay in. If on any such day D the totals
-  since launch have at least the qualifying spend ($100) and meet the targets, it becomes a **Late hit** (window shown as
-  first spend → D).
+- A concept that **missed** its day-3 test but **kept spending after** its judging window gets a second look on each day D
+  that is day `lateWindowDays` (default 7, Settings → "Late-hit window"; 0 turns it off) or later, after the judging window
+  and synced. It becomes a **Late hit** on the first such D where **either** look has at least the qualifying spend ($100)
+  and meets the targets (owner, Oct 18):
+  - **Totals since launch**: first spend → D, the bad first days included (window shown as first spend → D).
+  - **Rolling 7 days**: the 7 days ending on D (D−6 → D). It may overlap the test days, as long as it ends after them.
+  Since launch is shown when both hit on the same day.
 - Late hits count in the hit rate (hits + late hits ÷ decided) and are shown split out: "7 hits from 20 decided (2 late)".
-- Until then it stays a **Miss**; one still spending in the last 3 days is labelled "Miss · still running". Once the totals hit on a day,
+- Until then it stays a **Miss**; one still spending in the last 3 days is labelled "Miss · still running". Once a look hits,
   the late hit is permanent.
 
 ## Spend by pod

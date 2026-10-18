@@ -116,10 +116,12 @@ const addDays = (day: string, n: number) => {
 };
 
 /**
- * Second look at a concept that missed its day-3 test and kept spending: its totals **since launch**
- * (first spend through day D, the bad first days included) on the first day D that is at least
- * `lateWindowDays` days in (day 7 by default), after the judging window and by the latest synced
- * day, with at least `minTestSpend` spent, that meet the targets. Null if no such day.
+ * Second look at a concept that missed its day-3 test and kept spending. It becomes a late hit on the
+ * first day D, at least `lateWindowDays` days in (day 7 by default), after the judging window and by
+ * the latest synced day, where either look has at least `minTestSpend` spent and meets the targets:
+ * - its totals **since launch** (first spend through D, the bad first days included), or
+ * - the **last `lateWindowDays` days** up to D (a rolling window; it may overlap the test days).
+ * Since launch wins when both hit on the same day. Null if neither ever hits.
  * @param daily the concept's totals per day with spend, any order
  */
 export function lateHitWindow(
@@ -131,15 +133,19 @@ export function lateHitWindow(
 ): { from: string; to: string; totals: Totals } | null {
   const n = t.lateWindowDays;
   if (n <= 0) return null;
-  const sorted = [...daily].sort((a, b) => a.date.localeCompare(b.date));
+  const byDate = new Map<string, Totals>();
+  for (const d of daily) byDate.set(d.date, addTotals(byDate.get(d.date) ?? ZERO_TOTALS, d));
   const firstDay = addDays(firstSpend, n - 1);
-  let w = ZERO_TOTALS;
-  let i = 0;
+  const hits = (w: Totals) => w.spendCents >= t.minTestSpend * 100 && meetsTargets(w, t);
+  let sinceLaunch = ZERO_TOTALS;
   for (let to = firstSpend; to <= latest; to = addDays(to, 1)) {
-    while (i < sorted.length && sorted[i]!.date <= to) w = addTotals(w, sorted[i++]!);
+    sinceLaunch = addTotals(sinceLaunch, byDate.get(to) ?? ZERO_TOTALS);
     if (to < firstDay || to <= judgingEnd) continue;
-    if (w.spendCents >= t.minTestSpend * 100 && meetsTargets(w, t)) return { from: firstSpend, to, totals: w };
-    if (i >= sorted.length) break; // nothing after this day changes the totals
+    if (hits(sinceLaunch)) return { from: firstSpend, to, totals: sinceLaunch };
+    const from = addDays(to, 1 - n);
+    let rolling = ZERO_TOTALS;
+    for (let d = from; d <= to; d = addDays(d, 1)) rolling = addTotals(rolling, byDate.get(d) ?? ZERO_TOTALS);
+    if (hits(rolling)) return { from, to, totals: rolling };
   }
   return null;
 }

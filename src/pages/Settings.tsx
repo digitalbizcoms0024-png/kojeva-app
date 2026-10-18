@@ -372,7 +372,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
             disabled={!meta.canEdit}
           />
         </Labeled>
-        <Labeled label="Late hit from day" hint="0 turns late hits off">
+        <Labeled label="Late-hit window (days)" hint="0 turns late hits off">
           <input
             id="t-late"
             type="number"
@@ -407,7 +407,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
         </span>
         <span className="text-ink-3">
           A concept qualifies once one ad has spent ${min}, and is judged from first spend to day {days} or the day it qualified, whichever is later.
-          {Number(late) > 0 && ` A miss that keeps spending becomes a late hit if any ${late} days in a row reach target (with at least $${min} spent).`} Each
+          {Number(late) > 0 && ` A miss that keeps spending becomes a late hit if, from day ${late} on, its totals since launch or any ${late} days in a row reach target (with at least $${min} spent).`} Each
           ad is also judged on its own the same way; one ad hitting makes the concept a hit.
         </span>
       </div>
