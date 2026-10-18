@@ -35,10 +35,12 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
 - Triple Whale: model "Clicks & Views" (deterministic views), lifetime window, never blended.
 - The hub is permanently read-only on Meta (no ad management).
 
-## Open question with the owner
-- "ST _ Comparison _ Gua Sha vs Kojeva _ V1" (Harris, KOJEVA 3 | STATIC | Comparison) is a hit
-  in the owner's view, but Meta's numbers only hit on day 1 (days 1–3: CPA $23.25, ROAS 1.27;
-  no 7-day window reaches target). Waiting for their Ads Manager screenshot/date range.
+## Harris's two hits (settled Oct 18)
+- They are "ST _ Scarcity _ Almost Sold Out _ V1" (hit) and "ST _ Scarcity _ Get It or Regret It _ V1"
+  (late hit, Sep 21–27 ROAS 2.06), not "Gua Sha vs Kojeva". Both sit in one ad set, "IH | Harris |
+  KOJEVA 3 | STATIC | Scarcity", but the owner says they're separate concepts grouped only at launch:
+  that ad set alone is split per static (`ONE_CONCEPT_PER_AD` in `shared/concepts.ts`). Takes effect
+  on the next sync (concepts are rebuilt on every sync).
 
 ## Scheduled tasks (claude.ai)
 - "Kojeva Hub · Atria tag sync" (daily 10:07 UTC, Atria connector): tags, awareness/belief/offer

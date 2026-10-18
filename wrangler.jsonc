@@ -32,6 +32,12 @@
     // Client ID of the Access service token the nightly Atria task uses (docs/ATRIA.md).
     "ATRIA_CLIENT_ID": "52d224fd6c7660e512605f4d71331b55.access"
   },
+  // Keep Worker logs and errors (Workers & Pages → kojeva-hub → Observability). Free plan allows
+  // 200k events/day; this app makes a few hundred requests a day.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
   "triggers": {
     // Nightly Meta sync, 09:17 UTC (~5am New York).
     "crons": ["17 9 * * *"]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildConcepts, conceptLabel, partFor, splitParts } from "./concepts.ts";
+import { buildConcepts, conceptLabel, partFor, splitParts, staticTitle } from "./concepts.ts";
 
 // Real ad sets and ads from the Kojeva account, Oct 2026.
 const ad = (id: string, name: string, adsetId: string, adsetName: string) => ({ id, name, adsetId, adsetName });
@@ -112,5 +112,34 @@ describe("buildConcepts", () => {
   it("never treats scaling ad sets as concepts", () => {
     expect(concepts.some((c) => c.adsetId === "stop")).toBe(false);
     expect(concepts).toHaveLength(12);
+  });
+});
+
+describe("ad sets with one concept per static", () => {
+  const SCARCITY = "IH | Harris | KOJEVA 3 | STATIC | Scarcity";
+  const ad = (id: string, name: string, adsetId: string) => ({ id, name, adsetId, adsetName: SCARCITY });
+
+  it("splits Harris KOJEVA 3 Scarcity into one concept per static, keeping versions together", () => {
+    const concepts = buildConcepts([
+      ad("1", "ST _ Scarcity _ Almost Sold Out _ V1", "120249807197790075"),
+      ad("2", "ST _ Scarcity _ Get It or Regret It _ V1", "120249807197790075"),
+      ad("3", "ST _ Scarcity _ Empty Warehouse _ V1", "120249807197790075"),
+      ad("4", "ST _ Scarcity _ Almost Sold Out _ V2", "120249807197790075"),
+    ]);
+    expect(concepts.map((c) => [c.label, c.adIds])).toEqual([
+      ["KOJEVA 3 | STATIC | Scarcity | Almost Sold Out", ["1", "4"]],
+      ["KOJEVA 3 | STATIC | Scarcity | Get It or Regret It", ["2"]],
+      ["KOJEVA 3 | STATIC | Scarcity | Empty Warehouse", ["3"]],
+    ]);
+    expect(concepts[0]).toMatchObject({ id: "120249807197790075#almost-sold-out", podCode: "HAR" });
+  });
+
+  it("leaves every other ad set as it was", () => {
+    expect(buildConcepts([ad("1", "ST _ Scarcity _ Almost Sold Out _ V1", "other"), ad("2", "ST _ Scarcity _ Get It _ V1", "other")])).toHaveLength(1);
+  });
+
+  it("reads the static's title from its name", () => {
+    expect(staticTitle("ST _ Scarcity _ Almost Sold Out _ V1 | 122144277081047339")).toBe("Almost Sold Out");
+    expect(staticTitle("ST _ Comparison _ Gua Sha vs Kojeva _ V1_ Listicle")).toBe("Gua Sha vs Kojeva V1 Listicle");
   });
 });
