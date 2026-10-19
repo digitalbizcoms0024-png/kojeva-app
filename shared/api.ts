@@ -270,6 +270,51 @@ export interface InsightsResponse {
   to: string;
   dimension: InsightDimension;
   rows: InsightRow[];
+  /** Every concept in the period (and pod): the average a row is read against. */
+  baseline: HitBaseline;
+}
+
+export interface HitBaseline {
+  concepts: number;
+  hits: number;
+  decided: number;
+  hitRate: number | null;
+  window: Totals;
+}
+
+/** A tag value worth a look, from one dimension. */
+export interface InsightPick {
+  dimension: InsightDimension;
+  row: InsightRow & { value: string };
+}
+
+/** The top of Creative Insights: what to make more of, and where test money found nothing. */
+export interface InsightsOverview {
+  from: string;
+  to: string;
+  baseline: HitBaseline;
+  /** The best value per dimension (enough decided tests, beats the average), best first. */
+  winners: InsightPick[];
+  /** Values with enough decided tests and no hit, most test spend first. */
+  sinks: InsightPick[];
+  /** Concepts missing an angle / a format. */
+  untagged: { dimension: InsightDimension; concepts: number }[];
+}
+
+/** Dimensions the matrix can cross. */
+export type MatrixDimension = "angle" | "format" | "awareness" | "persona" | "motivation";
+
+export interface InsightsMatrix {
+  from: string;
+  to: string;
+  rows: MatrixDimension;
+  cols: MatrixDimension;
+  /** Tagged values on each axis, most concepts first. Untagged concepts are left out (see `skipped`). */
+  rowValues: string[];
+  colValues: string[];
+  cells: (InsightRow & { row: string; col: string })[];
+  baseline: HitBaseline;
+  skipped: number;
 }
 
 export interface PodsResponse {

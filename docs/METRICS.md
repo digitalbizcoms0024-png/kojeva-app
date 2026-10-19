@@ -115,9 +115,26 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 | By mass desire | Atria `core_desire` |
 | By belief shifted | Claude's belief group per creative; hand-set wins |
 | By Atria theme | Atria `theme` |
+| By motivation | Claude's motivation tags per creative, union across the concept; hand-set lists win |
+| By persona | Confirmed personas (Settings); before that, Atria's raw persona tags ("By avatar") |
 
-Atria and belief panels are multi-valued: a concept counts under each of its values, so rows overlap.
+Atria, belief and motivation panels are multi-valued: a concept counts under each of its values, so rows overlap.
 All panels use the same concept test results (judging window, late hits) as the hit rate.
+
+Panels are grouped into tabs: Creative (angle, format, hook), Audience (persona, motivation, awareness,
+mass desire), Message (belief, theme) and Combinations (`/api/insights/matrix`: hit rate per pair of two
+dimensions, default angle × format, tagged concepts only). Each panel's dashed line is the **average**: the
+hit rate of every concept in the period and pod (`baseline`). Untagged concepts are a footnote, not a row.
+
+**Hit-rate floor** (`hitRateFloor` in `shared/metrics.ts`): the lower bound of the 90% Wilson interval for
+hits / decided. "Best first" sorts by it, so a long record beats a short perfect one (3/3 floor 0.53 vs
+25/30 floor 0.70). Values with fewer than `MIN_DECIDED` (3) decided tests are hints: grey and sorted last.
+
+**Make more of** (`/api/insights/overview`, `worker/insights.ts`): per dimension (angle, format, motivation,
+hook type, awareness, persona), the tagged value with the highest floor among those with ≥ 3 decided tests
+whose hit rate beats the average; up to 4 shown, highest floor first. **No hits yet**: angle/format values
+with ≥ 3 decided tests and 0 hits, most test spend first (top 3). All of it comes from the cached concept
+results, so it adds no `ad_daily` reads.
 
 ## Incrementality (`/api/attribution`, Incrementality page)
 Meta's 7-day click and incremental attribution on the same Meta spend, side by side, as in Ads Manager's

@@ -165,6 +165,21 @@ export function hitRate(statuses: HitStatus[]): number | null {
   return decided > 0 ? hits / decided : null;
 }
 
+/** Fewer decided tests than this and a hit rate is a hint, not a verdict. */
+export const MIN_DECIDED = 3;
+
+/**
+ * Lower bound of the 90% Wilson interval for a hit rate: how high the rate is, discounted for
+ * small samples (3/3 ranks below 25/30). Null with nothing decided.
+ */
+export function hitRateFloor(hits: number, decided: number): number | null {
+  if (decided === 0) return null;
+  const z = 1.645;
+  const p = hits / decided;
+  const z2 = (z * z) / decided;
+  return Math.max(0, (p + z2 / 2 - z * Math.sqrt((p * (1 - p)) / decided + z2 / (4 * decided))) / (1 + z2));
+}
+
 /** Purchases and revenue under one Meta attribution setting. */
 export interface AttributedTotals {
   /** Fractional under incremental attribution. */

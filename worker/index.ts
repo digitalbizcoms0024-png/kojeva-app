@@ -7,8 +7,6 @@ import type {
   ConceptDetail,
   ConceptsResponse,
   Editor,
-  InsightDimension,
-  InsightRow,
   InsightsResponse,
   LaunchesResponse,
   CopyRow,
@@ -35,6 +33,7 @@ import { connection, sync } from "./meta/routes.ts";
 import { adPreview, PREVIEW_FORMATS, type PreviewFormat } from "./meta/preview.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
+import { baseline, INSIGHT_DIMENSIONS, insightRows, MATRIX_DIMENSIONS, matrix, overview, valuesOf } from "./insights.ts";
 import { getLatestDate, getTargets, loadConcepts, loadPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
 import { loadAddedPods } from "./pods.ts";
@@ -366,48 +365,39 @@ app.get("/pods", async (c) => {
   return c.json(body);
 });
 
-/** A concept's values on a multi-valued dimension (it counts under each). */
-function conceptValues(k: ConceptsResponse["rows"][number], d: "atria_theme" | "atria_desire" | "atria_hook" | "atria_persona" | "belief" | "motivation"): string[] {
-  return { atria_theme: k.atriaThemes, atria_desire: k.atriaDesires, atria_hook: k.atriaHooks, atria_persona: k.atriaPersonas, belief: k.beliefGroups, motivation: k.motivations }[d];
+/** Concepts that started testing in the period (and pod): what Creative Insights counts. */
+async function insightConcepts(db: D1Database, range: { from: string; to: string }, pod: string | undefined) {
+  return (await loadConcepts(db)).filter((k) => k.firstSpend >= range.from && k.firstSpend <= range.to && (!pod || k.podId === pod));
 }
 
-/** Concept results grouped by angle or format. Same period rule as the Pods tab. */
+/** Concept results grouped by one dimension. Same period rule as the Pods tab. */
 app.get("/insights", async (c) => {
   const db = c.env.DB;
   const range = await resolveRange(db, (k) => c.req.query(k));
   if (!range) return c.json({ error: "Invalid custom date range" }, 400);
-  const dims: InsightDimension[] = ["angle", "format", "awareness", "persona", "motivation", "atria_hook", "atria_persona", "atria_desire", "belief", "atria_theme"];
-  const dimension = (dims.find((d) => d === c.req.query("dimension")) ?? "angle") as InsightDimension;
-  const pod = c.req.query("pod");
-  const concepts = (await loadConcepts(db)).filter((k) => k.firstSpend >= range.from && k.firstSpend <= range.to && (!pod || k.podId === pod));
-  // Angle/format: one value per concept. Atria: every theme/desire the concept carries.
-  const valuesOf = (k: (typeof concepts)[number]): (string | null)[] => {
-    if (dimension === "angle" || dimension === "format" || dimension === "awareness") return [k[dimension]];
-    if (dimension === "persona") return [k.personaId];
-    const v = conceptValues(k, dimension);
-    return v.length ? v : [null];
-  };
-  const groups = new Map<string | null, typeof concepts>();
-  for (const k of concepts) for (const v of valuesOf(k)) groups.set(v, [...(groups.get(v) ?? []), k]);
-  const rows: InsightRow[] = [...groups].map(([value, list]) => {
-    const statuses = list.map((k) => k.status);
-    const pods = new Map<string, number>();
-    for (const k of list) pods.set(k.podId, (pods.get(k.podId) ?? 0) + 1);
-    return {
-      value,
-      concepts: list.length,
-      hits: statuses.filter((s) => s === "hit" || s === "late_hit").length,
-      lateHits: statuses.filter((s) => s === "late_hit").length,
-      misses: statuses.filter((s) => s === "miss").length,
-      testing: statuses.filter((s) => s === "testing").length,
-      hitRate: hitRate(statuses),
-      window: list.reduce((acc, k) => addTotals(acc, k.window), ZERO_TOTALS),
-      pods: [...pods].map(([podId, n]) => ({ podId, concepts: n })).sort((a, b) => b.concepts - a.concepts),
-    };
-  });
-  rows.sort((a, b) => (a.value === null ? 1 : b.value === null ? -1 : b.concepts - a.concepts || b.window.spendCents - a.window.spendCents));
-  const body: InsightsResponse = { ...range, dimension, rows };
+  const dimension = INSIGHT_DIMENSIONS.find((d) => d === c.req.query("dimension")) ?? "angle";
+  const concepts = await insightConcepts(db, range, c.req.query("pod"));
+  const body: InsightsResponse = { ...range, dimension, rows: insightRows(concepts, dimension), baseline: baseline(concepts) };
   return c.json(body);
+});
+
+/** What to make more of, and where test spend found nothing. */
+app.get("/insights/overview", async (c) => {
+  const db = c.env.DB;
+  const range = await resolveRange(db, (k) => c.req.query(k));
+  if (!range) return c.json({ error: "Invalid custom date range" }, 400);
+  return c.json(overview(await insightConcepts(db, range, c.req.query("pod")), range));
+});
+
+/** Hit rate for each pair of two dimensions (default angle × format). */
+app.get("/insights/matrix", async (c) => {
+  const db = c.env.DB;
+  const range = await resolveRange(db, (k) => c.req.query(k));
+  if (!range) return c.json({ error: "Invalid custom date range" }, 400);
+  const rows = MATRIX_DIMENSIONS.find((d) => d === c.req.query("rows")) ?? "angle";
+  const cols = MATRIX_DIMENSIONS.find((d) => d === c.req.query("cols")) ?? "format";
+  if (rows === cols) return c.json({ error: "Pick two different dimensions" }, 400);
+  return c.json(matrix(await insightConcepts(db, range, c.req.query("pod")), rows, cols, range));
 });
 
 /**
@@ -629,7 +619,7 @@ app.get("/concepts", async (c) => {
         tag(format, k.format) &&
         tag(awareness, k.awareness) &&
         tag(persona, k.personaId) &&
-        multi.every(([d, q]) => many(q, conceptValues(k, d))),
+        multi.every(([d, q]) => many(q, valuesOf(k, d).filter((v): v is string => v != null))),
     )
     .sort((a, b) => b.firstSpend.localeCompare(a.firstSpend) || b.window.spendCents - a.window.spendCents);
   const body: ConceptsResponse = { ...range, rows };

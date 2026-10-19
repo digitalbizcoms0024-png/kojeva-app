@@ -1,10 +1,10 @@
-import { Fragment, useState } from "react";
-import type { InsightDimension, InsightRow, InsightsResponse, MetaResponse } from "../../shared/api.ts";
-import { cpa, cpaBand, type Targets } from "../../shared/metrics.ts";
+import { useState } from "react";
+import type { InsightDimension, InsightRow, InsightsMatrix, InsightsOverview, InsightsResponse, MatrixDimension, MetaResponse } from "../../shared/api.ts";
+import { cpa, hitRateFloor, MIN_DECIDED, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, MOTIVATIONS, podById } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { CpaValue, Empty, PageHeader, PodSwatch, SectionTitle, Select } from "../components/ui.tsx";
+import { CpaValue, Empty, PageHeader, PodSwatch, SectionTitle, Segmented, Select, Tabs } from "../components/ui.tsx";
 import { money, pct } from "../format.ts";
 import { ConceptsTable, hitRuleText } from "./PodsView.tsx";
 
@@ -20,17 +20,18 @@ const LABELS: Record<InsightDimension, Record<string, string>> = {
   belief: {},
   atria_theme: {},
 };
-const DIM_NAME: Record<InsightDimension, string> = {
-  angle: "By angle",
-  format: "By format",
-  awareness: "By awareness level",
-  persona: "By persona",
-  motivation: "By motivation",
-  atria_hook: "By hook type",
-  atria_persona: "By avatar",
-  atria_desire: "By mass desire",
-  belief: "By belief shifted",
-  atria_theme: "By Atria theme",
+/** What one value of a dimension is called ("Angle: Scarcity"). */
+const DIM_LABEL: Record<InsightDimension, string> = {
+  angle: "Angle",
+  format: "Format",
+  awareness: "Awareness level",
+  persona: "Persona",
+  motivation: "Motivation",
+  atria_hook: "Hook type",
+  atria_persona: "Avatar",
+  atria_desire: "Mass desire",
+  belief: "Belief shifted",
+  atria_theme: "Atria theme",
 };
 /** Where each dimension comes from, shown under its title. */
 const DIM_SOURCE: Partial<Record<InsightDimension, string>> = {
@@ -44,124 +45,244 @@ const DIM_SOURCE: Partial<Record<InsightDimension, string>> = {
   atria_theme: "Atria · theme",
 };
 /** Dimensions where a concept can carry several values, so rows overlap. */
-const isAtria = (d: InsightDimension) => d.startsWith("atria_") || d === "belief" || d === "motivation";
+const isMulti = (d: InsightDimension) => d.startsWith("atria_") || d === "belief" || d === "motivation";
 const isLabel = (d: InsightDimension) => d === "awareness" || d === "belief" || d === "persona" || d === "motivation";
 
-/** Panels, two per row, in the order the team reads them. */
-const GROUPS: InsightDimension[][] = [
-  ["angle", "format"],
-  ["awareness", "atria_hook"],
-  ["atria_persona", "atria_desire"],
-  ["belief", "atria_theme"],
-  ["motivation", "persona"],
+type Tab = "creative" | "audience" | "message" | "combos";
+const TABS: { value: Tab; label: string }[] = [
+  { value: "creative", label: "Creative" },
+  { value: "audience", label: "Audience" },
+  { value: "message", label: "Message" },
+  { value: "combos", label: "Combinations" },
+];
+const PANELS: Record<Exclude<Tab, "combos">, InsightDimension[]> = {
+  creative: ["angle", "format", "atria_hook"],
+  audience: ["persona", "motivation", "awareness", "atria_desire"],
+  message: ["belief", "atria_theme"],
+};
+const TAB_OF: Record<InsightDimension, Exclude<Tab, "combos">> = {
+  angle: "creative",
+  format: "creative",
+  atria_hook: "creative",
+  persona: "audience",
+  atria_persona: "audience",
+  motivation: "audience",
+  awareness: "audience",
+  atria_desire: "audience",
+  belief: "message",
+  atria_theme: "message",
+};
+const MATRIX_OPTIONS: { value: MatrixDimension; label: string }[] = [
+  { value: "angle", label: "Angle" },
+  { value: "format", label: "Format" },
+  { value: "motivation", label: "Motivation" },
+  { value: "awareness", label: "Awareness level" },
+  { value: "persona", label: "Persona" },
 ];
 
-/** Fewer decided tests than this and a hit rate is shown as a hint, not a verdict. */
-const MIN_DECIDED = 3;
+type Sort = "best" | "spend" | "concepts";
+const SORTS: { value: Sort; label: string }[] = [
+  { value: "best", label: "Best first" },
+  { value: "spend", label: "Most spend" },
+  { value: "concepts", label: "Most concepts" },
+];
 
-const BAND_FILL = { good: "var(--good)", warn: "var(--warn-line)", bad: "var(--bad)", none: "var(--line)" } as const;
+type Open = { filter: Partial<Record<InsightDimension, string>>; title: string; tab: Tab } | null;
+
+const decidedOf = (r: InsightRow) => r.hits + r.misses;
+const isThin = (r: InsightRow) => decidedOf(r) < MIN_DECIDED;
+const floorOf = (r: InsightRow) => hitRateFloor(r.hits, decidedOf(r)) ?? -1;
+
+/** Rows with enough decided tests first, by how sure we are of their hit rate; then the hints. */
+function sortRows(rows: InsightRow[], sort: Sort): InsightRow[] {
+  const by: Record<Sort, (a: InsightRow, b: InsightRow) => number> = {
+    best: (a, b) => Number(isThin(a)) - Number(isThin(b)) || floorOf(b) - floorOf(a) || b.concepts - a.concepts,
+    spend: (a, b) => b.window.spendCents - a.window.spendCents,
+    concepts: (a, b) => b.concepts - a.concepts || b.window.spendCents - a.window.spendCents,
+  };
+  return [...rows].sort(by[sort]);
+}
 
 function name(dimension: InsightDimension, v: string | null, personas: Record<string, string> = {}) {
-  if (v == null) return isLabel(dimension) ? "Not labelled yet" : isAtria(dimension) ? "Not tagged by Atria" : `No ${dimension}`;
+  if (v == null) return isLabel(dimension) ? "Not labelled yet" : isMulti(dimension) ? "Not tagged by Atria" : `No ${DIM_LABEL[dimension].toLowerCase()}`;
   return (dimension === "persona" ? personas[v] : LABELS[dimension][v]) ?? v;
+}
+
+/** "7 concepts without an angle", "2 concepts not tagged by Atria". */
+function untaggedText(d: InsightDimension, n: number) {
+  const c = `${n} ${n === 1 ? "concept" : "concepts"}`;
+  if (isLabel(d)) return `${c} not labelled yet`;
+  if (isMulti(d)) return `${c} not tagged by Atria`;
+  return `${c} without ${d === "angle" ? "an angle" : `a ${DIM_LABEL[d].toLowerCase()}`}`;
+}
+
+/** Hit rate as a bar against a 0–100% scale, with the average dashed. Grey when there are too few tests to judge. */
+function HitBar({ rate, avg, thin, label }: { rate: number | null; avg: number | null; thin: boolean; label: string }) {
+  return (
+    <div className="relative h-3 bg-surface-2" title={label}>
+      <div className="h-full" style={{ width: `${(rate ?? 0) * 100}%`, background: thin ? "var(--chart-bar)" : "var(--ink)" }} />
+      {avg != null && <div className="absolute -inset-y-1 border-l-2 border-dashed border-ink-3" style={{ left: `${avg * 100}%` }} aria-hidden />}
+    </div>
+  );
+}
+
+/** "What to make more of": the best value per dimension, and the test spend that found nothing. */
+function Overview({ range, pod, targets, personas, onOpen }: { range: Range; pod: string; targets: Targets; personas: Record<string, string>; onOpen: (o: NonNullable<Open>) => void }) {
+  const { data, error } = useApi<InsightsOverview>(`/api/insights/overview?${qs({ range, pod })}`);
+  if (error) return <Empty>Couldn't load: {error.message}</Empty>;
+  if (!data) return <div className="h-40" />;
+  const avg = data.baseline.hitRate;
+  const open = (d: InsightDimension, v: string) => onOpen({ filter: { [d]: v }, title: `${DIM_LABEL[d]}: ${name(d, v, personas)}`, tab: TAB_OF[d] });
+  const untagged = data.untagged.filter((u) => u.concepts > 0);
+
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-lg font-extrabold text-ink">Make more of</h2>
+        <p className="num text-sm text-ink-3">
+          Account hit rate {avg == null ? "—" : pct(avg, 0)} · {data.baseline.hits} of {data.baseline.decided} decided tests
+        </p>
+      </div>
+      {data.winners.length === 0 ? (
+        <p className="border-2 border-divider px-4 py-5 text-sm text-ink-3">
+          Nothing beats the account hit rate with at least {MIN_DECIDED} decided tests yet. Try a longer period.
+        </p>
+      ) : (
+        <ul className="grid gap-0.5 border-2 border-divider bg-divider sm:grid-cols-2 xl:grid-cols-4">
+          {data.winners.slice(0, 4).map((w) => {
+            const c = cpa(w.row.window);
+            return (
+              <li key={w.dimension} className="bg-page">
+                <button type="button" onClick={() => open(w.dimension, w.row.value)} className="flex h-full w-full flex-col gap-2 px-4 py-3.5 text-left transition hover:bg-surface">
+                  <span className="kicker">{DIM_LABEL[w.dimension]}</span>
+                  <span className="truncate text-lg font-extrabold text-ink" title={name(w.dimension, w.row.value, personas)}>
+                    {name(w.dimension, w.row.value, personas)}
+                  </span>
+                  <span className="flex items-baseline gap-2">
+                    <span className="num text-3xl font-extrabold text-ink">{pct(w.row.hitRate, 0)}</span>
+                    <span className="num text-xs text-ink-3">
+                      hit rate · {w.row.hits}/{decidedOf(w.row)}
+                      {avg != null && ` · avg ${pct(avg, 0)}`}
+                    </span>
+                  </span>
+                  <HitBar rate={w.row.hitRate} avg={avg} thin={false} label={`${w.row.hits} hits of ${decidedOf(w.row)} decided`} />
+                  <span className="num flex gap-3 text-xs text-ink-3">
+                    <span>
+                      Test CPA <CpaValue value={c} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
+                    </span>
+                    <span>{money(w.row.window.spendCents, { compact: true })} tested</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {(data.sinks.length > 0 || untagged.length > 0) && (
+        <div className="flex flex-col gap-1.5 text-sm text-ink-2">
+          {data.sinks.length > 0 && (
+            <p>
+              <span className="font-bold text-ink">No hits yet: </span>
+              {data.sinks.map((s, i) => (
+                <span key={`${s.dimension}:${s.row.value}`}>
+                  {i > 0 && " · "}
+                  <button type="button" className="link" onClick={() => open(s.dimension, s.row.value)}>
+                    {name(s.dimension, s.row.value, personas)}
+                  </button>{" "}
+                  <span className="num text-ink-3">
+                    ({DIM_LABEL[s.dimension].toLowerCase()}, 0/{decidedOf(s.row)}, {money(s.row.window.spendCents, { compact: true })})
+                  </span>
+                </span>
+              ))}
+            </p>
+          )}
+          {untagged.length > 0 && (
+            <p className="text-ink-3">
+              {untagged.map((u) => `${u.concepts} of ${data.baseline.concepts} concepts have no ${u.dimension}`).join(" · ")}, so they're left out of those
+              panels.{" "}
+              <a className="link" href="#/tagging">
+                Tag them
+              </a>
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function Panel({
   dimension,
   range,
   pod,
+  sort,
   targets,
-  open,
-  onOpen,
   personas,
+  active,
+  onOpen,
 }: {
   dimension: InsightDimension;
   range: Range;
   pod: string;
+  sort: Sort;
   targets: Targets;
   personas: Record<string, string>;
-  open: { dimension: InsightDimension; value: string | null } | null;
+  active: string | null | undefined;
   onOpen: (value: string | null) => void;
 }) {
   const { data, error } = useApi<InsightsResponse>(`/api/insights?${qs({ range, dimension, pod })}`);
-  const rows = data?.rows ?? [];
-  const cpas = rows.map((r) => cpa(r.window) ?? 0);
-  const scale = Math.max(targets.targetCpa * 1.7, ...cpas) * 1.05;
-  const maxSpend = Math.max(1, ...rows.map((r) => r.window.spendCents));
-  const total = isAtria(dimension) ? null : rows.reduce((n, r) => n + r.concepts, 0);
-  const untagged = rows.find((r) => r.value === null)?.concepts ?? 0;
+  const tagged = sortRows((data?.rows ?? []).filter((r) => r.value !== null), sort);
+  const untagged = data?.rows.find((r) => r.value === null);
+  const avg = data?.baseline.hitRate ?? null;
 
   return (
     <section className="min-w-0">
       <SectionTitle
         title={
           <>
-            {DIM_NAME[dimension]}
+            By {DIM_LABEL[dimension].toLowerCase()}
             {DIM_SOURCE[dimension] && <span className="mt-0.5 block text-xs font-normal tracking-normal text-ink-3">{DIM_SOURCE[dimension]}</span>}
           </>
         }
         right={
-          <span className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-2.5 w-3 bg-good" aria-hidden />
-              <span className="-ml-1 inline-block h-2.5 w-3 bg-warn-line" aria-hidden /> Test CPA · Meta
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="inline-block h-1 w-3" style={{ background: "var(--chart-bar)" }} aria-hidden /> Test spend
-            </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-3 border-l-2 border-dashed border-ink-3" aria-hidden />
+            Average {avg == null ? "—" : pct(avg, 0)}
           </span>
         }
       />
       {error && <Empty>Couldn't load: {error.message}</Empty>}
-      {data && rows.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts started testing in this period.</p>}
-      {rows.length > 0 && (
+      {data && data.rows.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts started testing in this period.</p>}
+      {tagged.length > 0 && (
         <table className="w-full table-fixed text-sm">
           <thead className="kicker text-left">
             <tr>
-              <th className="w-[34%] py-1.5 font-normal"></th>
-              <th className="py-1.5 font-normal">
-                <div className="relative flex justify-between">
-                  <span>$0</span>
-                  <span
-                    className="absolute font-bold whitespace-nowrap text-accent-ink"
-                    style={{ left: `${(targets.targetCpa / scale) * 100}%`, transform: "translateX(-50%)" }}
-                  >
-                    Target ${targets.targetCpa}
-                  </span>
-                  <span>${Math.round(scale)}</span>
-                </div>
-              </th>
-              <th className="w-16 py-1.5 text-right font-normal">Hit rate</th>
-              <th className="w-20 py-1.5 text-right font-normal">CPA</th>
+              <th className="w-[40%] py-1.5 font-normal"></th>
+              <th className="py-1.5 font-normal">Hit rate</th>
+              <th className="w-16 py-1.5 text-right font-normal"></th>
+              <th className="w-20 py-1.5 text-right font-normal">Test CPA</th>
               <th className="hidden w-16 py-1.5 text-right font-normal sm:table-cell">Spend</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <Row
-                key={r.value ?? "none"}
-                r={r}
-                dimension={dimension}
-                targets={targets}
-                scale={scale}
-                maxSpend={maxSpend}
-                personas={personas}
-                active={open?.dimension === dimension && open.value === r.value}
-                onClick={() => onOpen(r.value)}
-              />
+            {tagged.map((r) => (
+              <Row key={r.value} r={r} dimension={dimension} targets={targets} avg={avg} personas={personas} active={active === r.value} onClick={() => onOpen(r.value)} />
             ))}
           </tbody>
         </table>
       )}
-      {total != null && total > 0 && (
-        <p className="num mt-2 text-xs text-ink-3">
-          {total} concepts · {pct((total - untagged) / total, 0)} have{" "}
-          {dimension === "angle" ? "an angle" : dimension === "format" ? "a format" : dimension === "persona" ? "a persona" : "an awareness level"} · click a
-          row for its concepts
+      {data && data.rows.length > 0 && (
+        <p className="mt-2 text-xs text-ink-3">
+          {untagged && (
+            <>
+              <button type="button" className="link" onClick={() => onOpen(null)}>
+                {untaggedText(dimension, untagged.concepts)}
+              </button>
+              {" · "}
+            </>
+          )}
+          {isMulti(dimension) ? "A concept counts under each of its tags, so rows overlap." : "Click a row for its concepts."}
         </p>
-      )}
-      {isAtria(dimension) && rows.length > 0 && (
-        <p className="mt-2 text-xs text-ink-3">A concept appears under each of its Atria tags, so rows overlap and don't add up.</p>
       )}
     </section>
   );
@@ -171,125 +292,273 @@ function Row({
   r,
   dimension,
   targets,
-  scale,
-  maxSpend,
+  avg,
   active,
   onClick,
   personas,
 }: {
   r: InsightRow;
-  personas: Record<string, string>;
   dimension: InsightDimension;
   targets: Targets;
-  scale: number;
-  maxSpend: number;
+  avg: number | null;
   active: boolean;
   onClick: () => void;
+  personas: Record<string, string>;
 }) {
-  const c = cpa(r.window);
-  const band = cpaBand(c, targets.targetCpa, targets.cpaWarnMax);
-  const decided = r.hits + r.misses;
-  const thin = decided < MIN_DECIDED;
+  const decided = decidedOf(r);
+  const thin = isThin(r);
+  const shown = r.pods.slice(0, 2);
   return (
     <tr onClick={onClick} className={`cursor-pointer border-t border-divider align-middle transition hover:bg-surface ${active ? "bg-surface" : ""}`}>
       <td className="py-2.5 pr-3">
-        <div className={`truncate font-semibold ${r.value === null ? "text-ink-3" : "text-ink"}`} title={name(dimension, r.value, personas)}>
+        <div className="truncate font-semibold text-ink" title={name(dimension, r.value, personas)}>
           {name(dimension, r.value, personas)}
         </div>
-        <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-ink-3">
+        <div className="flex flex-wrap items-center gap-x-2 text-[11px] whitespace-nowrap text-ink-3">
           <span>
             {r.concepts} {r.concepts === 1 ? "concept" : "concepts"}
             {r.testing > 0 && ` · ${r.testing} testing`}
           </span>
-          {r.pods.slice(0, 4).map((p) => (
-            <span key={p.podId} className="inline-flex items-center gap-0.5" title={`${p.concepts} from this pod`}>
+          {shown.map((p) => (
+            <span key={p.podId} className="hidden shrink-0 items-center gap-0.5 sm:inline-flex" title={`${p.concepts} from ${podById(p.podId)?.name ?? "this pod"}`}>
               <PodSwatch podId={p.podId} className="size-2" />
               {podById(p.podId)?.code ?? "—"} {p.concepts}
             </span>
           ))}
+          {r.pods.length > shown.length && <span className="hidden sm:inline" title={r.pods.slice(2).map((p) => `${podById(p.podId)?.name ?? "—"} ${p.concepts}`).join(", ")}>+{r.pods.length - shown.length}</span>}
         </div>
       </td>
       <td className="py-2.5">
-        <div className="relative flex flex-col gap-1">
-          <div
-            className="h-3"
-            style={{ width: `${c == null ? 0 : Math.min(1, c / scale) * 100}%`, background: BAND_FILL[band] }}
-            title={c == null ? "No purchases" : `Test CPA $${c.toFixed(2)}`}
-          />
-          <div
-            className="h-1"
-            style={{ width: `${(r.window.spendCents / maxSpend) * 100}%`, background: "var(--chart-bar)" }}
-            title={`Test spend ${money(r.window.spendCents)}`}
-          />
-          <div className="absolute -inset-y-1.5 border-l-2 border-dashed border-accent" style={{ left: `${(targets.targetCpa / scale) * 100}%` }} aria-hidden />
-        </div>
+        <HitBar rate={r.hitRate} avg={avg} thin={thin} label={`${r.hits} hits of ${decided} decided${thin ? " (too few to judge)" : ""}`} />
       </td>
-      <td className="num py-2.5 text-right text-ink" title={`${r.hits} hits of ${decided} decided`}>
-        {r.hitRate == null ? <span className="text-ink-3">—</span> : <span className={thin ? "text-ink-3" : "font-bold"}>{pct(r.hitRate, 0)}</span>}
+      <td className="num py-2.5 text-right" title={`${r.hits} hits of ${decided} decided`}>
+        {r.hitRate == null ? <span className="text-ink-3">—</span> : <span className={thin ? "text-ink-3" : "font-bold text-ink"}>{pct(r.hitRate, 0)}</span>}
         <div className="text-[11px] text-ink-3">
           {r.hits}/{decided}
           {thin && decided > 0 ? " · few" : ""}
         </div>
       </td>
       <td className="py-2.5 text-right">
-        <CpaValue value={c} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
+        <CpaValue value={cpa(r.window)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
       </td>
       <td className="num hidden py-2.5 text-right text-ink-2 sm:table-cell">{money(r.window.spendCents, { compact: true })}</td>
     </tr>
   );
 }
 
+/** Hit rate for each pair of two dimensions. Darker = higher; cells with too few tests stay blank. */
+function Matrix({
+  range,
+  pod,
+  personas,
+  onOpen,
+  active,
+}: {
+  range: Range;
+  pod: string;
+  personas: Record<string, string>;
+  onOpen: (o: NonNullable<Open>) => void;
+  active: Open;
+}) {
+  const [rows, setRows] = useState<MatrixDimension>("angle");
+  const [cols, setCols] = useState<MatrixDimension>("format");
+  const { data, error } = useApi<InsightsMatrix>(rows === cols ? null : `/api/insights/matrix?${qs({ range, pod, rows, cols })}`);
+  const cell = new Map((data?.cells ?? []).map((c) => [`${c.row}\u0000${c.col}`, c]));
+  const avg = data?.baseline.hitRate ?? null;
+  const rowValues = data?.rowValues.slice(0, 14) ?? [];
+  const colValues = data?.colValues.slice(0, 8) ?? [];
+  const isActive = (r: string, c: string) => active?.filter[rows] === r && active.filter[cols] === c;
+
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionTitle
+        title={
+          <>
+            {DIM_LABEL[rows]} × {DIM_LABEL[cols].toLowerCase()}
+            <span className="mt-0.5 block text-xs font-normal tracking-normal text-ink-3">Hit rate of the concepts that carry both. Click a cell for its concepts.</span>
+          </>
+        }
+        right={
+          <span className="flex flex-wrap items-center gap-3">
+            <Select label="Rows" value={rows} onChange={(v) => setRows(v as MatrixDimension)} options={MATRIX_OPTIONS} />
+            <Select label="Columns" value={cols} onChange={(v) => setCols(v as MatrixDimension)} options={MATRIX_OPTIONS} />
+          </span>
+        }
+      />
+      {rows === cols && <p className="text-sm text-ink-3">Pick two different dimensions.</p>}
+      {error && <Empty>Couldn't load: {error.message}</Empty>}
+      {data && rowValues.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts carry both tags in this period.</p>}
+      {rowValues.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] table-fixed border-separate border-spacing-0.5 text-sm">
+            <thead className="kicker">
+              <tr>
+                <th className="w-44 py-1.5 text-left font-normal"></th>
+                {colValues.map((c) => (
+                  <th key={c} className="truncate px-1 py-1.5 text-left font-normal" title={name(cols, c, personas)}>
+                    {name(cols, c, personas)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rowValues.map((r) => (
+                <tr key={r}>
+                  <th className="truncate py-1 pr-2 text-left font-semibold text-ink" title={name(rows, r, personas)}>
+                    {name(rows, r, personas)}
+                  </th>
+                  {colValues.map((c) => {
+                    const x = cell.get(`${r}\u0000${c}`);
+                    if (!x) return <td key={c} className="bg-surface" aria-label="No concepts" />;
+                    const decided = decidedOf(x);
+                    const judged = decided >= MIN_DECIDED && x.hitRate != null;
+                    const strength = judged ? 12 + Math.round(x.hitRate! * 78) : 0;
+                    const dark = strength > 50;
+                    return (
+                      <td key={c} className="p-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onOpen({ filter: { [rows]: r, [cols]: c }, title: `${name(rows, r, personas)} × ${name(cols, c, personas)}`, tab: "combos" })
+                          }
+                          title={`${x.concepts} concepts · ${x.hits} hits of ${decided} decided${judged ? "" : " (too few to judge)"} · test spend ${money(x.window.spendCents)}`}
+                          className={`num flex h-12 w-full flex-col items-start justify-center px-2 text-left transition hover:outline-2 hover:outline-ink ${isActive(r, c) ? "outline-2 outline-accent" : ""}`}
+                          style={{
+                            background: judged ? `color-mix(in oklab, var(--ink) ${strength}%, var(--page))` : "var(--surface)",
+                            color: dark ? "var(--page)" : undefined,
+                          }}
+                        >
+                          <span className={judged ? "font-bold" : "text-ink-3"}>{judged ? pct(x.hitRate, 0) : decided ? `${x.hits}/${decided}` : "testing"}</span>
+                          <span className={`text-[11px] ${dark ? "opacity-80" : "text-ink-3"}`}>
+                            {judged ? `${x.hits}/${decided}` : "few"}
+                            {judged && avg != null && x.hitRate! > avg ? " ▲" : ""}
+                          </span>
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {data && rowValues.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-ink-3">
+          <span className="inline-flex items-center gap-2">
+            0%
+            <span className="inline-block h-2.5 w-32" style={{ background: "linear-gradient(to right, color-mix(in oklab, var(--ink) 12%, var(--page)), color-mix(in oklab, var(--ink) 90%, var(--page)))" }} aria-hidden />
+            100% hit rate
+          </span>
+          <span>▲ above the average ({avg == null ? "—" : pct(avg, 0)})</span>
+          <span>Pale: fewer than {MIN_DECIDED} decided tests</span>
+          {data.skipped > 0 && <span>{data.skipped} concepts without both tags are left out</span>}
+          {(data.rowValues.length > rowValues.length || data.colValues.length > colValues.length) && <span>Showing the most-used values</span>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function readTab(): Tab {
+  try {
+    const t = localStorage.getItem("insights-tab");
+    return TABS.some((x) => x.value === t) ? (t as Tab) : "creative";
+  } catch {
+    return "creative";
+  }
+}
+
 export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; range: Range; setRange: (r: Range) => void }) {
   const [pod, setPod] = useState("");
-  const [open, setOpen] = useState<{ dimension: InsightDimension; value: string | null } | null>(null);
+  const [tab, setTabState] = useState<Tab>(readTab);
+  const [sort, setSort] = useState<Sort>("best");
+  const [open, setOpen] = useState<Open>(null);
   const t = meta.targets;
   const personas = Object.fromEntries(meta.personas.filter((p) => p.status === "active").map((p) => [p.id, p.name]));
   // Once the persona list is confirmed, "By persona" uses it instead of Atria's raw persona tags.
-  const groups = Object.keys(personas).length ? GROUPS.map((g) => g.map((d) => (d === "atria_persona" ? "persona" : d))) : GROUPS;
-  const toggle = (dimension: InsightDimension) => (value: string | null) =>
-    setOpen((o) => (o && o.dimension === dimension && o.value === value ? null : { dimension, value }));
+  const panelsOf = (k: Exclude<Tab, "combos">) => PANELS[k].map((d) => (d === "persona" && !Object.keys(personas).length ? "atria_persona" : d));
+  const setTab = (v: Tab) => {
+    setTabState(v);
+    try {
+      localStorage.setItem("insights-tab", v);
+    } catch {
+      /* per-browser convenience only */
+    }
+  };
+  const openFrom = (o: NonNullable<Open>) => {
+    setTab(o.tab);
+    setOpen(o);
+  };
+  const toggle = (dimension: InsightDimension) => (value: string | null) => {
+    const v = value ?? "none";
+    setOpen((o) => (o && o.filter[dimension] === v && Object.keys(o.filter).length === 1 ? null : { filter: { [dimension]: v }, title: `${DIM_LABEL[dimension]}: ${name(dimension, value, personas)}`, tab }));
+  };
 
   return (
     <div>
-      <PageHeader title="Creative Insights" subtitle="What angles and formats are doing against target, measured on concept tests">
+      <PageHeader title="Creative Insights" subtitle="What to make more of, judged on concept tests">
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
       <div className="flex flex-col gap-8 px-4 py-6 md:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="max-w-[90ch] text-sm text-ink-3">
-            Test CPA and spend sum each concept's judging window. {hitRuleText(t)} Grey hit rates mark fewer than {MIN_DECIDED} decided tests: treat them as
-            hints.
-          </p>
-          <Select
-            label="Pod"
-            value={pod}
-            onChange={(v) => {
-              setPod(v);
-              setOpen(null);
-            }}
-            options={[{ value: "", label: "All pods" }, ...meta.pods.map((p) => ({ value: p.id, label: p.name }))]}
-          />
+        <Overview range={range} pod={pod} targets={t} personas={personas} onOpen={openFrom} />
+
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <Tabs value={tab} onChange={setTab} options={TABS} />
+            <div className="flex flex-wrap items-center gap-3">
+              {tab !== "combos" && <Segmented label="Sort" value={sort} onChange={setSort} options={SORTS} />}
+              <Select
+                label="Pod"
+                value={pod}
+                onChange={(v) => {
+                  setPod(v);
+                  setOpen(null);
+                }}
+                options={[{ value: "", label: "All pods" }, ...meta.pods.map((p) => ({ value: p.id, label: p.name }))]}
+              />
+            </div>
+          </div>
+          <details className="text-sm text-ink-3">
+            <summary className="cursor-pointer text-ink-2">How it's measured</summary>
+            <p className="mt-2 max-w-[90ch]">
+              Hit rate is hits (including late hits) out of decided tests. Test CPA and spend sum each concept's judging window. {hitRuleText(t)} "Best first"
+              ranks by hit rate discounted for small samples, so 3 of 3 doesn't outrank 20 of 30; values with fewer than {MIN_DECIDED} decided tests are grey and
+              sorted last. The dashed line is the hit rate of every concept in the period.
+            </p>
+          </details>
         </div>
 
-        {groups.map((group) => (
-          <Fragment key={group.join()}>
-            <div className="grid gap-8 xl:grid-cols-2">
-              {group.map((d) => (
-                <Panel key={d} dimension={d} range={range} pod={pod} targets={t} open={open} onOpen={toggle(d)} personas={personas} />
-              ))}
-            </div>
-            {open && group.includes(open.dimension) && (
-              <ConceptsTable
-                key={`${open.dimension}:${open.value}:${pod}`}
+        {tab === "combos" ? (
+          <Matrix range={range} pod={pod} personas={personas} onOpen={openFrom} active={open} />
+        ) : (
+          <div className="grid gap-8 xl:grid-cols-2">
+            {panelsOf(tab).map((d) => (
+              <Panel
+                key={d}
+                dimension={d}
                 range={range}
+                pod={pod}
+                sort={sort}
                 targets={t}
-                pods={meta.pods.map((p) => ({ podId: p.id, name: p.name }))}
-                filter={{ [open.dimension]: open.value ?? "none", pod }}
-                title={`${DIM_NAME[open.dimension].replace("By ", "")}: ${name(open.dimension, open.value, personas)}`}
+                personas={personas}
+                active={open && Object.keys(open.filter).length === 1 && open.filter[d] !== undefined ? (open.filter[d] === "none" ? null : open.filter[d]) : undefined}
+                onOpen={toggle(d)}
               />
-            )}
-          </Fragment>
-        ))}
+            ))}
+          </div>
+        )}
+
+        {open && open.tab === tab && (
+          <ConceptsTable
+            key={`${JSON.stringify(open.filter)}:${pod}`}
+            range={range}
+            targets={t}
+            pods={meta.pods.map((p) => ({ podId: p.id, name: p.name }))}
+            filter={{ ...open.filter, pod }}
+            title={open.title}
+          />
+        )}
       </div>
     </div>
   );
