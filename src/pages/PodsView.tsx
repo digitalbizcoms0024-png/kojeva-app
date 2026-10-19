@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ConceptResult, ConceptsResponse, MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { qs, useApi } from "../api.ts";
+import { conceptHref } from "../components/ConceptDrawer.tsx";
 import { LaunchCadence, type LaunchCell } from "../components/LaunchCadence.tsx";
 import { PodSpend } from "../components/PodSpend.tsx";
 import { shiftDay } from "../components/HeaderControls.tsx";
@@ -311,7 +312,9 @@ export function ConceptsTable({
                     <PodChip podId={k.podId} />
                   </td>
                   <td className="py-2.5 pr-3">
-                    <div className="font-semibold text-ink">{k.label}</div>
+                    <a href={conceptHref(k.conceptId)} className="font-semibold text-ink hover:underline">
+                      {k.label}
+                    </a>
                     <div className="text-xs text-ink-3">
                       {k.adsetName} · {k.ads} {k.ads === 1 ? "ad" : "ads"} · {money(k.allTime.spendCents, { compact: true })} all-time
                     </div>

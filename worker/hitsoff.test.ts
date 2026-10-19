@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { RankingsResponse } from "../shared/api.ts";
+import type { ConceptDetail, RankingsResponse } from "../shared/api.ts";
 import { loadAlerts } from "./alerts.ts";
 import type { Env } from "./env.ts";
 import app from "./index.ts";
@@ -71,5 +71,16 @@ describe("hits turned off", () => {
     expect((await rankings("range=week&status=hits_off")).items.map((p) => p.postId).sort()).toEqual(["p1", "p5"]);
     // The normal list only shows posts that spent in the range.
     expect((await rankings("range=week")).items.map((p) => p.postId).sort()).toEqual(["p2", "p4"]);
+  });
+
+  it("serves a concept's card: result, its ads and its days", async () => {
+    const res = await app.fetch(new Request("https://hub.test/api/concepts/s1"), env, {} as ExecutionContext);
+    expect(res.status).toBe(200);
+    const card = (await res.json()) as ConceptDetail;
+    expect(card.concept).toMatchObject({ conceptId: "s1", label: "Almost Sold Out", status: "hit", firstSpend: "2026-10-01", windowEnd: "2026-10-03" });
+    // Only the testing ad belongs to the concept; the scaling copy doesn't.
+    expect(card.ads.map((a) => [a.adId, a.status, a.window.spendCents, a.allTime.spendCents])).toEqual([["sold-test", "PAUSED", 30000, 80000]]);
+    expect(card.daily.map((d) => d.date)).toEqual(Array.from({ length: 8 }, (_, i) => `2026-10-0${i + 1}`));
+    expect((await app.fetch(new Request("https://hub.test/api/concepts/nope"), env, {} as ExecutionContext)).status).toBe(404);
   });
 });

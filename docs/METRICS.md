@@ -57,12 +57,13 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 ## Dashboard alerts (`worker/alerts.ts`)
 - **Fatigue** (✕): Fatigued posts, and posts whose only signal is CPA (a CPA jump is worth a look on its own); biggest recent
   spend first, at most 3.
-- **Hit** (✓): a concept whose judging window closed in the last 7 days as a hit.
+- **Hit** (✓): a concept whose judging window closed in the last 7 days as a hit. "View concept" opens its card (`?concept=<id>` on any page,
+  `src/components/ConceptDrawer.tsx`, data from `GET /api/concepts/:id`); concept names in the Concepts table open it too.
 - **Needs a pod** (!): posts with spend in the last 7 days that no pod or the agency is credited with.
 - **Hit turned off** (!): a hit or late hit that just stopped running **everywhere**: every copy of the creative (same
   video/image by `asset_id`, else the same post, in any ad set) has an off status in Meta (paused, ad set/campaign paused,
-  archived, deleted, disapproved, with issues) or spent nothing in the last 3 synced days, and some copy spent in the 7 days
-  before that. Pausing the test ad after scaling doesn't count while a copy still runs (owner, Oct 18). One alert per
+  archived, deleted, disapproved, with issues) or spent nothing in the last 3 synced days, after its copies spent at least
+  $20 in the 7 days before that (`RUNNING_MIN_CENTS`). Pausing the test ad after scaling doesn't count while a copy still runs (owner, Oct 18). One alert per
   concept, at most 3; each shows for about a week (`worker/hitsoff.ts`).
 - **Rankings → Status → Hits turned off** lists every winner that is off everywhere now, however long ago it stopped, by its
   test post (hit badge), whatever the range spent.

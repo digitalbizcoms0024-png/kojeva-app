@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { MetaResponse } from "../shared/api.ts";
 import { useApi } from "./api.ts";
+import { ConceptDrawer } from "./components/ConceptDrawer.tsx";
 import type { Range } from "./components/HeaderControls.tsx";
 import { Empty, Icon, type IconName } from "./components/ui.tsx";
 import { shortDate } from "./format.ts";
@@ -207,6 +208,9 @@ export default function App() {
         {m && path === "insights" && <InsightsPage meta={m} range={range} setRange={setRange} />}
         {m && path === "coverage" && <CoveragePage meta={m} />}
       </main>
+      {m && route.params.get("concept") && (
+        <ConceptDrawer conceptId={route.params.get("concept")!} meta={m} onClose={() => (window.location.hash = `#/${path}`)} />
+      )}
     </div>
   );
 }

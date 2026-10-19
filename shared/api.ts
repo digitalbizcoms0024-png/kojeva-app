@@ -217,6 +217,29 @@ export interface ConceptsResponse {
   rows: ConceptResult[];
 }
 
+/** One ad in a concept, for the concept card. */
+export interface ConceptAdRow {
+  adId: string;
+  postId: string;
+  name: string;
+  status: string;
+  campaignName: string | null;
+  mediaType: string;
+  thumbnailUrl: string | null;
+  /** Over the concept's judging window, and since launch. */
+  window: Totals;
+  allTime: Totals;
+}
+
+/** GET /api/concepts/:id: the concept card. */
+export interface ConceptDetail {
+  concept: ConceptResult;
+  /** Biggest all-time spend first. */
+  ads: ConceptAdRow[];
+  /** Concept totals per day with any spend or purchases, oldest first. */
+  daily: ({ date: string } & Totals)[];
+}
+
 /** Atria dimensions are multi-valued: a concept counts under each of its themes. */
 export type InsightDimension = "angle" | "format" | "awareness" | "persona" | "atria_hook" | "atria_persona" | "atria_desire" | "belief" | "atria_theme";
 

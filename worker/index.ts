@@ -4,6 +4,7 @@ import type {
   AttributionLevel,
   AttributionResponse,
   AttributionRow,
+  ConceptDetail,
   ConceptsResponse,
   Editor,
   InsightDimension,
@@ -515,6 +516,63 @@ app.get("/launches", async (c) => {
 });
 
 /** Concepts that first spent in the range, newest first. ?pod=<id> narrows to one pod. */
+/** One concept's card: its result, each of its ads, and its days (each ad's days read by key). */
+app.get("/concepts/:id", async (c) => {
+  const db = c.env.DB;
+  const id = c.req.param("id");
+  const concept = (await loadConcepts(db)).find((k) => k.conceptId === id);
+  if (!concept) return c.json({ error: "Concept not found" }, 404);
+  const [ads, days] = await Promise.all([
+    db
+      .prepare(
+        `SELECT a.id, a.post_id, a.name, a.status, a.campaign_name, p.media_type, p.thumbnail_url
+         FROM ads a JOIN posts p ON p.id = a.post_id WHERE a.concept_id = ?1`,
+      )
+      .bind(id)
+      .all<{ id: string; post_id: string; name: string; status: string; campaign_name: string | null; media_type: string; thumbnail_url: string | null }>(),
+    db
+      .prepare(
+        `SELECT a.id, d.date, d.spend_cents, d.impressions, d.link_clicks, d.purchases, d.revenue_cents
+         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id WHERE a.concept_id = ?1`,
+      )
+      .bind(id)
+      .all<Record<string, unknown>>(),
+  ]);
+  const zero = () => ({ ...ZERO_TOTALS });
+  const perAd = new Map(ads.results.map((a) => [a.id, { window: zero(), allTime: zero() }]));
+  const byDay = new Map<string, Totals>();
+  for (const r of days.results) {
+    const t = toTotals(r);
+    const date = String(r.date);
+    const ad = perAd.get(String(r.id));
+    if (ad) {
+      ad.allTime = addTotals(ad.allTime, t);
+      if (date >= concept.firstSpend && date <= concept.windowEnd) ad.window = addTotals(ad.window, t);
+    }
+    byDay.set(date, addTotals(byDay.get(date) ?? ZERO_TOTALS, t));
+  }
+  const body: ConceptDetail = {
+    concept,
+    ads: ads.results
+      .map((a) => ({
+        adId: a.id,
+        postId: a.post_id,
+        name: a.name,
+        status: a.status,
+        campaignName: a.campaign_name,
+        mediaType: a.media_type,
+        thumbnailUrl: a.thumbnail_url,
+        ...perAd.get(a.id)!,
+      }))
+      .sort((x, y) => y.allTime.spendCents - x.allTime.spendCents),
+    daily: [...byDay]
+      .filter(([, t]) => t.spendCents > 0 || t.purchases > 0)
+      .map(([date, t]) => ({ date, ...t }))
+      .sort((x, y) => x.date.localeCompare(y.date)),
+  };
+  return c.json(body);
+});
+
 app.get("/concepts", async (c) => {
   const db = c.env.DB;
   const range = await resolveRange(db, (k) => c.req.query(k));

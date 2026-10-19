@@ -15,6 +15,9 @@ export const OFF_STATUSES: Record<string, string> = {
   WITH_ISSUES: "has issues",
 };
 
+/** Week-before spend (all copies) below which a winner wasn't really running, so stopping isn't news. */
+export const RUNNING_MIN_CENTS = 2000;
+
 export interface HitCopy {
   postId: string;
   name: string;
@@ -32,7 +35,7 @@ export interface HitCreative {
   copies: HitCopy[];
   /** No copy anywhere is running: each is off in Meta or spent nothing in the last 3 synced days. */
   offEverywhere: boolean;
-  /** Off everywhere, and some copy was spending in the week before: just turned off. */
+  /** Off everywhere, after spending at least $20 in the week before: just turned off. */
   turnedOffRecently: boolean;
 }
 
@@ -96,7 +99,7 @@ async function compute(db: D1Database, concepts: ConceptResult[], latest: string
       testPosts: [...testPosts],
       copies: copies.sort((a, b) => b.beforeCents - a.beforeCents),
       offEverywhere,
-      turnedOffRecently: offEverywhere && copies.some((c) => c.beforeCents > 0),
+      turnedOffRecently: offEverywhere && copies.reduce((n, c) => n + c.beforeCents, 0) >= RUNNING_MIN_CENTS,
     };
   });
 }

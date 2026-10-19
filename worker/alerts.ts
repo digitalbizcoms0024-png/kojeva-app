@@ -54,7 +54,7 @@ export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null;
       tone: "good",
       title: `${k.label} hit target`,
       detail: `${podById(k.podId)?.name ?? "Unassigned"} · ${usd2(cpa(k.window) ?? 0)} CPA and ${(roas(k.window) ?? 0).toFixed(2)} ROAS in its test · ${usd(k.window.spendCents)} spend`,
-      href: "#/pods",
+      href: `#/dashboard?concept=${encodeURIComponent(k.conceptId)}`,
       action: "View concept",
     });
   }
