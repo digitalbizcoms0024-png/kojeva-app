@@ -58,6 +58,10 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
   the morning sync and Atria run, plus three deploys each starting with an empty memory cache. Fix:
   results are now also stored in D1 (`snapshots`, migration 0015), so a fresh isolate reads ~40 rows
   for the Dashboard instead of ~465k; only a data change recomputes. Owner chose to stay on the free plan.
+- Oct 19, later: ad numbers (concept results, windows, fatigue, range totals) now recompute once per
+  sync (`stats_version`), not per edit: a tag edit costs ~21k reads instead of ~465k; a sync ~320k
+  once. Settings → Rebuild summaries forces a recompute. `worker/summaries.test.ts` proves the cached
+  pages match a from-scratch recomputation after edits.
 
 ## Scheduled tasks (claude.ai)
 - "Kojeva Hub · Atria tag sync" (daily 10:07 UTC, Atria connector): tags, awareness/belief/offer

@@ -7,7 +7,7 @@ import { loadCoverage } from "./coverage.ts";
 import { confirmed, loadPersonas } from "./personas.ts";
 import { loadFatigue } from "./fatigue.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
-import { getLatestDate, getTargets, loadConcepts, shiftDay } from "./queries.ts";
+import { getLatestDate, getTargets, loadConcepts, shiftDay, untaggedSpend } from "./queries.ts";
 
 /** Share of a week's spend in a single persona × awareness cell that raises an alert. */
 export const CONCENTRATION = 0.6;
@@ -30,15 +30,7 @@ export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null;
 
   const [tired, untagged, concepts] = await Promise.all([
     loadFatigue(db, targets, latest),
-    db
-      .prepare(
-        `SELECT COUNT(DISTINCT a.post_id) AS posts, COALESCE(SUM(d.spend_cents), 0) AS spend_cents
-         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
-         LEFT JOIN assignments s ON s.post_id = a.post_id
-         WHERE d.date BETWEEN ?1 AND ?2 AND d.spend_cents > 0 AND s.pod_id IS NULL`,
-      )
-      .bind(weekFrom, latest)
-      .first<{ posts: number; spend_cents: number }>(),
+    untaggedSpend(db, weekFrom, latest),
     loadConcepts(db),
   ]);
 
@@ -66,7 +58,7 @@ export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null;
     alerts.push({
       id: "untagged",
       tone: "warn",
-      title: `${n} ${n === 1 ? "ad" : "ads"} with ${usd(Number(untagged.spend_cents))} spend ${n === 1 ? "needs" : "need"} a pod`,
+      title: `${n} ${n === 1 ? "ad" : "ads"} with ${usd(untagged.spendCents)} spend ${n === 1 ? "needs" : "need"} a pod`,
       detail: "Spend in the last 7 days that no pod or the agency gets credit for yet",
       href: "#/tagging",
       action: "Tag ads",

@@ -1,5 +1,5 @@
 // Pulls ads and daily insights from Meta into D1. See docs/ROADMAP.md → Phase 1.
-import { bumpVersion } from "../cache.ts";
+import { bumpStats } from "../cache.ts";
 import { loadAddedPods } from "../pods.ts";
 import { attributePod, DEFAULT_ATTRIBUTION, detectPodsStart, type AttributionSettings } from "../../shared/attribution.ts";
 import { classify } from "../../shared/classify.ts";
@@ -318,6 +318,8 @@ async function saveConcepts(
     }
   }
   await runBatched(db, stmts);
+  // Which ads form which concept changed: the concept numbers are recomputed once.
+  if (stmts.length) await bumpStats(db);
 }
 
 /** Posts left without ads (their ads moved to a real post ID), unless tagged by hand. */
@@ -514,7 +516,7 @@ export async function runSync(
   // writes 0 data rows); /api/meta keys its cache on the latest run, so the status stays current.
   const finish = async (status: string, message: string, changed: boolean) => {
     await finishRun(status, message);
-    if (changed) await bumpVersion(db).catch(() => undefined);
+    if (changed) await bumpStats(db).catch(() => undefined);
   };
   const finishRun = (status: string, message: string) =>
     db

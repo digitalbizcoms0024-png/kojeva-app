@@ -1,6 +1,6 @@
 import type { Assignment, ConceptResult, PostSummary } from "../shared/api.ts";
 import { classify } from "../shared/classify.ts";
-import { memoize } from "./cache.ts";
+import { memoize, memoizeMap } from "./cache.ts";
 import { loadFatigue } from "./fatigue.ts";
 import {
   addTotals,
@@ -141,51 +141,43 @@ function mode(values: string[]): string | null {
 
 /** Every concept with its test-window totals and hit status (computed once per data version). */
 export function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
+  // Labels per edit, on top of the numbers per sync (loadConceptNumbers).
   return memoize(db, "concepts", () => computeConcepts(db), { durable: true });
 }
 
-async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
+/** A concept's numbers: they depend only on ad_daily, its ads and the targets (see ConceptResult). */
+interface ConceptNumbers {
+  firstSpend: string;
+  lastSpend: string;
+  qualifiedOn: string | null;
+  windowEnd: string;
+  window: Totals;
+  allTime: Totals;
+  /** Before the late-hit look. */
+  status: HitStatus;
+  lateWindow: { from: string; to: string; totals: Totals } | null;
+}
+
+/**
+ * Every concept's numbers, keyed by concept id; concepts without spend are left out. Computed once
+ * per sync (stats version), not per edit, and stored for every isolate.
+ */
+function loadConceptNumbers(db: D1Database): Promise<Record<string, ConceptNumbers>> {
+  return memoize(db, "concept-numbers", () => computeConceptNumbers(db), { durable: true, scope: "stats" });
+}
+
+async function computeConceptNumbers(db: D1Database): Promise<Record<string, ConceptNumbers>> {
   const [targets, latest] = await Promise.all([getTargets(db), getLatestDate(db)]);
   const minSpend = targets.minTestSpend * 100;
-  const [meta, rows] = await Promise.all([
-    db
-      .prepare(
-        `SELECT c.id, c.pod_id, c.label, c.adset_name,
-           (SELECT COUNT(*) FROM ads x WHERE x.concept_id = c.id) AS ads,
-           (SELECT GROUP_CONCAT(x.name, char(10)) FROM ads x WHERE x.concept_id = c.id) AS ad_names,
-           (SELECT GROUP_CONCAT(t.tags, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
-              WHERE x.concept_id = c.id AND t.status = 'tagged') AS atria_tags,
-           (SELECT s.angle FROM ads x JOIN assignments s ON s.post_id = x.post_id
-              WHERE x.concept_id = c.id AND s.tags_source = 'manual' AND s.angle IS NOT NULL LIMIT 1) AS manual_angle,
-           (SELECT s.format FROM ads x JOIN assignments s ON s.post_id = x.post_id
-              WHERE x.concept_id = c.id AND s.tags_source = 'manual' AND s.format IS NOT NULL LIMIT 1) AS manual_format,
-           (SELECT GROUP_CONCAT(t.awareness, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
-              WHERE x.concept_id = c.id AND t.awareness IS NOT NULL) AS awareness_list,
-           (SELECT GROUP_CONCAT(t.belief_group, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
-              WHERE x.concept_id = c.id AND t.belief_group IS NOT NULL) AS belief_group_list,
-           (SELECT GROUP_CONCAT(t.belief, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
-              WHERE x.concept_id = c.id AND t.belief IS NOT NULL) AS belief_list,
-           (SELECT s.awareness FROM ads x JOIN assignments s ON s.post_id = x.post_id
-              WHERE x.concept_id = c.id AND s.awareness IS NOT NULL LIMIT 1) AS manual_awareness,
-           (SELECT s.belief_group FROM ads x JOIN assignments s ON s.post_id = x.post_id
-              WHERE x.concept_id = c.id AND s.belief_group IS NOT NULL LIMIT 1) AS manual_belief,
-           (SELECT GROUP_CONCAT(t.persona_id, char(30)) FROM ads x JOIN atria_assets t ON t.asset_id = x.asset_id
-              WHERE x.concept_id = c.id AND t.persona_id IS NOT NULL) AS persona_list,
-           (SELECT s.persona_id FROM ads x JOIN assignments s ON s.post_id = x.post_id
-              WHERE x.concept_id = c.id AND s.persona_id IS NOT NULL LIMIT 1) AS manual_persona
-         FROM concepts c`,
-      )
-      .all<Row>(),
-    // Every day of every ad in a concept, read once (ads first, then each ad's days by key; a window
-    // function or GROUP BY here costs D1 several reads per row). Everything below is computed from it.
-    db
-      .prepare(
-        `SELECT a.concept_id, a.id, d.date, d.spend_cents, d.impressions, d.link_clicks, d.purchases, d.revenue_cents
-         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
-         WHERE a.concept_id IS NOT NULL`,
-      )
-      .raw<[string, string, string, number, number, number, number, number]>(),
-  ]);
+  // Every day of every ad in a concept, read once (ads first, then each ad's days by key; a window
+  // function or GROUP BY here costs D1 several reads per row). Everything below is computed from it.
+  const rows = await db
+    .prepare(
+      `SELECT a.concept_id, a.id, d.date, d.spend_cents, d.impressions, d.link_clicks, d.purchases, d.revenue_cents
+       FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
+       WHERE a.concept_id IS NOT NULL`,
+    )
+    .raw<[string, string, string, number, number, number, number, number]>();
 
   // Per concept: totals by day; per ad: running spend, for the day it reached the minimum.
   const days = new Map<string, Map<string, Totals>>();
@@ -211,37 +203,88 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
       }
     }
   }
-  const series = new Map<string, ({ date: string } & Totals)[]>();
-  for (const [id, byDay] of days) series.set(id, [...byDay].map(([date, t]) => ({ date, ...t })).sort((x, y) => x.date.localeCompare(y.date)));
   const sum = (list: ({ date: string } & Totals)[], from = "", to = "9999-12-31") =>
     list.reduce((acc, d) => (d.date >= from && d.date <= to ? addTotals(acc, d) : acc), ZERO_TOTALS);
 
-  const allTime = new Map([...series].map(([id, list]) => [id, sum(list)]));
-  const ends = meta.results.flatMap((r) => {
-    const spent = (series.get(String(r.id)) ?? []).filter((d) => d.spendCents > 0);
-    if (!spent.length) return [];
+  const out: Record<string, ConceptNumbers> = {};
+  for (const [id, byDay] of days) {
+    const series = [...byDay].map(([date, t]) => ({ date, ...t })).sort((x, y) => x.date.localeCompare(y.date));
+    const spent = series.filter((d) => d.spendCents > 0);
+    if (!spent.length) continue;
     const firstSpend = spent[0]!.date;
-    r.last_date = spent[spent.length - 1]!.date;
-    const qualifiedOn = qualified.get(String(r.id)) ?? null;
-    return [{ r, firstSpend, qualifiedOn, windowEnd: judgingWindowEnd(firstSpend, qualifiedOn, targets) }];
-  });
-
-  const base = ends.map((e) => {
-    const window = sum(series.get(String(e.r.id)) ?? [], e.firstSpend, e.windowEnd);
-    const status = hitStatus(window, { qualified: e.qualifiedOn != null, complete: latest != null && latest >= e.windowEnd }, targets);
-    return { ...e, window, status };
-  });
-
-  // Second look for day-3 misses that kept spending after their judging window.
-  const late = new Map<string, { from: string; to: string; totals: Totals }>();
-  for (const b of base) {
-    if (!latest || b.status !== "miss" || String(b.r.last_date) <= b.windowEnd) continue;
-    const w = lateHitWindow(series.get(String(b.r.id)) ?? [], b.firstSpend, b.windowEnd, latest, targets);
-    if (w) late.set(String(b.r.id), w);
+    const lastSpend = spent[spent.length - 1]!.date;
+    const qualifiedOn = qualified.get(id) ?? null;
+    const windowEnd = judgingWindowEnd(firstSpend, qualifiedOn, targets);
+    const window = sum(series, firstSpend, windowEnd);
+    const status = hitStatus(window, { qualified: qualifiedOn != null, complete: latest != null && latest >= windowEnd }, targets);
+    // Second look for day-3 misses that kept spending after their judging window.
+    const lateWindow = latest && status === "miss" && lastSpend > windowEnd ? lateHitWindow(series, firstSpend, windowEnd, latest, targets) : null;
+    out[id] = { firstSpend, lastSpend, qualifiedOn, windowEnd, window, allTime: sum(series), status, lateWindow };
   }
+  return out;
+}
 
-  return base.map(({ r, firstSpend, qualifiedOn, windowEnd, window, status: own }) => {
-    const lateWindow = late.get(String(r.id)) ?? null;
+/**
+ * Each concept's labels from its ads: names, Atria tags and labels, hand-set tags. Two flat reads
+ * combined here (a sub-select per concept costs D1 a dozen reads per concept). Lists are joined
+ * with char(30), names with "\n", as the callers split them.
+ */
+async function conceptLabels(db: D1Database): Promise<Row[]> {
+  const [concepts, ads] = await Promise.all([
+    db.prepare("SELECT id, pod_id, label, adset_name FROM concepts").all<Row>(),
+    db
+      .prepare(
+        `SELECT x.concept_id, x.name, t.status AS t_status, t.tags, t.awareness, t.belief_group, t.belief, t.persona_id,
+           s.tags_source, s.angle, s.format, s.awareness AS s_awareness, s.belief_group AS s_belief, s.persona_id AS s_persona
+         FROM ads x
+         LEFT JOIN atria_assets t ON t.asset_id = x.asset_id
+         LEFT JOIN assignments s ON s.post_id = x.post_id
+         WHERE x.concept_id IS NOT NULL`,
+      )
+      .all<Row>(),
+  ]);
+  const byConcept = new Map<string, Row[]>();
+  for (const ad of ads.results) {
+    const list = byConcept.get(String(ad.concept_id));
+    if (list) list.push(ad);
+    else byConcept.set(String(ad.concept_id), [ad]);
+  }
+  const joined = (values: unknown[], sep: string) => (values.length ? values.map(String).join(sep) : null);
+  const pick = (list: Row[], key: string, ok: (ad: Row) => boolean = () => true) => list.find((ad) => ad[key] != null && ok(ad))?.[key] ?? null;
+  return concepts.results.map((c) => {
+    const list = byConcept.get(String(c.id)) ?? [];
+    const values = (key: string) => list.filter((ad) => ad[key] != null).map((ad) => ad[key]);
+    const manual = (ad: Row) => ad.tags_source === "manual";
+    return {
+      ...c,
+      ads: list.length,
+      ad_names: joined(list.map((ad) => ad.name), "\n"),
+      atria_tags: joined(list.filter((ad) => ad.t_status === "tagged").map((ad) => ad.tags), "\u001e"),
+      manual_angle: pick(list, "angle", manual),
+      manual_format: pick(list, "format", manual),
+      awareness_list: joined(values("awareness"), "\u001e"),
+      belief_group_list: joined(values("belief_group"), "\u001e"),
+      belief_list: joined(values("belief"), "\u001e"),
+      manual_awareness: pick(list, "s_awareness"),
+      manual_belief: pick(list, "s_belief"),
+      persona_list: joined(values("persona_id"), "\u001e"),
+      manual_persona: pick(list, "s_persona"),
+    };
+  });
+}
+
+/** Concepts' labels and tags (per edit) joined to their numbers (per sync). */
+async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
+  const [latest, numbers] = await Promise.all([getLatestDate(db), loadConceptNumbers(db)]);
+  const meta = { results: await conceptLabels(db) };
+  const base = meta.results.flatMap((r) => {
+    const n = numbers[String(r.id)];
+    if (!n) return [];
+    r.last_date = n.lastSpend;
+    return [{ r, ...n }];
+  });
+
+  return base.map(({ r, firstSpend, qualifiedOn, windowEnd, window, allTime, status: own, lateWindow }) => {
     const status: HitStatus = lateWindow ? "late_hit" : own;
     const manualAwareness = r.manual_awareness == null ? null : String(r.manual_awareness);
     const manualBelief = r.manual_belief == null ? null : String(r.manual_belief);
@@ -274,7 +317,7 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
       qualifiedOn,
       windowEnd,
       window,
-      allTime: allTime.get(String(r.id)) ?? window,
+      allTime,
       status,
       lateWindow,
       lastSpend,
@@ -320,28 +363,56 @@ function toAssignment(r: Row): Assignment {
   };
 }
 
+/** Each post's totals in [from, to] (each ad's days by key). */
+async function postRangeTotals(db: D1Database, from: string, to: string, postId?: string): Promise<Map<string, Totals>> {
+  const { results } = await db
+    .prepare(
+      `SELECT a.post_id, ${TOTALS_SQL}
+       FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
+       WHERE d.date BETWEEN ?1 AND ?2 ${postId ? "AND a.post_id = ?3" : ""}
+       GROUP BY a.post_id`,
+    )
+    .bind(...(postId ? [from, to, postId] : [from, to]))
+    .all<Row>();
+  return new Map(results.map((r) => [String(r.post_id), toTotals(r)]));
+}
+
+/** Every post's totals in [from, to], once per sync for each range (edits don't change them). */
+export function loadPostRangeTotals(db: D1Database, from: string, to: string): Promise<Map<string, Totals>> {
+  return memoizeMap(db, `post-range-${from}-${to}`, () => postRangeTotals(db, from, to), { durable: true, scope: "stats" });
+}
+
+/** Posts with spend in [from, to] that no pod or the agency is credited with: count and spend. */
+export async function untaggedSpend(db: D1Database, from: string, to: string): Promise<{ posts: number; spendCents: number }> {
+  const [totals, tagged] = await Promise.all([
+    loadPostRangeTotals(db, from, to),
+    db.prepare("SELECT post_id FROM assignments WHERE pod_id IS NOT NULL").all<{ post_id: string }>(),
+  ]);
+  const credited = new Set(tagged.results.map((r) => r.post_id));
+  let posts = 0;
+  let spendCents = 0;
+  for (const [postId, t] of totals) {
+    if (t.spendCents <= 0 || credited.has(postId)) continue;
+    posts++;
+    spendCents += t.spendCents;
+  }
+  return { posts, spendCents };
+}
+
 /** Every post with its totals in [from, to] and its initial-test verdict. */
 export async function loadPosts(db: D1Database, from: string, to: string, opts: { postId?: string; concepts?: ConceptResult[] } = {}): Promise<PostSummary[]> {
   const [targets, latest, concepts] = await Promise.all([getTargets(db), getLatestDate(db), opts.concepts ?? loadConcepts(db)]);
   const conceptStatus = new Map(concepts.map((c) => [c.conceptId, c.status]));
   const [base, ranged, windows, fatigueByPost] = await Promise.all([
-    // The range-independent parts are computed once per data version (see cache.ts).
-    opts.postId ? loadPostBase(db, opts.postId) : memoize(db, "post-base", () => loadPostBase(db)),
-    db
-      .prepare(
-        `SELECT a.post_id, ${TOTALS_SQL}
-         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
-         WHERE d.date BETWEEN ?1 AND ?2 ${opts.postId ? "AND a.post_id = ?3" : ""}
-         GROUP BY a.post_id`,
-      )
-      .bind(...(opts.postId ? [from, to, opts.postId] : [from, to]))
-      .all<Row>(),
+    // Labels and tags: once per edit. The numbers: once per sync (stats version, see cache.ts).
+    opts.postId ? loadPostBase(db, opts.postId) : memoize(db, "post-base", () => loadPostBase(db), { durable: true }),
+    opts.postId ? postRangeTotals(db, from, to, opts.postId) : loadPostRangeTotals(db, from, to),
     opts.postId
       ? testWindows(db, targets.testWindowDays, opts.postId)
-      : memoize(db, `post-windows-${targets.testWindowDays}`, () => testWindows(db, targets.testWindowDays)),
+      : memoizeMap(db, `post-windows-${targets.testWindowDays}`, () => testWindows(db, targets.testWindowDays), { durable: true, scope: "stats" }),
     loadFatigue(db, targets, latest),
   ]);
-  const totalsByPost = new Map(ranged.results.map((r) => [String(r.post_id), toTotals(r)]));
+  const totalsByPost = ranged;
 
   return base.map((r) => {
     const postId = String(r.post_id);

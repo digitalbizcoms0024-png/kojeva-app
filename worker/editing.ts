@@ -8,7 +8,7 @@ import { ANGLES, FORMATS, GROUPS, HOOKS, LANDING_PAGES, AWARENESS, POD_SLOTS } f
 import { requireAccess } from "./access.ts";
 import { randomToken } from "./crypto.ts";
 import type { AppEnv } from "./env.ts";
-import { bumpVersion } from "./cache.ts";
+import { bumpStats, bumpVersion } from "./cache.ts";
 import { attribute } from "./meta/sync.ts";
 import { loadAddedPods } from "./pods.ts";
 import { cleanPersona, loadPersonas, MAX_PERSONAS, newPersonaId, nextSort, relabelUnplaced } from "./personas.ts";
@@ -179,7 +179,10 @@ editing.put("/settings", requireAccess, async (c) => {
   const problem = (body.targets && checkTargets(body.targets)) || (body.attribution && checkAttribution(body.attribution));
   if (problem) return c.json({ error: problem }, 400);
   const by = c.get("userEmail");
-  if (body.targets) await mergeSetting(db, "targets", body.targets, by);
+  if (body.targets) {
+    await mergeSetting(db, "targets", body.targets, by);
+    await bumpStats(db); // hit results and fatigue depend on the targets
+  }
   if (body.attribution) {
     const a = { ...body.attribution };
     if (a.agencyPrefixes) a.agencyPrefixes = [...new Set(a.agencyPrefixes.map((p) => p.toUpperCase()))];
@@ -188,6 +191,12 @@ editing.put("/settings", requireAccess, async (c) => {
     await mergeSetting(db, "attribution", a, by);
     await attribute(db);
   }
+  return c.json({ ok: true });
+});
+
+// Recompute the stored summaries (worker/cache.ts, stats version) from the daily data.
+editing.post("/stats/rebuild", requireAccess, async (c) => {
+  await bumpStats(c.env.DB);
   return c.json({ ok: true });
 });
 

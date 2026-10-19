@@ -43,8 +43,17 @@ export interface HitCreative {
  * Every creative that won a concept (hit or late hit), with all its copies: the same video or image
  * (`asset_id`, else the same post) in any ad set.
  */
-export function loadHitCreatives(db: D1Database, concepts: ConceptResult[], latest: string): Promise<HitCreative[]> {
-  return memoize(db, `hit-creatives-${latest}`, () => compute(db, concepts, latest));
+export async function loadHitCreatives(db: D1Database, concepts: ConceptResult[], latest: string): Promise<HitCreative[]> {
+  // Statuses and spend change only with a sync, so this is computed once per sync (stats version)
+  // and joined to the current concept labels here.
+  const byId = new Map(concepts.map((k) => [k.conceptId, k]));
+  const stored = await memoize(
+    db,
+    `hit-creatives-${latest}`,
+    async () => (await compute(db, concepts, latest)).map(({ concept, ...h }) => ({ ...h, conceptId: concept.conceptId })),
+    { durable: true, scope: "stats" },
+  );
+  return stored.flatMap(({ conceptId, ...h }) => (byId.has(conceptId) ? [{ ...h, concept: byId.get(conceptId)! }] : []));
 }
 
 async function compute(db: D1Database, concepts: ConceptResult[], latest: string): Promise<HitCreative[]> {

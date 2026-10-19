@@ -7,7 +7,7 @@ import { classify } from "../shared/classify.ts";
 import { buildConcepts, ONE_CONCEPT_PER_AD, staticTitle } from "../shared/concepts.ts";
 import { parseAdName } from "../shared/naming.ts";
 import { PODS } from "../shared/taxonomy.ts";
-import { bumpVersion, memoize } from "./cache.ts";
+import { bumpStats, memoize } from "./cache.ts";
 import { attribute } from "./meta/sync.ts";
 import { loadAddedPods } from "./pods.ts";
 
@@ -35,6 +35,6 @@ export function ensureAttributed(db: D1Database): Promise<void> {
       .prepare("INSERT INTO settings (key, value) VALUES ('rules_fingerprint', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
       .bind(fingerprint)
       .run();
-    await bumpVersion(db);
+    await bumpStats(db);
   });
 }

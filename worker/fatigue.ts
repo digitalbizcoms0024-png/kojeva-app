@@ -1,14 +1,14 @@
 // Loads each spending post's first week and last 3 days, and applies shared/fatigue.ts.
 import { fatigue, type Fatigue, type FatigueWindow } from "../shared/fatigue.ts";
 import type { Targets } from "../shared/metrics.ts";
-import { memoize } from "./cache.ts";
+import { memoizeMap } from "./cache.ts";
 import { daysBetween, postFirstSpendSql, shiftDay } from "./queries.ts";
 
 type Row = { post_id: string; first_date: string; w: string; spend: number; impr: number; reach: number | null; clicks: number; purchases: number };
 
 /** Fatigue for every post that spent in the last 3 synced days and is old enough to judge. */
 export function loadFatigue(db: D1Database, targets: Targets, latest: string | null): Promise<Map<string, Fatigue>> {
-  return memoize(db, `fatigue-${latest}`, () => computeFatigue(db, targets, latest));
+  return memoizeMap(db, `fatigue-${latest}`, () => computeFatigue(db, targets, latest), { durable: true, scope: "stats" });
 }
 
 async function computeFatigue(db: D1Database, targets: Targets, latest: string | null): Promise<Map<string, Fatigue>> {

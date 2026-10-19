@@ -26,7 +26,7 @@ import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, roas, type Totals } from "..
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware } from "./access.ts";
-import { bumpVersion, cachedResponse, cacheResponse, dataVersion, readSnapshot, writeSnapshot } from "./cache.ts";
+import { bumpVersion, cachedResponse, cacheResponse, dataVersion, memoize, readSnapshot, writeSnapshot } from "./cache.ts";
 import type { AppEnv, Env } from "./env.ts";
 import { loadAlerts, loadSuggestions } from "./alerts.ts";
 import { atria } from "./atria.ts";
@@ -34,7 +34,7 @@ import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
-import { getLatestDate, getTargets, loadConcepts, loadPosts, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
+import { getLatestDate, getTargets, loadConcepts, loadPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
 import { loadAddedPods } from "./pods.ts";
 import { ensureAttributed } from "./rules.ts";
@@ -142,15 +142,7 @@ app.get("/meta", async (c) => {
     db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'pods_start_detected'").first<{ value: string }>(),
     db.prepare("SELECT id, name, pod_id AS podId FROM editors ORDER BY name").all<Editor>(),
-    db
-      .prepare(
-        `SELECT COUNT(DISTINCT a.post_id) AS n
-         FROM ads a LEFT JOIN assignments s ON s.post_id = a.post_id
-         WHERE s.pod_id IS NULL AND EXISTS (
-           SELECT 1 FROM ad_daily d WHERE d.ad_id = a.id AND d.spend_cents > 0
-             AND d.date >= date((SELECT MAX(date) FROM ad_daily), '-29 days'))`,
-      )
-      .first<{ n: number }>(),
+    getLatestDate(db).then((l) => (l ? untaggedSpend(db, shiftDay(l, -29), l) : { posts: 0, spendCents: 0 })),
     loadPersonas(db),
   ]);
   const attribution = { ...DEFAULT_ATTRIBUTION, ...(attr ? (JSON.parse(attr.value) as Partial<AttributionSettings>) : {}) };
@@ -171,7 +163,7 @@ app.get("/meta", async (c) => {
     editors: editors.results,
     canEdit: accessConfigured(c.env),
     viewer: c.get("userEmail"),
-    needsTagging: Number(untagged?.n ?? 0),
+    needsTagging: untagged.posts,
     personas,
   };
   return c.json(body);
@@ -296,16 +288,30 @@ app.get("/pods", async (c) => {
     loadPosts(db, range.from, range.to),
     loadConcepts(db),
     db.prepare("SELECT id, name, color, kind FROM pods ORDER BY kind DESC, name").all<{ id: string; name: string; color: string; kind: "pod" | "agency" }>(),
-    db
-      .prepare(
-        `SELECT s.pod_id, d.date, SUM(d.spend_cents) AS spend_cents
-         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id LEFT JOIN assignments s ON s.post_id = a.post_id
-         WHERE d.date >= ?1 GROUP BY s.pod_id, d.date`,
-      )
-      .bind(sparkDays[0] ?? "9999-12-31")
-      .all<{ pod_id: string | null; date: string; spend_cents: number }>(),
+    // Each post's spend per day (once per sync), grouped by the current pods below.
+    memoize(
+      db,
+      `post-spark-${sparkDays[0] ?? ""}`,
+      async () =>
+        (
+          await db
+            .prepare(
+              `SELECT a.post_id, d.date, SUM(d.spend_cents) AS spend_cents
+               FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
+               WHERE d.date >= ?1 GROUP BY a.post_id, d.date`,
+            )
+            .bind(sparkDays[0] ?? "9999-12-31")
+            .all<{ post_id: string; date: string; spend_cents: number }>()
+        ).results,
+      { durable: true, scope: "stats" },
+    ),
   ]);
-  const spendOn = new Map(daily.results.map((r) => [`${r.pod_id ?? ""}|${r.date}`, Number(r.spend_cents)]));
+  const podOf = new Map(posts.map((p) => [p.postId, p.assignment.podId ?? ""]));
+  const spendOn = new Map<string, number>();
+  for (const r of daily) {
+    const k = `${podOf.get(r.post_id) ?? ""}|${r.date}`;
+    spendOn.set(k, (spendOn.get(k) ?? 0) + Number(r.spend_cents));
+  }
 
   const groups: { podId: string | null; name: string; color: string | null; kind: PodRow["kind"] }[] = [
     ...pods.results.map((p) => ({ podId: p.id, name: p.name, color: p.color, kind: p.kind })),
@@ -409,14 +415,17 @@ app.get("/trends", async (c) => {
   const bucket = (col: string) => (grain === "week" ? `date(${col}, 'weekday 0', '-6 days')` : col);
   const podSql = pod === "unassigned" ? "AND s.pod_id IS NULL" : pod ? "AND s.pod_id = ?3" : "";
   const binds = pod && pod !== "unassigned" ? [range.from, range.to, pod] : [range.from, range.to];
-  const meta = await db
-    .prepare(
-      `SELECT ${bucket("d.date")} AS b, ${TOTALS_SQL}
-       FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id LEFT JOIN assignments s ON s.post_id = a.post_id
-       WHERE d.date BETWEEN ?1 AND ?2 ${podSql} GROUP BY b ORDER BY b`,
-    )
-    .bind(...binds)
-    .all<Record<string, unknown>>();
+  const query = () =>
+    db
+      .prepare(
+        `SELECT ${bucket("d.date")} AS b, ${TOTALS_SQL}
+         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id ${pod ? "LEFT JOIN assignments s ON s.post_id = a.post_id" : ""}
+         WHERE d.date BETWEEN ?1 AND ?2 ${podSql} GROUP BY b ORDER BY b`,
+      )
+      .bind(...binds)
+      .all<Record<string, unknown>>();
+  // The whole account doesn't depend on tags: once per sync. One pod's follows its tags: per edit.
+  const meta = pod ? await query() : await memoize(db, `trend-${range.from}-${range.to}-${grain}`, query, { durable: true, scope: "stats" });
   const body: TrendsResponse = {
     ...range,
     grain,

@@ -78,6 +78,19 @@ function MetaPanel({ onSynced }: { onSynced: () => void }) {
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number; label: string } | null>(null);
+  // Recomputes the stored summaries (concept results, test windows, totals) from the daily data.
+  const rebuild = async () => {
+    setBusy("rebuild");
+    try {
+      await post("/api/stats/rebuild", {});
+      setNotice({ kind: "good", text: "Summaries will be rebuilt from the daily data on the next page you open." });
+      onSynced();
+    } catch (e) {
+      setNotice({ kind: "bad", text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBusy(null);
+    }
+  };
   const [days, setDays] = useState(90);
 
   useEffect(() => {
@@ -215,6 +228,14 @@ function MetaPanel({ onSynced }: { onSynced: () => void }) {
                 ))}
               </select>
             </span>
+            <button
+              className={secondary}
+              disabled={!!busy}
+              onClick={rebuild}
+              title="Recompute hit results and totals from the stored daily data. Only needed if numbers look out of date; it reads about as much as a sync."
+            >
+              Rebuild summaries
+            </button>
             {s.connection && (
               <button className={`${secondary} text-bad`} disabled={!!busy} onClick={disconnect}>
                 Disconnect

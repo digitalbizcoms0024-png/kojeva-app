@@ -64,13 +64,35 @@ describe("read cache", () => {
     expect(await again.json()).toEqual(await first.json());
     expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM snapshots").first<{ n: number }>())!.n).toBeGreaterThan(0);
 
-    // An edit empties the stored results, so nothing stale is served.
+    // An edit empties the stored responses, so nothing stale is served, but keeps the ad numbers
+    // (concept results, test windows): a tag edit doesn't recompute them.
+    const count = async (like: string) =>
+      (await env.DB.prepare("SELECT COUNT(*) AS n FROM snapshots WHERE key LIKE ?1").bind(like).first<{ n: number }>())!.n;
+    expect(await count("stats:%")).toBeGreaterThan(0);
     expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ podId: "dhia" }) })).status).toBe(200);
-    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM snapshots").first<{ n: number }>())!.n).toBe(0);
+    expect(await count("resp:%")).toBe(0);
+    expect(await count("stats:%")).toBeGreaterThan(0);
     forgetMemory();
     const after = await call("/api/rankings?range=all", person);
     expect(after.headers.get("X-Cache")).toBeNull();
     expect(((await after.json()) as { items: { assignment: { podId: string } }[] }).items[0]!.assignment.podId).toBe("dhia");
+  });
+
+  it("regroups by the new pod right after a tag edit, without recomputing the ad numbers", async () => {
+    const pods = async () => ((await (await call("/api/pods?range=all", person)).json()) as { rows: { podId: string | null; totals: { spendCents: number } }[] }).rows;
+    const spendOf = (rows: Awaited<ReturnType<typeof pods>>, id: string) => rows.find((r) => r.podId === id)?.totals.spendCents ?? 0;
+    expect(spendOf(await pods(), "harris")).toBe(10000);
+    const stats = await env.DB.prepare("SELECT value FROM settings WHERE key = 'stats_version'").first<{ value: string }>();
+    expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ podId: "dhia" }) })).status).toBe(200);
+    const after = await pods();
+    expect([spendOf(after, "harris"), spendOf(after, "dhia")]).toEqual([0, 10000]);
+    // The edit kept the stats version: concept results and totals weren't recomputed.
+    expect(await env.DB.prepare("SELECT value FROM settings WHERE key = 'stats_version'").first<{ value: string }>()).toEqual(stats);
+
+    // "Rebuild summaries" in Settings recomputes them.
+    expect((await call("/api/stats/rebuild", person, { method: "POST", body: "{}" })).status).toBe(200);
+    expect(await env.DB.prepare("SELECT value FROM settings WHERE key = 'stats_version'").first<{ value: string }>()).not.toEqual(stats);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM snapshots").first<{ n: number }>())!.n).toBe(0);
   });
 
   it("doesn't count an unchanged ingest push as a change", async () => {

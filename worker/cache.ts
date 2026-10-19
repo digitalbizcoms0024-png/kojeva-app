@@ -1,34 +1,60 @@
 // Read results kept until the data changes, in memory and in the `snapshots` table. D1's free
-// plan allows 5M rows read a day and one uncached Dashboard view reads ~440k on live-sized data
-// (scripts/measure-reads.ts), so repeat views, and fresh isolates after a deploy, must not recompute. The cache lives in the Worker
-// isolate: free, and lost when the isolate is recycled, which only costs one recompute.
-// Every write bumps `data_version` (one row), which drops everything cached under the old one.
+// plan allows 5M rows read a day and recomputing from ad_daily costs hundreds of thousands, so
+// repeat views, and fresh isolates after a deploy, must not recompute.
+//
+// Two versions:
+// - `stats_version`: the ad numbers (ad_daily, which ads form which concept, the targets). Bumped
+//   by a sync that wrote rows, a change in concept membership, or new targets (`bumpStats`). The
+//   heavy loaders (concept results, test windows, fatigue, range totals) are memoized under it
+//   (`scope: "stats"`), so they are computed once per sync, not once per edit.
+// - `data_version`: anything shown (tags, pods, personas, Atria labels, the numbers too). Bumped by
+//   every write (`bumpVersion`); responses and label loaders are cached under it, and recompute
+//   cheaply on top of the stats.
 
 const MAX_ENTRIES = 150;
 const MAX_BODY_BYTES = 3_000_000;
 
 let current = "";
+let currentStats = "";
 const responses = new Map<string, string>();
 const memos = new Map<string, Promise<unknown>>();
+const statsMemos = new Map<string, Promise<unknown>>();
 
-/** The current data version (1 row read). */
-export async function dataVersion(db: D1Database): Promise<string> {
-  const row = await db.prepare("SELECT value FROM settings WHERE key = 'data_version'").first<{ value: string }>();
-  const v = row?.value ?? "none";
-  if (v !== current) {
-    current = v;
+/** Both versions (2 rows read); clears what this isolate kept under older ones. */
+async function versions(db: D1Database): Promise<{ data: string; stats: string }> {
+  const { results } = await db
+    .prepare("SELECT key, value FROM settings WHERE key IN ('data_version', 'stats_version')")
+    .all<{ key: string; value: string }>();
+  const data = results.find((r) => r.key === "data_version")?.value ?? "none";
+  const stats = results.find((r) => r.key === "stats_version")?.value ?? "none";
+  if (data !== current) {
+    current = data;
     responses.clear();
     memos.clear();
   }
-  return v;
+  if (stats !== currentStats) {
+    currentStats = stats;
+    statsMemos.clear();
+  }
+  return { data, stats };
 }
 
-/** Marks stored data as changed (one row written) and drops the stored snapshots, now stale. */
+/** The current data version. */
+export async function dataVersion(db: D1Database): Promise<string> {
+  return (await versions(db)).data;
+}
+
+const NEW_VERSION = (key: string) =>
+  `INSERT INTO settings (key, value) VALUES ('${key}', lower(hex(randomblob(8)))) ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
+
+/** Marks shown data as changed (one row written); drops stored responses but keeps the stats. */
 export function bumpVersion(db: D1Database) {
-  return db.batch([
-    db.prepare("INSERT INTO settings (key, value) VALUES ('data_version', lower(hex(randomblob(8)))) ON CONFLICT(key) DO UPDATE SET value = excluded.value"),
-    db.prepare("DELETE FROM snapshots"),
-  ]);
+  return db.batch([db.prepare(NEW_VERSION("data_version")), db.prepare("DELETE FROM snapshots WHERE key NOT LIKE 'stats:%'")]);
+}
+
+/** Marks the ad numbers as changed too: everything is recomputed once. */
+export function bumpStats(db: D1Database) {
+  return db.batch([db.prepare(NEW_VERSION("data_version")), db.prepare(NEW_VERSION("stats_version")), db.prepare("DELETE FROM snapshots")]);
 }
 
 // Snapshots: the same results stored in D1, shared by every isolate. Memory is per isolate and
@@ -61,8 +87,10 @@ export async function writeSnapshot(db: D1Database, key: string, version: string
 /** Empties this isolate's memory (tests and scripts/measure-reads.ts: a fresh isolate). */
 export function forgetMemory() {
   current = "";
+  currentStats = "";
   responses.clear();
   memos.clear();
+  statsMemos.clear();
 }
 
 export function cachedResponse(key: string): string | undefined {
@@ -76,25 +104,46 @@ export function cacheResponse(key: string, body: string) {
 }
 
 /**
- * Computes `fn` once per data version (shared by every request until the data changes).
- * `durable` also stores the JSON result in D1 for other isolates; use it for plain data only.
+ * Computes `fn` once per version (shared by every request until it changes).
+ * - `scope: "stats"` keys it on the ad numbers only, so edits don't recompute it. Use it only for
+ *   results that depend on nothing but ad_daily, ads (status, concept), concepts and the targets.
+ * - `durable` also stores the JSON result in D1 for other isolates; use it for plain data only.
  */
-export async function memoize<T>(db: D1Database, name: string, fn: () => Promise<T>, opts: { durable?: boolean } = {}): Promise<T> {
-  const version = await dataVersion(db);
+export async function memoize<T>(
+  db: D1Database,
+  name: string,
+  fn: () => Promise<T>,
+  opts: { durable?: boolean; scope?: "data" | "stats" } = {},
+): Promise<T> {
+  const v = await versions(db);
+  const stats = opts.scope === "stats";
+  const version = stats ? v.stats : v.data;
+  const store = stats ? statsMemos : memos;
+  const stored = `${stats ? "stats" : "memo"}:${name}`;
   const key = `${version}|${name}`;
-  let p = memos.get(key) as Promise<T> | undefined;
+  let p = store.get(key) as Promise<T> | undefined;
   if (!p) {
     p = opts.durable
       ? (async () => {
-          const stored = await readSnapshot(db, `memo:${name}`, version);
-          if (stored !== undefined) return JSON.parse(stored) as T;
+          const body = await readSnapshot(db, stored, version);
+          if (body !== undefined) return JSON.parse(body) as T;
           const value = await fn();
-          await writeSnapshot(db, `memo:${name}`, version, JSON.stringify(value));
+          await writeSnapshot(db, stored, version, JSON.stringify(value));
           return value;
         })()
       : fn();
-    memos.set(key, p);
-    p.catch(() => memos.delete(key));
+    store.set(key, p);
+    p.catch(() => store.delete(key));
   }
   return p;
+}
+
+/** A Map through a durable memo (stored as entries). */
+export async function memoizeMap<K, V>(
+  db: D1Database,
+  name: string,
+  fn: () => Promise<Map<K, V>>,
+  opts: { durable?: boolean; scope?: "data" | "stats" } = {},
+): Promise<Map<K, V>> {
+  return new Map(await memoize(db, name, async () => [...(await fn())], opts));
 }

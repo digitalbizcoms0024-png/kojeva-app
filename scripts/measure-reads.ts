@@ -11,7 +11,7 @@
 import { getPlatformProxy } from "wrangler";
 import app from "../worker/index.ts";
 import { attribute } from "../worker/meta/sync.ts";
-import { bumpVersion, forgetMemory } from "../worker/cache.ts";
+import { bumpStats, bumpVersion, forgetMemory } from "../worker/cache.ts";
 
 const dir = process.argv[2] ?? ".wrangler/measure";
 const proxy = await getPlatformProxy<{ DB: D1Database }>({
@@ -116,6 +116,14 @@ await measure("Dashboard again (cached)", async () => {
 });
 forgetMemory(); // a fresh isolate: after a deploy, or another one serving a second viewer
 await measure("Dashboard on a fresh isolate", async () => {
+  for (const p of dash) await get(p);
+});
+await bumpVersion(raw); // a tag edit or an Atria run: labels change, the ad numbers don't
+await measure("Dashboard after a tag edit", async () => {
+  for (const p of dash) await get(p);
+});
+await bumpStats(raw); // a sync that wrote rows
+await measure("Dashboard after a sync", async () => {
   for (const p of dash) await get(p);
 });
 for (const p of [
