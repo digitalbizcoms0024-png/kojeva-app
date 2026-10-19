@@ -9,7 +9,21 @@ import { podByCode, type PodCode } from "../../shared/taxonomy.ts";
 import { decrypt } from "../crypto.ts";
 import type { Env } from "../env.ts";
 import { GraphError, graphClient, type GraphClient } from "./graph.ts";
-import { assetIdFor, COMPARE_WINDOWS, insightToDaily, insightToWindows, isoTime, mediaTypeFor, postIdFor, thumbnailFor, type GraphAd, type GraphInsight } from "./transform.ts";
+import {
+  assetIdFor,
+  COMPARE_WINDOWS,
+  insightToDaily,
+  insightToWindows,
+  isoTime,
+  isTinyThumbnail,
+  mediaHidden,
+  mediaTypeFor,
+  pickVideoCover,
+  postIdFor,
+  thumbnailFor,
+  type GraphAd,
+  type GraphInsight,
+} from "./transform.ts";
 
 const AD_FIELDS =
   "id,name,status,effective_status,created_time,adset{id,name},campaign{id,name}," +
@@ -87,6 +101,42 @@ export function thumbnailNeedsRefresh(stored: string | null, now = Date.now()): 
   return oe ? parseInt(oe, 16) * 1000 < now + 3 * 86_400_000 : false;
 }
 
+/**
+ * The thumbnail to store for a post. Keeps the stored one while it's valid, so an unchanged sync
+ * writes nothing; replaces it when it expires, or when it's a 64px one and a sharper one exists.
+ * Null when Meta hides the media (it would be the Page logo).
+ */
+export function chooseThumbnail(stored: string | null | undefined, candidate: string | null, hidden: boolean, now = Date.now()): string | null {
+  if (hidden) return null;
+  const usable = stored != null && !thumbnailNeedsRefresh(stored, now);
+  if (usable && !(isTinyThumbnail(stored) && candidate != null && !isTinyThumbnail(candidate))) return stored;
+  return candidate ?? stored ?? null;
+}
+
+/** Up to this many video covers fetched per sync (5 Graph calls of 50). */
+const MAX_COVERS = 250;
+
+/** Full-size cover frames for videos, by video id; failures leave the 64px thumbnail in place. */
+async function videoCovers(gc: GraphClient, videoIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (let i = 0; i < videoIds.length; i += 50) {
+    const ids = videoIds.slice(i, i + 50);
+    try {
+      const res = await gc.get<Record<string, { thumbnails?: { data?: { uri: string; is_preferred?: boolean; width?: number }[] } }>>("", {
+        ids: ids.join(","),
+        fields: "thumbnails{uri,is_preferred,width}",
+      });
+      for (const id of ids) {
+        const cover = pickVideoCover(res[id]?.thumbnails?.data);
+        if (cover) out.set(id, cover);
+      }
+    } catch {
+      // Not every video is readable with ads_read; keep what Meta's creative gave us.
+    }
+  }
+  return out;
+}
+
 /** Upserts every ad (all statuses) and its post, then re-attributes pods, tags and concepts. */
 export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
   const now = new Date().toISOString();
@@ -98,6 +148,8 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
   const oldPosts = new Map(storedPosts.map((p) => [p.id, p]));
 
   const posts = new Map<string, PostRow>();
+  const hidden = new Set<string>();
+  const videoOf = new Map<string, string>();
   const ads: AdRow[] = [];
   for await (const page of gc.pages<GraphAd>(`${env.META_AD_ACCOUNT_ID}/ads`, {
     fields: AD_FIELDS,
@@ -108,6 +160,8 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
       const postId = postIdFor(ad);
       const created = isoTime(ad.created_time);
       const prev = posts.get(postId);
+      if (mediaHidden(ad)) hidden.add(postId);
+      if (ad.creative?.video_id && !videoOf.has(postId)) videoOf.set(postId, ad.creative.video_id);
       posts.set(postId, {
         id: postId,
         media_type: mediaTypeFor(ad),
@@ -130,11 +184,19 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
     }
   }
 
+  // Sharper covers for video posts that have none yet, an expiring one, or a 64px one.
+  const needCover = [...videoOf].filter(([postId]) => {
+    const stored = oldPosts.get(postId)?.thumbnail_url ?? null;
+    return !hidden.has(postId) && (stored == null || thumbnailNeedsRefresh(stored) || isTinyThumbnail(stored));
+  });
+  const covers = await videoCovers(gc, [...new Set(needCover.map(([, v]) => v))].slice(0, MAX_COVERS));
+
   const postStmts: D1PreparedStatement[] = [];
   for (const p of posts.values()) {
     const old = oldPosts.get(p.id);
     const created = old?.created_time && p.created_time ? (old.created_time < p.created_time ? old.created_time : p.created_time) : (old?.created_time ?? p.created_time);
-    const thumb = old && !thumbnailNeedsRefresh(old.thumbnail_url) ? old.thumbnail_url : (p.thumbnail_url ?? old?.thumbnail_url ?? null);
+    const video = videoOf.get(p.id);
+    const thumb = chooseThumbnail(old?.thumbnail_url, (video && covers.get(video)) ?? p.thumbnail_url, hidden.has(p.id));
     const next = { ...p, thumbnail_url: thumb, created_time: created };
     if (old && same(old, next, ["media_type", "thumbnail_url", "created_time"])) continue;
     postStmts.push(

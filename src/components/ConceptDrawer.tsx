@@ -4,6 +4,7 @@ import { cpa, roas, type Totals } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS } from "../../shared/taxonomy.ts";
 import { useApi } from "../api.ts";
 import { dollars, int, money, ratio, shortDate } from "../format.ts";
+import { PlayableThumb } from "./AdPreview.tsx";
 import { DailyCharts } from "./DailyCharts.tsx";
 import { CpaValue, HitBadge, PodChip, RoasValue, Tag, Thumb } from "./ui.tsx";
 
@@ -90,17 +91,24 @@ export function ConceptDrawer({ conceptId, meta, onClose }: { conceptId: string;
         {k && data && (
           <div className="flex flex-col gap-6 px-5 py-5">
             {top && (
-              <a href={`#/rankings?post=${encodeURIComponent(top.postId)}`} className="flex gap-4" title="Open the ad">
-                <Thumb mediaType={top.mediaType} label={top.mediaType === "image" ? "Image" : "Video"} url={top.thumbnailUrl} className="h-48 w-36 shrink-0" />
-                <div className="min-w-0 text-sm text-ink-2">
+              <div className="flex gap-4">
+                <PlayableThumb
+                  postId={top.postId}
+                  name={top.name}
+                  mediaType={top.mediaType}
+                  label={top.mediaType === "image" ? "Image" : "Video"}
+                  url={top.thumbnailUrl}
+                  className="h-48 w-36 shrink-0"
+                />
+                <a href={`#/rankings?post=${encodeURIComponent(top.postId)}`} className="min-w-0 text-sm text-ink-2 hover:underline" title="Open the ad">
                   <div className="font-bold text-ink">{top.name}</div>
                   <div className="mt-1">
                     {k.ads} {k.ads === 1 ? "ad" : "ads"} · first spend {shortDate(k.firstSpend)}
                     {k.lastSpend && ` · last spend ${shortDate(k.lastSpend)}`}
                   </div>
                   <div className="mt-1">{money(k.allTime.spendCents)} spent since launch</div>
-                </div>
-              </a>
+                </a>
+              </div>
             )}
 
             <section>

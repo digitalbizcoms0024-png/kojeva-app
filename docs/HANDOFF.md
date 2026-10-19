@@ -63,6 +63,14 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
   once. Settings → Rebuild summaries forces a recompute. `worker/summaries.test.ts` proves the cached
   pages match a from-scratch recomputation after edits.
 
+## Creative previews (Oct 19)
+- ▶ on the ad detail panel and concept card opens Meta's own ad preview (`GET /api/posts/:id/preview`,
+  Graph `/{ad_id}/previews`, read-only), fetched fresh per click; Facebook feed, Instagram feed, Reels, Story.
+- Sync stores sharper covers: full-size frames for videos (`thumbnails` of the video, up to 250 per sync)
+  instead of Meta's 64px creative thumbnail. "Post ID" ads whose post ads_read can't see come back as
+  `PRIVACY_CHECK_FAIL` with the Page logo: stored as no thumbnail; ▶ still shows the real ad.
+- Not done (owner's call): `pages_read_engagement` for real thumbnails of those post-based ads.
+
 ## Scheduled tasks (claude.ai)
 - "Kojeva Hub · Atria tag sync" (daily 10:07 UTC, Atria connector): tags, awareness/belief/offer
   labels, persona drafts and placement. Prompt documented in `docs/ATRIA.md`.

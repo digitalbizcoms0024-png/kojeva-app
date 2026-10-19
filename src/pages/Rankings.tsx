@@ -4,6 +4,7 @@ import { attributedCpa, attributedRoas, cpa, ctr, roas, type Targets, type Total
 import { ANGLES, FORMATS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
+import { PlayableThumb } from "../components/AdPreview.tsx";
 import { DailyCharts } from "../components/DailyCharts.tsx";
 import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, ratio, shortDate } from "../format.ts";
@@ -383,7 +384,9 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
       )}
 
       <div className="flex flex-col gap-4 sm:flex-row">
-        <Thumb
+        <PlayableThumb
+          postId={data.postId}
+          name={data.name}
           mediaType={data.mediaType}
           label={a.format ? (FORMATS[a.format] ?? a.format) : ""}
           url={data.thumbnailUrl}

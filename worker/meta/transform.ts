@@ -107,8 +107,29 @@ export function assetIdFor(ad: Pick<GraphAd, "creative">): string | null {
   return null;
 }
 
+/**
+ * Meta hides a creative's media when the token can't see the Page post it promotes (object_type
+ * PRIVACY_CHECK_FAIL, e.g. "Post ID" ads with ads_read only); its thumbnail is then the Page's logo.
+ */
+export function mediaHidden(ad: Pick<GraphAd, "creative">): boolean {
+  return ad.creative?.object_type?.toUpperCase() === "PRIVACY_CHECK_FAIL";
+}
+
+/** Full-size image for image ads, else Meta's 64px creative thumbnail; null when it would be the Page logo. */
 export function thumbnailFor(ad: Pick<GraphAd, "creative">): string | null {
+  if (mediaHidden(ad)) return null;
   return ad.creative?.image_url ?? ad.creative?.thumbnail_url ?? null;
+}
+
+/** Meta's creative thumbnails are 64×64 ("p64x64" in the URL): fine as a fallback, blurry on a card. */
+export function isTinyThumbnail(url: string | null): boolean {
+  return url != null && /[_.-][ps]64x64/.test(url);
+}
+
+/** The best cover among a video's frames: the preferred one, else the widest. */
+export function pickVideoCover(frames: { uri: string; is_preferred?: boolean; width?: number }[] | undefined): string | null {
+  if (!frames?.length) return null;
+  return (frames.find((f) => f.is_preferred) ?? [...frames].sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0]!).uri;
 }
 
 /** "2026-10-08T14:03:11-0400" → "2026-10-08T18:03:11.000Z" (sortable). */

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import app from "../index.ts";
 import type { Env } from "../env.ts";
 import { testDb } from "../testing/db.ts";
-import { attribute, runSync, thumbnailNeedsRefresh, wipeSampleData } from "./sync.ts";
+import { attribute, chooseThumbnail, runSync, thumbnailNeedsRefresh, wipeSampleData } from "./sync.ts";
 import type { GraphAd, GraphInsight } from "./transform.ts";
 
 const ACT = "act_2930078677198801";
@@ -291,6 +291,50 @@ describe("many concepts", () => {
     const rows = ((await res.json()) as { rows: { window: { spendCents: number } }[] }).rows;
     expect(rows).toHaveLength(80);
     expect(rows.every((r) => r.window.spendCents === 12000)).toBe(true);
+  });
+});
+
+describe("thumbnails", () => {
+  const TINY = "https://scontent.example/v/t1.jpg?stp=c0.5000x0.5000f_dst-emg0_p64x64_q75_tt6";
+  const SHARP = "https://scontent.example/v/frame.jpg";
+
+  it("keeps a valid stored one, upgrades a 64px one, and drops the Page logo of hidden media", () => {
+    expect(chooseThumbnail(SHARP, "https://scontent.example/other.jpg", false)).toBe(SHARP);
+    expect(chooseThumbnail(TINY, SHARP, false)).toBe(SHARP);
+    expect(chooseThumbnail(TINY, TINY.replace("t1", "t2"), false)).toBe(TINY); // no sharper one: no churn
+    expect(chooseThumbnail(undefined, TINY, false)).toBe(TINY);
+    expect(chooseThumbnail(TINY, TINY, true)).toBeNull();
+  });
+
+  it("uses the video's own cover frame, and writes nothing on a re-sync", async () => {
+    const ads: GraphAd[] = [
+      { ...ADS[0]!, creative: { ...ADS[0]!.creative!, thumbnail_url: TINY } },
+      // A "Post ID" ad whose post the token can't read: Meta returns the Page logo.
+      {
+        ...ADS[2]!,
+        creative: { id: "cr-hidden", effective_object_story_id: "776862388850901_1516733839978074", object_type: "PRIVACY_CHECK_FAIL", thumbnail_url: TINY },
+      },
+    ];
+    const meta = () =>
+      fakeMeta((url) => {
+        if (url.searchParams.has("ids")) {
+          expect(url.searchParams.get("ids")).toBe("1053927990294150");
+          return { "1053927990294150": { thumbnails: { data: [{ uri: "https://scontent.example/small.jpg", width: 200 }, { uri: SHARP, width: 1080, is_preferred: true }] } } };
+        }
+        if (url.pathname.endsWith(`${ACT}/ads`)) return { data: ads };
+        if (url.pathname.endsWith(`${ACT}/insights`)) return { data: [] };
+        return { error: { message: `Unexpected ${url.pathname}`, code: 100 } };
+      });
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, meta());
+    const thumbs = await env.DB.prepare("SELECT id, thumbnail_url FROM posts ORDER BY id").all<{ id: string; thumbnail_url: string | null }>();
+    expect(Object.fromEntries(thumbs.results.map((r) => [r.id, r.thumbnail_url]))).toEqual({
+      [POST_HXM]: SHARP,
+      "776862388850901_1516733839978074": null,
+    });
+    const again = meta();
+    expect((await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, again)).written).toBe(0);
+    // The cover isn't fetched again once a sharp one is stored.
+    expect(again.calls.some((u) => u.searchParams.has("ids"))).toBe(false);
   });
 });
 

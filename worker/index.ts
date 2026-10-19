@@ -32,6 +32,7 @@ import { loadAlerts, loadSuggestions } from "./alerts.ts";
 import { atria } from "./atria.ts";
 import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
+import { adPreview, PREVIEW_FORMATS, type PreviewFormat } from "./meta/preview.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
 import { getLatestDate, getTargets, loadConcepts, loadPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
@@ -46,7 +47,8 @@ app.use("*", accessMiddleware);
 
 // Read routes are served from memory until the data changes; any successful write marks the
 // data as changed. Connection, sync and ingest routes are never cached. See worker/cache.ts.
-const UNCACHED = /^\/api\/(connection|sync|ingest)(\/|$)/;
+// Ad previews are fetched from Meta each time: their links expire.
+const UNCACHED = /^\/api\/((connection|sync|ingest)(\/|$)|posts\/[^/]+\/preview$)/;
 // Syncs and ingest pushes mark changes themselves, only when they wrote rows.
 const SELF_BUMPING = /^\/api\/(sync|ingest)(\/|$)/;
 app.use("*", async (c, next) => {
@@ -228,6 +230,14 @@ app.get("/rankings", async (c) => {
     items: items.slice(0, limit),
   };
   return c.json(body);
+});
+
+/** Meta's preview of one of the post's ads, for the play button (?format=, default Facebook feed). */
+app.get("/posts/:id/preview", async (c) => {
+  const asked = c.req.query("format") as PreviewFormat | undefined;
+  const format: PreviewFormat = asked && PREVIEW_FORMATS.includes(asked) ? asked : "MOBILE_FEED_STANDARD";
+  const res = await adPreview(c.env, c.env.DB, c.req.param("id"), format);
+  return "error" in res ? c.json({ error: res.error }, res.status) : c.json(res);
 });
 
 app.get("/posts/:id", async (c) => {
