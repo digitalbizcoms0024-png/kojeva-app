@@ -48,6 +48,13 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
 - Rule changes like this one take effect by themselves after deploy: `worker/rules.ts` re-credits once
   when the crediting/concept rules or the pods change. No "Sync last 7 days" needed for that.
 
+## Hit check, Oct 19 (Meta daily data, new late-hit rule)
+- Harris 3: Scarcity · Almost Sold Out (hit), Scarcity · Get It or Regret It (late hit, since launch
+  Sep 18–24), KOJEVA 12 · Women Over 50 (late hit, rolling Oct 1–7: $128, ROAS 2.25).
+- Dhia 1: Static · One Step (hit, Oct 10–12: $115, 10 purchases, CPA $11.55, ROAS 2.43). Closest miss:
+  Batch 3 (CPA $16.43, ROAS 1.60).
+- Oct 18 deploys failed while D1 was over its read limit; re-triggered Oct 19 by a push.
+
 ## Scheduled tasks (claude.ai)
 - "Kojeva Hub · Atria tag sync" (daily 10:07 UTC, Atria connector): tags, awareness/belief/offer
   labels, persona drafts and placement. Prompt documented in `docs/ATRIA.md`.
