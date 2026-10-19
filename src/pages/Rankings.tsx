@@ -170,7 +170,7 @@ export function RankingsPage({
                   ))}
                 </ol>
               </div>
-              <div className="min-w-0 lg:sticky lg:top-4">
+              <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:overscroll-contain">
                 {activeId ? (
                   <PostDetailPanel postId={activeId} range={range} targets={meta.targets} rank={rank} sortLabel={SORTS.find((s) => s.value === sort)!.label} />
                 ) : (
