@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import app from "./index.ts";
 import type { Env } from "./env.ts";
+import { forgetMemory } from "./cache.ts";
 import { attribute } from "./meta/sync.ts";
 import { accessFixture, TEST_TEAM } from "./testing/access.ts";
 import { testDb } from "./testing/db.ts";
@@ -49,6 +50,24 @@ describe("read cache", () => {
     const before = await version();
     expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ podId: "dhia" }) })).status).toBe(200);
     expect(await version()).not.toBe(before);
+    const after = await call("/api/rankings?range=all", person);
+    expect(after.headers.get("X-Cache")).toBeNull();
+    expect(((await after.json()) as { items: { assignment: { podId: string } }[] }).items[0]!.assignment.podId).toBe("dhia");
+  });
+
+  it("lets a fresh isolate reuse a result another one computed, until the data changes", async () => {
+    const first = await call("/api/rankings?range=all", person);
+    expect(first.headers.get("X-Cache")).toBeNull();
+    forgetMemory(); // a new isolate: after a deploy, or another one serving a second viewer
+    const again = await call("/api/rankings?range=all", person);
+    expect(again.headers.get("X-Cache")).toBe("stored");
+    expect(await again.json()).toEqual(await first.json());
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM snapshots").first<{ n: number }>())!.n).toBeGreaterThan(0);
+
+    // An edit empties the stored results, so nothing stale is served.
+    expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ podId: "dhia" }) })).status).toBe(200);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM snapshots").first<{ n: number }>())!.n).toBe(0);
+    forgetMemory();
     const after = await call("/api/rankings?range=all", person);
     expect(after.headers.get("X-Cache")).toBeNull();
     expect(((await after.json()) as { items: { assignment: { podId: string } }[] }).items[0]!.assignment.podId).toBe("dhia");

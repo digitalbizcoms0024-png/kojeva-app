@@ -54,6 +54,10 @@ Read `CLAUDE.md` first (rules), then `docs/ROADMAP.md`. Work happens on branch
 - Dhia 1: Static · One Step (hit, Oct 10–12: $115, 10 purchases, CPA $11.55, ROAS 2.43). Closest miss:
   Batch 3 (CPA $16.43, ROAS 1.60).
 - Oct 18 deploys failed while D1 was over its read limit; re-triggered Oct 19 by a push.
+- Oct 19: 90% of D1 reads used by 11:20 UTC, mostly by the old code (live until 10:45) recomputing after
+  the morning sync and Atria run, plus three deploys each starting with an empty memory cache. Fix:
+  results are now also stored in D1 (`snapshots`, migration 0015), so a fresh isolate reads ~40 rows
+  for the Dashboard instead of ~465k; only a data change recomputes. Owner chose to stay on the free plan.
 
 ## Scheduled tasks (claude.ai)
 - "Kojeva Hub · Atria tag sync" (daily 10:07 UTC, Atria connector): tags, awareness/belief/offer

@@ -26,7 +26,7 @@ import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, roas, type Totals } from "..
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware } from "./access.ts";
-import { bumpVersion, cachedResponse, cacheResponse, dataVersion } from "./cache.ts";
+import { bumpVersion, cachedResponse, cacheResponse, dataVersion, readSnapshot, writeSnapshot } from "./cache.ts";
 import type { AppEnv, Env } from "./env.ts";
 import { loadAlerts, loadSuggestions } from "./alerts.ts";
 import { atria } from "./atria.ts";
@@ -68,11 +68,25 @@ app.use("*", async (c, next) => {
           (await c.env.DB.prepare("SELECT id || ':' || status AS s FROM sync_runs ORDER BY id DESC LIMIT 1").first<{ s: string }>())?.s ?? ""
         }`
       : "";
-  const key = `${await dataVersion(c.env.DB)}|${c.req.url}|${extra}`;
+  const version = await dataVersion(c.env.DB);
+  const url = new URL(c.req.url);
+  const stored = `resp:${url.pathname}${url.search}|${extra}`;
+  const key = `${version}|${stored}`;
+  const json = { "Content-Type": "application/json; charset=UTF-8" };
   const hit = cachedResponse(key);
-  if (hit !== undefined) return c.body(hit, 200, { "Content-Type": "application/json; charset=UTF-8", "X-Cache": "hit" });
+  if (hit !== undefined) return c.body(hit, 200, { ...json, "X-Cache": "hit" });
+  // Another isolate may already have computed it for this data version (1 row read).
+  const shared = await readSnapshot(c.env.DB, stored, version);
+  if (shared !== undefined) {
+    cacheResponse(key, shared);
+    return c.body(shared, 200, { ...json, "X-Cache": "stored" });
+  }
   await next();
-  if (c.res.status === 200) cacheResponse(key, await c.res.clone().text());
+  if (c.res.status === 200) {
+    const body = await c.res.clone().text();
+    cacheResponse(key, body);
+    await writeSnapshot(c.env.DB, stored, version, body);
+  }
 });
 app.route("/connection", connection);
 app.route("/sync", sync);

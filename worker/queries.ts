@@ -141,7 +141,7 @@ function mode(values: string[]): string | null {
 
 /** Every concept with its test-window totals and hit status (computed once per data version). */
 export function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
-  return memoize(db, "concepts", () => computeConcepts(db));
+  return memoize(db, "concepts", () => computeConcepts(db), { durable: true });
 }
 
 async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {

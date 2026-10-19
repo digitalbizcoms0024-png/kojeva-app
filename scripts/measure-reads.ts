@@ -7,11 +7,11 @@
 //   TOP=3 node --experimental-transform-types scripts/measure-reads.ts
 //
 // TOP=n also lists the n most expensive statements per route. Oct 2026, 52k ad_daily rows: a cold
-// Dashboard read ~440k rows, a cached one ~25.
+// Dashboard read ~440k rows, a cached one ~25, one on a fresh isolate (stored snapshots) ~40.
 import { getPlatformProxy } from "wrangler";
 import app from "../worker/index.ts";
 import { attribute } from "../worker/meta/sync.ts";
-import { bumpVersion } from "../worker/cache.ts";
+import { bumpVersion, forgetMemory } from "../worker/cache.ts";
 
 const dir = process.argv[2] ?? ".wrangler/measure";
 const proxy = await getPlatformProxy<{ DB: D1Database }>({
@@ -112,6 +112,10 @@ const dash = [
 ];
 for (const p of dash) await measure(p, () => get(p));
 await measure("Dashboard again (cached)", async () => {
+  for (const p of dash) await get(p);
+});
+forgetMemory(); // a fresh isolate: after a deploy, or another one serving a second viewer
+await measure("Dashboard on a fresh isolate", async () => {
   for (const p of dash) await get(p);
 });
 for (const p of [
