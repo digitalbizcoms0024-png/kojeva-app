@@ -67,6 +67,17 @@ awareness level. Personas are a short list of specific people (table `personas`)
   Deleting one sends its creatives back too; merging moves them to the other persona.
 - Hand-set persona, awareness and offer in Needs Tagging always win (`assignments.persona_id`,
   `assignments.offer`). Re-sending unchanged labels writes 0 rows.
+- **Replacing drafts.** While no persona is confirmed, `POST /personas` with `replaceDrafts: true`
+  deletes the current drafts (and clears any Claude assignments to them) before adding the new
+  list. Once one is active it answers 409: change confirmed personas in Settings.
+
+## Motivations
+Why a viewer would buy, separate from who they are (`MOTIVATIONS` in `shared/taxonomy.ts`): proof
+needed, price/value, under-eye puffiness, comfort, convenience, self-care/relaxation and
+demonstration-led discovery. `/unlabeled` returns assets without a motivation decision plus the keys;
+`/labels` takes optional `motivations` (a list of keys, `[]` for none). A hand-set list in Needs
+Tagging wins until "Use Claude's label". Concepts carry the union of their ads' lists, and Insights
+has a "By motivation" panel.
 
 ## Nightly task prompt
 The live prompt is stored on the scheduled task "Kojeva Hub · Atria tag sync". Part 1 is the tag sync

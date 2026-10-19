@@ -6,6 +6,7 @@ import { requireService } from "./access.ts";
 import type { AppEnv } from "./env.ts";
 import { bumpVersion } from "./cache.ts";
 import { cleanPersona, confirmed, loadPersonas, MAX_PERSONAS, newPersonaId, nextSort } from "./personas.ts";
+import { MOTIVATIONS } from "../shared/taxonomy.ts";
 import { getLatestDate, shiftDay } from "./queries.ts";
 
 export const ATRIA_CATEGORIES = [
@@ -148,7 +149,7 @@ atria.get("/unlabeled", async (c) => {
            (SELECT GROUP_CONCAT(n.name, char(10)) FROM (SELECT DISTINCT x.name FROM ads x WHERE x.asset_id = t.asset_id) n) AS ad_names
          FROM atria_assets t JOIN ads a ON a.asset_id = t.asset_id JOIN ad_daily d ON d.ad_id = a.id
          WHERE t.status = 'tagged' AND d.date >= ?1
-           AND (t.labeled_at IS NULL OR t.offer IS NULL OR (?3 = 1 AND t.persona_at IS NULL))
+           AND (t.labeled_at IS NULL OR t.offer IS NULL OR t.motivations_at IS NULL OR (?3 = 1 AND t.persona_at IS NULL))
          GROUP BY t.asset_id ORDER BY spend DESC LIMIT ?2`,
       )
       .bind(shiftDay(latest, -89), limit, ready ? 1 : 0)
@@ -159,6 +160,8 @@ atria.get("/unlabeled", async (c) => {
   ]);
   return c.json({
     awarenessLevels: AWARENESS_LEVELS,
+    // Send `motivations` (any of these keys, or []) for each asset.
+    motivations: Object.entries(MOTIVATIONS).map(([key, label]) => ({ key, label })),
     beliefGroups: groups.results.map((g) => ({ name: g.belief_group, assets: Number(g.n) })),
     // Until people confirm the list, Claude labels awareness, belief and offer only.
     personasConfirmed: ready,
@@ -173,11 +176,29 @@ atria.get("/unlabeled", async (c) => {
   });
 });
 
-type IncomingLabel = { assetId?: unknown; awareness?: unknown; belief?: unknown; beliefGroup?: unknown; offer?: unknown; personaId?: unknown };
-type Label = { assetId: string; awareness: string; belief: string; beliefGroup: string; offer: number | null; persona: { id: string | null } | null };
+type IncomingLabel = {
+  assetId?: unknown;
+  awareness?: unknown;
+  belief?: unknown;
+  beliefGroup?: unknown;
+  offer?: unknown;
+  personaId?: unknown;
+  motivations?: unknown;
+};
+type Label = {
+  assetId: string;
+  awareness: string;
+  belief: string;
+  beliefGroup: string;
+  offer: number | null;
+  persona: { id: string | null } | null;
+  /** Sorted JSON array, or null when not sent. */
+  motivations: string | null;
+};
 
 /**
- * Body: { labels: [{ assetId, awareness, belief, beliefGroup, offer, personaId? }] }, up to 100.
+ * Body: { labels: [{ assetId, awareness, belief, beliefGroup, offer, personaId?, motivations? }] }, up to 100.
+ * motivations: MOTIVATIONS keys that apply ([] for none); optional so older prompts keep working.
  * personaId (an active persona's id, or null for "fits none") is only accepted once the persona
  * list is confirmed. Writes only changed rows.
  */
@@ -207,6 +228,12 @@ atria.post("/labels", async (c) => {
         return c.json({ error: `personaId for ${l.assetId} must be an active persona's id, or null if none fits.` }, 400);
       persona = { id: l.personaId as string | null };
     }
+    let motivations: string | null = null;
+    if (l.motivations !== undefined) {
+      if (!Array.isArray(l.motivations) || l.motivations.some((m) => typeof m !== "string" || !(m in MOTIVATIONS)))
+        return c.json({ error: `motivations for ${l.assetId} must be a list of ${Object.keys(MOTIVATIONS).join(", ")} ([] for none).` }, 400);
+      motivations = JSON.stringify([...new Set(l.motivations as string[])].sort());
+    }
     rows.push({
       assetId: l.assetId,
       awareness: l.awareness as string,
@@ -214,6 +241,7 @@ atria.post("/labels", async (c) => {
       beliefGroup: group,
       offer: l.offer === undefined ? null : l.offer ? 1 : 0,
       persona,
+      motivations,
     });
   }
 
@@ -226,13 +254,15 @@ atria.post("/labels", async (c) => {
     offer: number | null;
     persona_id: string | null;
     persona_at: string | null;
+    motivations: string | null;
+    motivations_at: string | null;
   };
   const stored = new Map<string, Stored>();
   for (let i = 0; i < rows.length; i += 90) {
     const chunk = rows.slice(i, i + 90);
     const { results } = await db
       .prepare(
-        `SELECT asset_id, awareness, belief, belief_group, labeled_at, offer, persona_id, persona_at
+        `SELECT asset_id, awareness, belief, belief_group, labeled_at, offer, persona_id, persona_at, motivations, motivations_at
          FROM atria_assets WHERE asset_id IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")})`,
       )
       .bind(...chunk.map((r) => r.assetId))
@@ -256,17 +286,19 @@ atria.post("/labels", async (c) => {
       old.belief === r.belief &&
       old.belief_group === r.beliefGroup &&
       (r.offer == null || old.offer === r.offer) &&
-      samePersona
+      samePersona &&
+      (r.motivations == null || (old.motivations_at != null && old.motivations === r.motivations))
     )
       continue;
     stmts.push(
       db
         .prepare(
           `UPDATE atria_assets SET awareness = ?2, belief = ?3, belief_group = ?4, labeled_at = ?5, offer = COALESCE(?6, offer),
-             persona_id = CASE WHEN ?7 = 1 THEN ?8 ELSE persona_id END, persona_at = CASE WHEN ?7 = 1 THEN ?5 ELSE persona_at END
+             persona_id = CASE WHEN ?7 = 1 THEN ?8 ELSE persona_id END, persona_at = CASE WHEN ?7 = 1 THEN ?5 ELSE persona_at END,
+             motivations = COALESCE(?9, motivations), motivations_at = CASE WHEN ?9 IS NULL THEN motivations_at ELSE ?5 END
            WHERE asset_id = ?1`,
         )
-        .bind(r.assetId, r.awareness, r.belief, r.beliefGroup, now, r.offer, r.persona ? 1 : 0, r.persona?.id ?? null),
+        .bind(r.assetId, r.awareness, r.belief, r.beliefGroup, now, r.offer, r.persona ? 1 : 0, r.persona?.id ?? null, r.motivations),
     );
   }
   if (stmts.length) {
@@ -312,13 +344,15 @@ atria.get("/personas", async (c) => {
 });
 
 /**
- * Body: { personas: [{ name, description }] }. With no personas yet, these become the draft list
- * (up to 8) for people to edit and confirm. Afterwards each is a suggestion (at most 3 waiting)
- * that a person approves or dismisses; names already in use or dismissed are skipped.
+ * Body: { personas: [{ name, description }], replaceDrafts? }. With no personas yet, these become the
+ * draft list (up to 8) for people to edit and confirm. Afterwards each is a suggestion (at most 3
+ * waiting) that a person approves or dismisses; names already in use or dismissed are skipped.
+ * replaceDrafts: true swaps an unconfirmed draft list for this one; refused once any persona is
+ * confirmed (people own the list from then on).
  */
 atria.post("/personas", async (c) => {
   const db = c.env.DB;
-  const body = await c.req.json<{ personas?: { name?: unknown; description?: unknown }[] }>().catch(() => null);
+  const body = await c.req.json<{ personas?: { name?: unknown; description?: unknown }[]; replaceDrafts?: unknown }>().catch(() => null);
   const items = body?.personas;
   if (!Array.isArray(items) || items.length === 0 || items.length > 8) return c.json({ error: "Send 1–8 personas." }, 400);
   const clean = [];
@@ -327,9 +361,20 @@ atria.post("/personas", async (c) => {
     if (typeof r === "string") return c.json({ error: r }, 400);
     clean.push(r);
   }
+  if (body?.replaceDrafts === true) {
+    const { results: current } = await db.prepare("SELECT status FROM personas").all<{ status: string }>();
+    if (current.some((p) => p.status === "active")) return c.json({ error: "The persona list is confirmed; people change it in Settings." }, 409);
+    // Nothing is placed on drafts yet (Claude assigns only after confirmation), so they can go.
+    await db.batch([
+      db.prepare("UPDATE atria_assets SET persona_id = NULL, persona_at = NULL WHERE persona_id IN (SELECT id FROM personas WHERE status <> 'dismissed')"),
+      db.prepare("UPDATE assignments SET persona_id = NULL WHERE persona_id IN (SELECT id FROM personas WHERE status <> 'dismissed')"),
+      db.prepare("DELETE FROM personas WHERE status <> 'dismissed'"),
+    ]);
+  }
   const { results: all } = await db.prepare("SELECT name, status FROM personas").all<{ name: string; status: string }>();
   const taken = new Set(all.map((p) => p.name.toLowerCase()));
-  const drafting = all.length === 0;
+  // A list of only dismissed names (after replaceDrafts, say) is drafted afresh too.
+  const drafting = all.every((p) => p.status === "dismissed");
   const waiting = all.filter((p) => p.status === "suggested").length;
   const live = all.filter((p) => p.status !== "dismissed").length;
   const room = drafting ? 8 : Math.min(3 - waiting, MAX_PERSONAS - live);

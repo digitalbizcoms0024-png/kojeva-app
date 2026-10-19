@@ -74,7 +74,7 @@ async function loadPostBase(db: D1Database, postId?: string): Promise<Row[]> {
       .prepare(
         `SELECT p.id AS post_id, p.media_type, p.thumbnail_url,
            s.pod_id, s.pod_source, s.editor_id, e.name AS editor_name,
-           s.angle, s.format, s.hook, s.landing_page, s.tags_source, s.awareness, s.belief_group, s.persona_id, s.offer
+           s.angle, s.format, s.hook, s.landing_page, s.tags_source, s.awareness, s.belief_group, s.persona_id, s.offer, s.motivations
          FROM posts p
          LEFT JOIN assignments s ON s.post_id = p.id
          LEFT JOIN editors e ON e.id = s.editor_id ${where}`,
@@ -84,7 +84,8 @@ async function loadPostBase(db: D1Database, postId?: string): Promise<Row[]> {
     db
       .prepare(
         `SELECT x.id, x.post_id, x.name, x.status, x.created_time, x.concept_id, x.adset_name,
-           t.status AS t_status, t.tags, t.labeled_at, t.awareness AS t_awareness, t.offer AS t_offer, t.persona_id AS t_persona
+           t.status AS t_status, t.tags, t.labeled_at, t.awareness AS t_awareness, t.offer AS t_offer, t.persona_id AS t_persona,
+           t.motivations AS t_motivations, t.motivations_at
          FROM ads x LEFT JOIN atria_assets t ON t.asset_id = x.asset_id ${postId ? "WHERE x.post_id = ?1" : ""}`,
       )
       .bind(...(postId ? [postId] : []))
@@ -113,6 +114,7 @@ async function loadPostBase(db: D1Database, postId?: string): Promise<Row[]> {
       l_awareness: find((ad) => ad.labeled_at != null)?.t_awareness ?? null,
       l_offer: find((ad) => ad.t_offer != null)?.t_offer ?? null,
       l_persona: find((ad) => ad.t_persona != null)?.t_persona ?? null,
+      l_motivations: find((ad) => ad.motivations_at != null)?.t_motivations ?? null,
     };
   });
 }
@@ -129,6 +131,17 @@ function atriaUnion(raw: unknown): { atriaThemes: string[]; atriaDesires: string
 }
 
 const list = (raw: unknown) => (raw == null ? [] : String(raw).split("\x1e").filter(Boolean));
+
+/** A stored motivations JSON array ([] when null or unreadable). */
+export function motivationList(raw: unknown): string[] {
+  if (raw == null) return [];
+  try {
+    const v = JSON.parse(String(raw)) as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
 
 /** The most common value (ties: first seen), or null. */
 function mode(values: string[]): string | null {
@@ -235,6 +248,7 @@ async function conceptLabels(db: D1Database): Promise<Row[]> {
     db
       .prepare(
         `SELECT x.concept_id, x.name, t.status AS t_status, t.tags, t.awareness, t.belief_group, t.belief, t.persona_id,
+           t.motivations AS t_motivations, s.motivations AS s_motivations,
            s.tags_source, s.angle, s.format, s.awareness AS s_awareness, s.belief_group AS s_belief, s.persona_id AS s_persona
          FROM ads x
          LEFT JOIN atria_assets t ON t.asset_id = x.asset_id
@@ -269,6 +283,8 @@ async function conceptLabels(db: D1Database): Promise<Row[]> {
       manual_belief: pick(list, "s_belief"),
       persona_list: joined(values("persona_id"), "\u001e"),
       manual_persona: pick(list, "s_persona"),
+      // Per ad, a hand-set list wins over Claude's; the concept carries the union.
+      motivations_list: joined([...new Set(list.flatMap((ad) => motivationList(ad.s_motivations ?? ad.t_motivations)))], "\u001e"),
     };
   });
 }
@@ -308,6 +324,7 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
       beliefGroups: manualBelief ? [manualBelief] : [...new Set(list(r.belief_group_list))],
       beliefs: [...new Set(list(r.belief_list))].slice(0, 3),
       personaId,
+      motivations: list(r.motivations_list).sort(),
       conceptId: String(r.id),
       podId: String(r.pod_id),
       label: String(r.label),
@@ -360,6 +377,7 @@ function toAssignment(r: Row): Assignment {
     beliefGroup: s("belief_group"),
     personaId: s("persona_id"),
     offer: r.offer == null ? null : Number(r.offer) === 1,
+    motivations: r.motivations == null ? null : motivationList(r.motivations),
   };
 }
 
@@ -440,6 +458,7 @@ export async function loadPosts(db: D1Database, from: string, to: string, opts: 
         awareness: r.l_awareness == null ? null : String(r.l_awareness),
         personaId: r.l_persona == null ? null : String(r.l_persona),
         offer: r.l_offer == null ? null : Number(r.l_offer) === 1,
+        motivations: r.l_motivations == null ? null : motivationList(r.l_motivations),
       },
     };
   });

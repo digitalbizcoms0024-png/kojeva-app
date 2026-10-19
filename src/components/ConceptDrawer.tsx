@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ConceptDetail, MetaResponse } from "../../shared/api.ts";
 import { cpa, roas, type Totals } from "../../shared/metrics.ts";
-import { ANGLES, AWARENESS, FORMATS } from "../../shared/taxonomy.ts";
+import { ANGLES, AWARENESS, FORMATS, MOTIVATIONS } from "../../shared/taxonomy.ts";
 import { useApi } from "../api.ts";
 import { dollars, int, money, ratio, shortDate } from "../format.ts";
 import { PlayableThumb } from "./AdPreview.tsx";
@@ -139,7 +139,7 @@ export function ConceptDrawer({ conceptId, meta, onClose }: { conceptId: string;
               <Numbers t={k.allTime} meta={meta} />
             </section>
 
-            {(k.angle || k.format || k.awareness || persona || k.atriaThemes.length > 0 || k.beliefGroups.length > 0) && (
+            {(k.angle || k.format || k.awareness || persona || k.atriaThemes.length > 0 || k.beliefGroups.length > 0 || k.motivations.length > 0) && (
               <section>
                 <h3 className="mb-2 font-extrabold text-ink">Tags</h3>
                 <div className="flex flex-wrap gap-1.5">
@@ -150,6 +150,11 @@ export function ConceptDrawer({ conceptId, meta, onClose }: { conceptId: string;
                   {k.beliefGroups.map((b) => (
                     <Tag key={b} tone="outline">
                       {b}
+                    </Tag>
+                  ))}
+                  {k.motivations.map((m) => (
+                    <Tag key={m} tone="accent">
+                      {MOTIVATIONS[m] ?? m}
                     </Tag>
                   ))}
                   {k.atriaThemes.map((th) => (

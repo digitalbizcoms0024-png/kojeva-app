@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AssignmentPatch, MetaResponse, PodsResponse, PostSummary, RankingsResponse, SuggestionsResponse } from "../../shared/api.ts";
-import { podById, ANGLES, AWARENESS, FORMATS, HOOKS, LANDING_PAGES } from "../../shared/taxonomy.ts";
+import { podById, ANGLES, AWARENESS, FORMATS, HOOKS, LANDING_PAGES, MOTIVATIONS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
 import { Empty, PageHeader, PodChip, Segmented, Thumb } from "../components/ui.tsx";
@@ -22,6 +22,34 @@ const TAGS: { key: "angle" | "format" | "hook" | "landingPage"; label: string; o
 ];
 
 const selectCls = "field w-full min-w-28 py-1.5";
+
+const motivationText = (list: string[] | null) => (list?.length ? list.map((m) => MOTIVATIONS[m] ?? m).join(", ") : "none");
+
+/** Motivation tags: Claude's until set by hand; a hand-set list (even empty) wins until cleared. */
+function MotivationPicker({ manual, claude, disabled, onChange }: { manual: string[] | null; claude: string[] | null; disabled: boolean; onChange: (v: string[] | null) => void }) {
+  const current = manual ?? claude ?? [];
+  const toggle = (key: string) => onChange(current.includes(key) ? current.filter((m) => m !== key) : [...current, key]);
+  return (
+    <details className="relative min-w-40 text-sm">
+      <summary className={`field cursor-pointer py-1.5 ${disabled ? "pointer-events-none opacity-60" : ""}`} title={manual ? "Set by hand" : "Claude's label"}>
+        {manual ? motivationText(manual) : `Claude: ${claude == null ? "—" : motivationText(claude)}`}
+      </summary>
+      <div className="absolute right-0 z-20 mt-1 flex w-64 flex-col gap-1 border-2 border-divider bg-page p-2 shadow-lg">
+        {Object.entries(MOTIVATIONS).map(([key, label]) => (
+          <label key={key} className="flex items-center gap-2">
+            <input type="checkbox" checked={current.includes(key)} onChange={() => toggle(key)} disabled={disabled} />
+            {label}
+          </label>
+        ))}
+        {manual && (
+          <button type="button" className="link mt-1 self-start text-xs" onClick={() => onChange(null)} disabled={disabled}>
+            Use Claude's label
+          </button>
+        )}
+      </div>
+    </details>
+  );
+}
 
 type View = "unassigned" | "unplaced" | "all";
 type Period = "month" | "all";
@@ -91,6 +119,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
             if (patch.beliefGroup !== undefined) a.beliefGroup = patch.beliefGroup;
             if (patch.personaId !== undefined) a.personaId = patch.personaId;
             if (patch.offer !== undefined) a.offer = patch.offer;
+            if (patch.motivations !== undefined) a.motivations = patch.motivations;
             return { ...r, assignment: a };
           }),
         );
@@ -348,6 +377,9 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                   <th className="py-2 pr-2 font-normal" title="Empty = Claude's grouping">
                     Belief shifted
                   </th>
+                  <th className="py-2 pr-2 font-normal" title="What the ad leans on; Claude's label until set by hand">
+                    Motivations
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -531,6 +563,14 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                             const v = e.target.value.trim() || null;
                             if (v !== (a.beliefGroup ?? null)) void patchRow(r, { beliefGroup: v });
                           }}
+                        />
+                      </td>
+                      <td className="py-2.5 pr-2">
+                        <MotivationPicker
+                          manual={a.motivations}
+                          claude={r.labels.motivations}
+                          disabled={disabled}
+                          onChange={(v) => void patchRow(r, { motivations: v })}
                         />
                       </td>
                     </tr>

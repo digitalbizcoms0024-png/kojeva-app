@@ -122,3 +122,17 @@ export const AWARENESS: Record<string, string> = {
 };
 
 export const CAMPAIGN_HINTS = ["CBO", "ABO"] as const;
+
+/**
+ * Motivation tags: what an ad leans on, several per ad (Oct 2026, from the behavioral research:
+ * 964 category/competitor reviews and 21 Facebook comments). Labelled by Claude, editable by hand.
+ */
+export const MOTIVATIONS: Record<string, string> = {
+  proof: "Proof needed",
+  price: "Price / value",
+  under_eye: "Under-eye puffiness",
+  comfort: "Comfort",
+  convenience: "Convenience",
+  relaxation: "Self-care / relaxation",
+  demo_led: "Demonstration-led discovery",
+};

@@ -46,6 +46,8 @@ export interface AssignmentPatch {
   personaId?: string | null;
   /** Whether the ad carries a discount or offer; a hand-set value wins over Claude's. */
   offer?: boolean | null;
+  /** Motivation tags (MOTIVATIONS keys); a hand-set list wins over Claude's, null hands it back. */
+  motivations?: string[] | null;
   /** Hand the pod (or tags) back to automatic attribution. */
   reset?: ("pod" | "tags")[];
 }
@@ -96,6 +98,7 @@ export interface Assignment {
   beliefGroup: string | null;
   personaId: string | null;
   offer: boolean | null;
+  motivations: string[] | null;
 }
 
 /** Claude's labels for a post's creative (from its first labelled asset); null where not labelled. */
@@ -103,6 +106,7 @@ export interface CreativeLabels {
   awareness: string | null;
   personaId: string | null;
   offer: boolean | null;
+  motivations: string[] | null;
 }
 
 export interface PostSummary {
@@ -209,6 +213,8 @@ export interface ConceptResult {
   beliefs: string[];
   /** Persona: hand-set on one of its ads, else the most common one Claude gave its assets. */
   personaId: string | null;
+  /** Motivation tags across its ads (hand-set lists win per ad over Claude's). */
+  motivations: string[];
 }
 
 export interface ConceptsResponse {
@@ -241,7 +247,7 @@ export interface ConceptDetail {
 }
 
 /** Atria dimensions are multi-valued: a concept counts under each of its themes. */
-export type InsightDimension = "angle" | "format" | "awareness" | "persona" | "atria_hook" | "atria_persona" | "atria_desire" | "belief" | "atria_theme";
+export type InsightDimension = "angle" | "format" | "awareness" | "persona" | "motivation" | "atria_hook" | "atria_persona" | "atria_desire" | "belief" | "atria_theme";
 
 export interface InsightRow {
   /** Tag key, or null for concepts with no tag on this dimension. */

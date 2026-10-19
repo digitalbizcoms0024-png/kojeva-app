@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import type { AssignmentPatch, Editor } from "../shared/api.ts";
 import type { AttributionSettings } from "../shared/attribution.ts";
 import type { Targets } from "../shared/metrics.ts";
-import { ANGLES, FORMATS, GROUPS, HOOKS, LANDING_PAGES, AWARENESS, POD_SLOTS } from "../shared/taxonomy.ts";
+import { ANGLES, FORMATS, GROUPS, HOOKS, LANDING_PAGES, AWARENESS, MOTIVATIONS, POD_SLOTS } from "../shared/taxonomy.ts";
 import { requireAccess } from "./access.ts";
 import { randomToken } from "./crypto.ts";
 import type { AppEnv } from "./env.ts";
@@ -41,6 +41,8 @@ async function checkPatch(db: D1Database, p: AssignmentPatch): Promise<Problem> 
     if (!e) return "Unknown persona.";
   }
   if (p.offer !== undefined && p.offer !== null && typeof p.offer !== "boolean") return "offer must be true, false or null.";
+  if (p.motivations != null && (!Array.isArray(p.motivations) || p.motivations.some((m) => typeof m !== "string" || !(m in MOTIVATIONS))))
+    return `motivations must be a list of ${Object.keys(MOTIVATIONS).join(", ")}, or null.`;
   if (p.editorId != null) {
     const e = await db.prepare("SELECT 1 FROM editors WHERE id = ?1").bind(p.editorId).first();
     if (!e) return "Unknown editor.";
@@ -84,6 +86,7 @@ function patchStatements(db: D1Database, postIds: string[], p: AssignmentPatch, 
   if (p.beliefGroup !== undefined) col("belief_group = ?", p.beliefGroup?.trim() ?? null);
   if (p.personaId !== undefined) col("persona_id = ?", p.personaId);
   if (p.offer !== undefined) col("offer = ?", p.offer == null ? null : p.offer ? 1 : 0);
+  if (p.motivations !== undefined) col("motivations = ?", p.motivations == null ? null : JSON.stringify([...new Set(p.motivations)].sort()));
   if (p.reset?.includes("pod")) sets.push("pod_source = NULL");
   if (p.reset?.includes("tags")) sets.push("tags_source = NULL");
   sets.push("updated_at = ?2", "updated_by = ?3");

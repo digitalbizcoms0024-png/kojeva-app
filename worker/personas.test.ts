@@ -62,7 +62,7 @@ const call = (path: string, headers: Record<string, string>, init: RequestInit =
 const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
 const json = async <T>(r: Response | Promise<Response>) => (await (await r).json()) as T;
 const personas = async () => (await json<MetaResponse>(call("/api/meta", person))).personas;
-const label = (assetId: string, extra: object) => ({ assetId, awareness: "product", belief: "It works", beliefGroup: "It works", ...extra });
+const label = (assetId: string, extra: object) => ({ assetId, awareness: "product", belief: "It works", beliefGroup: "It works", motivations: [], ...extra });
 
 /** Drafts two personas through the service route, then confirms them as a person. */
 async function confirmTwo() {
@@ -82,6 +82,20 @@ async function confirmTwo() {
 }
 
 describe("personas", () => {
+  it("lets Claude replace an unconfirmed draft list, but not a confirmed one", async () => {
+    const drafts = (names: string[], replaceDrafts?: boolean) =>
+      call("/api/ingest/atria/personas", service, post({ personas: names.map((name) => ({ name, description: `${name}, from the research` })), replaceDrafts }));
+    await drafts(["Deal-hunting Dana", "Morning-puffy Maya", "Skeptical Sophie"]);
+    expect(await json(drafts(["The Morning De-Puffer", "The Frustrated Facial-Tool User"], true))).toMatchObject({ added: 2, as: "draft" });
+    expect((await personas()).map((p) => [p.name, p.status])).toEqual([
+      ["The Morning De-Puffer", "draft"],
+      ["The Frustrated Facial-Tool User", "draft"],
+    ]);
+    expect((await call("/api/personas/confirm", person, { method: "POST" })).status).toBe(200);
+    expect((await drafts(["Someone else"], true)).status).toBe(409);
+    expect((await personas()).map((p) => p.name)).toEqual(["The Morning De-Puffer", "The Frustrated Facial-Tool User"]);
+  });
+
   it("gives Claude Atria's persona tags to draft from, keeps the first list as drafts and later ones as suggestions", async () => {
     const input = await json<{ state: string; atriaPersonas: { tag: string; assets: number; spendCents: number }[] }>(
       call("/api/ingest/atria/personas", service),

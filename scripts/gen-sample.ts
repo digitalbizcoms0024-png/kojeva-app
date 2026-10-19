@@ -222,6 +222,7 @@ const SAMPLE_HOOKS = ["Transformation Start", "Direct Eye Contact", "Product Dro
 const SAMPLE_PERSONAS = ["Woman 45+ noticing jowls", "Busy mom, morning puffiness", "Skincare skeptic", "Gua sha enthusiast"];
 const SAMPLE_DESIRES = ["Aesthetics", "Health", "Confidence", "Saving"];
 const SAMPLE_AWARENESS = ["problem", "solution", "product", "unaware", "most"];
+const SAMPLE_MOTIVATIONS = [["under_eye", "convenience"], ["proof"], ["comfort", "relaxation"], ["price"], ["demo_led", "proof"], []];
 const SAMPLE_BELIEFS: [string, string][] = [
   ["Puffiness is fluid, not fat", "Morning puffiness is trapped fluid you can drain, not weight"],
   ["Real gua sha beats fakes", "Cheap stones don't work; real Bian stone does"],
@@ -259,7 +260,7 @@ posts.forEach((p, i) => {
   };
   const [group, belief] = SAMPLE_BELIEFS[(i * 7) % 4]!;
   out.push(
-    `INSERT INTO atria_assets (asset_id, status, tags, fetched_at, awareness, belief, belief_group, labeled_at, persona_id, persona_at, offer) VALUES (${q(`v:${p.id}`)}, 'tagged', ${q(JSON.stringify(tags))}, ${q(now)}, ${q(i % 10 === 9 ? SAMPLE_AWARENESS[(i * 3) % 5]! : awareness)}, ${q(belief)}, ${q(group)}, ${q(now)}, ${q(persona)}, ${q(now)}, ${offer});`,
+    `INSERT INTO atria_assets (asset_id, status, tags, fetched_at, awareness, belief, belief_group, labeled_at, persona_id, persona_at, offer, motivations, motivations_at) VALUES (${q(`v:${p.id}`)}, 'tagged', ${q(JSON.stringify(tags))}, ${q(now)}, ${q(i % 10 === 9 ? SAMPLE_AWARENESS[(i * 3) % 5]! : awareness)}, ${q(belief)}, ${q(group)}, ${q(now)}, ${q(persona)}, ${q(now)}, ${offer}, ${q(JSON.stringify(SAMPLE_MOTIVATIONS[i % SAMPLE_MOTIVATIONS.length]))}, ${q(now)});`,
   );
 });
 out.push(`INSERT INTO sync_runs (source, started_at, finished_at, status, message) VALUES ('sample', ${q(now)}, ${q(now)}, 'ok', 'Sample data loaded');`);

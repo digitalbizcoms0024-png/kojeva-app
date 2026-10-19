@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import type { InsightDimension, InsightRow, InsightsResponse, MetaResponse } from "../../shared/api.ts";
 import { cpa, cpaBand, type Targets } from "../../shared/metrics.ts";
-import { ANGLES, AWARENESS, FORMATS, podById } from "../../shared/taxonomy.ts";
+import { ANGLES, AWARENESS, FORMATS, MOTIVATIONS, podById } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { CpaValue, Empty, PageHeader, PodSwatch, SectionTitle, Select } from "../components/ui.tsx";
@@ -13,6 +13,7 @@ const LABELS: Record<InsightDimension, Record<string, string>> = {
   format: FORMATS,
   awareness: AWARENESS,
   persona: {},
+  motivation: MOTIVATIONS,
   atria_hook: {},
   atria_persona: {},
   atria_desire: {},
@@ -24,6 +25,7 @@ const DIM_NAME: Record<InsightDimension, string> = {
   format: "By format",
   awareness: "By awareness level",
   persona: "By persona",
+  motivation: "By motivation",
   atria_hook: "By hook type",
   atria_persona: "By avatar",
   atria_desire: "By mass desire",
@@ -34,6 +36,7 @@ const DIM_NAME: Record<InsightDimension, string> = {
 const DIM_SOURCE: Partial<Record<InsightDimension, string>> = {
   awareness: "Labelled by Claude from Atria's tags; hand-set values win",
   persona: "Your persona list (Settings); placed by Claude, hand-set values win",
+  motivation: "Labelled by Claude from Atria's tags; hand-set lists win; an ad can lean on several",
   atria_hook: "Atria · visual hook",
   atria_persona: "Atria · persona",
   atria_desire: "Atria · core desire",
@@ -41,8 +44,8 @@ const DIM_SOURCE: Partial<Record<InsightDimension, string>> = {
   atria_theme: "Atria · theme",
 };
 /** Dimensions where a concept can carry several values, so rows overlap. */
-const isAtria = (d: InsightDimension) => d.startsWith("atria_") || d === "belief";
-const isLabel = (d: InsightDimension) => d === "awareness" || d === "belief" || d === "persona";
+const isAtria = (d: InsightDimension) => d.startsWith("atria_") || d === "belief" || d === "motivation";
+const isLabel = (d: InsightDimension) => d === "awareness" || d === "belief" || d === "persona" || d === "motivation";
 
 /** Panels, two per row, in the order the team reads them. */
 const GROUPS: InsightDimension[][] = [
@@ -50,6 +53,7 @@ const GROUPS: InsightDimension[][] = [
   ["awareness", "atria_hook"],
   ["atria_persona", "atria_desire"],
   ["belief", "atria_theme"],
+  ["motivation", "persona"],
 ];
 
 /** Fewer decided tests than this and a hit rate is shown as a hint, not a verdict. */

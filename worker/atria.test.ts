@@ -150,8 +150,9 @@ describe("Atria ingest", () => {
           belief: "Puffiness isn't fat, it's fluid that can drain",
           beliefGroup: "Puffiness is fluid, not fat",
           offer: false,
+          motivations: ["under_eye", "convenience"],
         },
-        { assetId: IMAGE, awareness: "most", belief: "This deal won't come back", beliefGroup: "Now is the time to buy", offer: true },
+        { assetId: IMAGE, awareness: "most", belief: "This deal won't come back", beliefGroup: "Now is the time to buy", offer: true, motivations: ["price"] },
       ],
     };
 
@@ -206,6 +207,34 @@ describe("Atria ingest", () => {
         expect.objectContaining({ awareness: "solution", awarenessSource: "manual", beliefGroups: ["Real gua sha beats fakes"] }),
       ]);
       expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ awareness: "very" }) })).status).toBe(400);
+    });
+
+    it("labels motivation tags, rolls them up per concept and lets a hand-set list win", async () => {
+      await tagBoth();
+      await call("/api/ingest/atria/labels", service, post(LABELS));
+      const values = async () =>
+        Object.fromEntries(
+          ((await (await call("/api/insights?range=all&dimension=motivation", person)).json()) as { rows: { value: string | null; concepts: number }[] }).rows.map(
+            (r) => [r.value ?? "none", r.concepts],
+          ),
+        );
+      expect(await values()).toEqual({ under_eye: 1, convenience: 1, price: 1, none: 1 });
+      const post1 = async () =>
+        ((await (await call("/api/rankings?range=all", person)).json()) as { items: { postId: string; labels: { motivations: string[] | null }; assignment: { motivations: string[] | null } }[] }).items.find(
+          (p) => p.postId === "p1",
+        )!;
+      expect((await post1()).labels.motivations).toEqual(["convenience", "under_eye"]);
+
+      // A hand-set list replaces Claude's for that ad; null hands it back.
+      expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ motivations: ["proof", "proof"] }) })).status).toBe(200);
+      expect((await post1()).assignment.motivations).toEqual(["proof"]);
+      expect(await values()).toEqual({ proof: 1, price: 1, none: 1 });
+      expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ motivations: null }) })).status).toBe(200);
+      expect(await values()).toEqual({ under_eye: 1, convenience: 1, price: 1, none: 1 });
+
+      expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ motivations: ["vibes"] }) })).status).toBe(400);
+      const bad = await call("/api/ingest/atria/labels", service, post({ labels: [{ ...LABELS.labels[0], motivations: ["vibes"] }] }));
+      expect(bad.status).toBe(400);
     });
 
     it("rejects malformed labels", async () => {
