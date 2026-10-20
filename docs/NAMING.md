@@ -72,11 +72,14 @@ Ad names rarely carry tags, but concept and ad set names usually do: "KOJEVA 3 |
 first, read the concept label, then the ad set name, then ad names. Add keywords there (with a test
 using the real name) as naming evolves. Hand-set tags always win.
 
-Format words the rules know: Static, UGC, AI UGC (or "AI voiceover"), AI drama, VSL, Video, Native ad /
-advertorial / listicle, Podcast, Interview, Animation (or "Pixar"), Carousel. Put one in the ad set name
+Format words the rules know: Static, UGC static, UGC, AI UGC, AI voiceover / B-roll, UGC montage, AI drama,
+Song, Product demo, Mixed media, VSL, Video, Native ad / advertorial / listicle, Podcast, Interview, Animation
+(or "Pixar"), Carousel. What each means is in `FORMAT_DEFINITIONS` (`shared/taxonomy.ts`), the media buyer's
+definitions; the nightly Atria task suggests a format from the ad's frames and Atria's tags (a suggestion
+only, accepted in Needs Tagging). Put one in the ad set name
 ("Dhia | AI UGC | Problem Vs Solution 2") and the concept is tagged without anyone doing it by hand.
 Names without one (KOJEVA 15's videos, Dhia's "…_Brief" sets) were tagged by the media buyer in
-migration 0018.
+migrations 0018 and 0021, after checking each ad.
 
 ## Open questions
 - Do older ad sets (before the naming habit started) also carry strategist names? If not, a tracker

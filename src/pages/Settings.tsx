@@ -445,9 +445,9 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           ad is also judged on its own the same way; one ad hitting makes the concept a hit.
         </span>
       </div>
-      <h3 className="mt-6 mb-1 font-extrabold text-ink">Winner by call</h3>
+      <h3 className="mt-6 mb-1 font-extrabold text-ink">Hit (call)</h3>
       <p className="mb-3 max-w-[90ch] text-sm text-ink-3">
-        A miss that takes major spend and lifts the account can be called a winner (or super winner) by the media buyer, even below target. The hub
+        A miss that takes major spend and lifts the account can be called a hit (or super hit) by the media buyer, even below target. The hub
         flags it for review when it reaches these numbers since launch; the call, and these thresholds, are the media buyer's only.
       </p>
       <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-7">
@@ -460,7 +460,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
         <Labeled label="…over (days)">
           <input id="w-days" type="number" min="1" max="90" step="1" value={wDays} onChange={(e) => setWDays(e.target.value)} className={field} disabled={!buyer} />
         </Labeled>
-        <Labeled label="Super winner from ($)">
+        <Labeled label="Super hit from ($)">
           <input id="w-super" type="number" min="0" step="500" value={swSpend} onChange={(e) => setSwSpend(e.target.value)} className={field} disabled={!buyer} />
         </Labeled>
       </div>

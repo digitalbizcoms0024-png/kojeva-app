@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AssignmentPatch, MetaResponse, PodsResponse, PostSummary, RankingsResponse, SuggestionsResponse } from "../../shared/api.ts";
-import { podById, ANGLES, AWARENESS, FORMATS, HOOKS, LANDING_PAGES, MOTIVATIONS } from "../../shared/taxonomy.ts";
+import { podById, ANGLES, AWARENESS, FORMAT_DEFINITIONS, FORMATS, HOOKS, LANDING_PAGES, MOTIVATIONS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
 import { Empty, PageHeader, PodChip, Segmented, Thumb } from "../components/ui.tsx";
@@ -512,6 +512,18 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                               </option>
                             ))}
                           </select>
+                          {/* Claude's format suggestion (from the ad's frames and Atria's tags): never applied without you. */}
+                          {t.key === "format" && r.labels.format && r.labels.format !== a.format && (
+                            <button
+                              type="button"
+                              className="link mt-1 block text-left text-xs"
+                              disabled={disabled}
+                              title={FORMAT_DEFINITIONS[r.labels.format] ?? undefined}
+                              onClick={() => patchRow(r, { format: r.labels.format })}
+                            >
+                              Claude: {FORMATS[r.labels.format] ?? r.labels.format} · use
+                            </button>
+                          )}
                         </td>
                       ))}
                       {activePersonas.length > 0 && (

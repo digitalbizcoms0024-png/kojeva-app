@@ -49,7 +49,7 @@ function EvidenceTable({ e }: { e: CallEvidence }) {
 }
 
 /**
- * Winner by call on a concept card: the call and its evidence once made; for a candidate (or any
+ * Hit (call) on a concept card: the call and its evidence once made; for a candidate (or any
  * miss, for the media buyer) the live evidence and, for the media buyer only, the call itself.
  */
 export function WinnerCall({ k, meta, onChanged }: { k: ConceptResult; meta: MetaResponse; onChanged: () => void }) {
@@ -85,7 +85,7 @@ export function WinnerCall({ k, meta, onChanged }: { k: ConceptResult; meta: Met
       <section className="flex flex-col gap-3 border-2 border-good bg-good-soft px-4 py-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h3 className="font-extrabold text-ink">{k.call.kind === "super_winner" ? "★★ Super winner" : "★ Winner"} by call</h3>
+            <h3 className="font-extrabold text-ink">{k.call.kind === "super_winner" ? "✓ Super hit (call)" : "✓ Hit (call)"}</h3>
             <p className="text-xs text-ink-3">
               Missed target in its test; called by {k.call.calledBy} on {shortDate(k.call.calledAt.slice(0, 10))}. Counts as a hit.
             </p>
@@ -106,7 +106,7 @@ export function WinnerCall({ k, meta, onChanged }: { k: ConceptResult; meta: Met
   if (!showForm) {
     return meta.isMediaBuyer && k.status === "miss" ? (
       <button className="link self-start text-sm" onClick={() => setOpen(true)}>
-        Below target: make a winner call…
+        Below target: make it a hit (call)…
       </button>
     ) : null;
   }
@@ -115,11 +115,11 @@ export function WinnerCall({ k, meta, onChanged }: { k: ConceptResult; meta: Met
     <section className="flex flex-col gap-3 border-2 border-divider px-4 py-3">
       <div>
         <h3 className="font-extrabold text-ink">
-          {k.candidate ? `Could be a ${k.candidate === "super_winner" ? "super winner" : "winner"}` : "Winner call"}
+          {k.candidate ? `Could be a ${k.candidate === "super_winner" ? "super hit" : "hit"} (call)` : "Hit (call)"}
         </h3>
         <p className="text-xs text-ink-3">
           Below target ({ratio(roas(k.allTime))} ROAS since launch on {money(k.allTime.spendCents)}). A creative that takes major spend and
-          lifts the account can be called a winner; that's the media buyer's call, from the evidence below.
+          lifts the account can be called a hit; that's the media buyer's call, from the evidence below.
         </p>
       </div>
       {evidence ? <EvidenceTable e={evidence} /> : <p className="text-sm text-ink-3">Loading the account's numbers…</p>}
@@ -129,12 +129,12 @@ export function WinnerCall({ k, meta, onChanged }: { k: ConceptResult; meta: Met
             {(["winner", "super_winner"] as const).map((v) => (
               <label key={v} className="flex items-center gap-1.5">
                 <input type="radio" name={`kind-${k.conceptId}`} checked={kind === v} onChange={() => setKind(v)} />
-                {v === "winner" ? "Winner" : "Super winner (a real scaler)"}
+                {v === "winner" ? "Hit (call)" : "Super hit (call): a real scaler"}
               </label>
             ))}
           </div>
           <textarea
-            aria-label="Why it's a winner"
+            aria-label="Why it's a hit"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             maxLength={500}
@@ -144,7 +144,7 @@ export function WinnerCall({ k, meta, onChanged }: { k: ConceptResult; meta: Met
           />
           <div className="flex items-center gap-3">
             <button className="btn btn-primary" disabled={busy || reason.trim().length < 10} onClick={() => void send("PUT")}>
-              Call it a {kind === "super_winner" ? "super winner" : "winner"}
+              Call it a {kind === "super_winner" ? "super hit" : "hit"}
             </button>
             {error && <span className="text-sm text-bad">{error}</span>}
           </div>

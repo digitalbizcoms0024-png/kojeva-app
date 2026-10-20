@@ -94,9 +94,9 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - Until then it stays a **Miss**; one still spending in the last 3 days is labelled "Miss · still running". Once a look hits,
   the late hit is permanent.
 
-## Winner by call (`worker/calls.ts`, `winnerCandidate` in `shared/metrics.ts`)
+## Hit (call) (`worker/calls.ts`, `winnerCandidate` in `shared/metrics.ts`)
 A top-of-funnel creative that takes major spend and measurably lifts the account can be called a
-**Winner**, or **Super winner** if it's a real scaler, even when its own ROAS is below target (owner's
+**Hit (call)**, or **Super hit (call)** if it's a real scaler (shown that way; stored as status `winner` / `super_winner`), even when its own ROAS is below target (owner's
 rule, Oct 2026). Only the media buyer makes the call (`MEDIA_BUYER_EMAILS`), tied to the creative's data:
 - **Candidates** are flagged automatically: a concept that missed its test, with ROAS since launch ≥
   `winnerMinRoas` (1.5) on ≥ `winnerMinSpend` ($1,000) over ≥ `winnerMinDays` (5) days; a possible super

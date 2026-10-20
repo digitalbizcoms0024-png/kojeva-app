@@ -190,7 +190,7 @@ editing.put("/settings", requireAccess, async (c) => {
   // Winner thresholds feed the media buyer's calls, so only they set them.
   const winnerKeys = ["winnerMinRoas", "winnerMinSpend", "winnerMinDays", "superWinnerMinSpend"] as const;
   if (body.targets && winnerKeys.some((k) => body.targets![k] !== undefined) && !isMediaBuyer(c.env, c.get("userEmail")))
-    return c.json({ error: "Only the media buyer can change the winner thresholds." }, 403);
+    return c.json({ error: "Only the media buyer can change the hit (call) thresholds." }, 403);
   const by = c.get("userEmail");
   if (body.targets) {
     await mergeSetting(db, "targets", body.targets, by);

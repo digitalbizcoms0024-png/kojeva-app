@@ -62,7 +62,7 @@ const call = (path: string, headers: Record<string, string>, init: RequestInit =
 const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
 const json = async <T>(r: Response | Promise<Response>) => (await (await r).json()) as T;
 const personas = async () => (await json<MetaResponse>(call("/api/meta", person))).personas;
-const label = (assetId: string, extra: object) => ({ assetId, awareness: "product", belief: "It works", beliefGroup: "It works", motivations: [], ...extra });
+const label = (assetId: string, extra: object) => ({ assetId, awareness: "product", belief: "It works", beliefGroup: "It works", motivations: [], format: null, ...extra });
 
 /** Drafts two personas through the service route, then confirms them as a person. */
 async function confirmTwo() {

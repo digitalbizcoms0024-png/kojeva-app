@@ -151,8 +151,9 @@ describe("Atria ingest", () => {
           beliefGroup: "Puffiness is fluid, not fat",
           offer: false,
           motivations: ["under_eye", "convenience"],
+          format: "AIUGC",
         },
-        { assetId: IMAGE, awareness: "most", belief: "This deal won't come back", beliefGroup: "Now is the time to buy", offer: true, motivations: ["price"] },
+        { assetId: IMAGE, awareness: "most", belief: "This deal won't come back", beliefGroup: "Now is the time to buy", offer: true, motivations: ["price"], format: null },
       ],
     };
 
@@ -234,6 +235,30 @@ describe("Atria ingest", () => {
 
       expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ motivations: ["vibes"] }) })).status).toBe(400);
       const bad = await call("/api/ingest/atria/labels", service, post({ labels: [{ ...LABELS.labels[0], motivations: ["vibes"] }] }));
+      expect(bad.status).toBe(400);
+    });
+
+    it("stores Claude's format suggestion without applying it, and writes nothing on a re-send", async () => {
+      await tagBoth();
+      const unlabeled = (await (await call("/api/ingest/atria/unlabeled", service)).json()) as {
+        formats: { key: string; definition: string | null }[];
+        assets: { assetId: string; adIds: string[] }[];
+      };
+      expect(unlabeled.formats.find((f) => f.key === "AIVoiceover")?.definition).toMatch(/AI voice/);
+      expect(unlabeled.assets.find((a) => a.assetId === VIDEO)?.adIds).toEqual(["a1"]);
+
+      expect(((await (await call("/api/ingest/atria/labels", service, post(LABELS))).json()) as { written: number }).written).toBe(2);
+      expect(((await (await call("/api/ingest/atria/labels", service, post(LABELS))).json()) as { written: number }).written).toBe(0);
+      const post1 = async () =>
+        ((await (await call("/api/rankings?range=all", person)).json()) as { items: { postId: string; labels: { format: string | null } }[] }).items.find(
+          (p) => p.postId === "p1",
+        )!;
+      expect((await post1()).labels.format).toBe("AIUGC");
+      // The concept's format still comes from its name ("KOJEVA 15 | FAKE BRUSH" has none): a suggestion only.
+      const concepts = (await (await call("/api/concepts?range=all", person)).json()) as { rows: { label: string; format: string | null }[] };
+      expect(concepts.rows.find((k) => k.label.includes("FAKE BRUSH"))?.format).toBeNull();
+
+      const bad = await call("/api/ingest/atria/labels", service, post({ labels: [{ ...LABELS.labels[0], format: "Hologram" }] }));
       expect(bad.status).toBe(400);
     });
 

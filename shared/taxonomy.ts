@@ -86,7 +86,13 @@ export const ANGLES: Record<string, string> = {
 export const FORMATS: Record<string, string> = {
   UGC: "UGC",
   AIUGC: "AI UGC",
+  AIVoiceover: "AI voiceover + B-roll",
+  UGCMontage: "UGC montage",
+  Song: "Song ad",
+  ProductDemo: "Product demo",
+  MixedMedia: "Mixed media",
   Static: "Static",
+  UGCStatic: "UGC static",
   VSL: "VSL",
   Video: "Video",
   Native: "Native ad / advertorial",
@@ -95,6 +101,30 @@ export const FORMATS: Record<string, string> = {
   Animation: "Animation",
   AIDrama: "AI drama ad",
   Carousel: "Carousel",
+};
+
+/**
+ * What each format means, as the media buyer defined them (Oct 2026). Claude reads these when it
+ * suggests a creative's format (nightly Atria task); they're shown in Needs Tagging too.
+ */
+export const FORMAT_DEFINITIONS: Record<string, string> = {
+  UGC: "A real creator talking to camera, phone-style.",
+  AIUGC: "An AI avatar talking to camera.",
+  AIVoiceover: "An AI voice over stock, product or demo footage; no on-camera presenter.",
+  UGCMontage: "A montage of several creators' or customers' clips (e.g. problem / fix), cut together.",
+  AIDrama: "A scripted AI story or mini movie, with characters and dialogue.",
+  Song: "Built around a song or jingle.",
+  Animation: "Animated: 2D, 3D (Pixar-style), motion graphics or an explainer.",
+  ProductDemo: "The product in use, with little or no talking.",
+  MixedMedia: "Clips, text and graphics mixed, with no single presenter or voice driving it.",
+  VSL: "A long, script-led video sales letter.",
+  Interview: "Someone interviewed on camera (street interview, Q&A).",
+  Podcast: "A podcast-style clip.",
+  Video: "Any other video (fallback).",
+  Static: "A designed image or graphic.",
+  UGCStatic: "An image that looks native: phone photo, screenshot, notes, review.",
+  Carousel: "A carousel of images or cards.",
+  Native: "An advertorial or listicle-style ad that reads like an article.",
 };
 
 export const HOOKS: Record<string, string> = {

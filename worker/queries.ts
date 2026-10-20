@@ -86,7 +86,7 @@ async function loadPostBase(db: D1Database, postId?: string): Promise<Row[]> {
       .prepare(
         `SELECT x.id, x.post_id, x.name, x.status, x.created_time, x.concept_id, x.adset_name,
            t.status AS t_status, t.tags, t.labeled_at, t.awareness AS t_awareness, t.offer AS t_offer, t.persona_id AS t_persona,
-           t.motivations AS t_motivations, t.motivations_at
+           t.motivations AS t_motivations, t.motivations_at, t.format_label AS t_format, t.format_at
          FROM ads x LEFT JOIN atria_assets t ON t.asset_id = x.asset_id ${postId ? "WHERE x.post_id = ?1" : ""}`,
       )
       .bind(...(postId ? [postId] : []))
@@ -116,6 +116,8 @@ async function loadPostBase(db: D1Database, postId?: string): Promise<Row[]> {
       l_offer: find((ad) => ad.t_offer != null)?.t_offer ?? null,
       l_persona: find((ad) => ad.t_persona != null)?.t_persona ?? null,
       l_motivations: find((ad) => ad.motivations_at != null)?.t_motivations ?? null,
+      // Claude's format suggestion from the first ad it decided on (null = none fits or not yet).
+      l_format: find((ad) => ad.format_at != null)?.t_format ?? null,
     };
   });
 }
@@ -475,6 +477,7 @@ export async function loadPosts(db: D1Database, from: string, to: string, opts: 
         personaId: r.l_persona == null ? null : String(r.l_persona),
         offer: r.l_offer == null ? null : Number(r.l_offer) === 1,
         motivations: r.l_motivations == null ? null : motivationList(r.l_motivations),
+        format: r.l_format == null ? null : String(r.l_format),
       },
     };
   });

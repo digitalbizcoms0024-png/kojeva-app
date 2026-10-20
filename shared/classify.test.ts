@@ -24,6 +24,9 @@ describe("classify", () => {
     ["KOJEVA 1 | ANIMSONG-HxM1", null, "Animation"],
     // The media buyer's format names (Oct 2026), for ad sets named with them from now on.
     ["KOJEVA 16 | AI DRAMA | Mini Movie", null, "AIDrama"],
+    ["AI Voiceover + Brolls | Apology", "ProblemAware", "AIVoiceover"],
+    ["Dhia | UGC Montage | Problem Vs Solution 3", "Comparison", "UGCMontage"],
+    ["KOJEVA 16 | SONG | Husband", "Husband", "Song"],
     ["KOJEVA 16 | PIXAR ANIMATION | Husband", "Husband", "Animation"],
     ["KOJEVA STATIC | Offer", "Offer", "Static"],
     ["KOJEVA STATIC | Mature Skin", "MatureFace", "Static"],

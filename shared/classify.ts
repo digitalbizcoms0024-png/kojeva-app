@@ -28,7 +28,13 @@ const ANGLE_RULES: [Angle, RegExp][] = [
 
 const FORMAT_RULES: [Format, RegExp][] = [
   ["AIDrama", /\bai drama\b/],
-  ["AIUGC", /\bai ugc\b|ai voiceover/],
+  ["AIVoiceover", /voice ?over|\bb-? ?rolls?\b/],
+  ["AIUGC", /\bai ugc\b/],
+  ["UGCMontage", /\bmontage\b|compilation/],
+  ["UGCStatic", /\bugc static\b/],
+  ["Song", /\bsong\b|jingle/],
+  ["ProductDemo", /product demo/],
+  ["MixedMedia", /mixed media/],
   ["UGC", /\bugc\b/],
   ["VSL", /\bvsl\b/],
   ["Native", /native ad|advertorial|listicle/],

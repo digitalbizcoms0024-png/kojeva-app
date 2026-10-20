@@ -71,6 +71,16 @@ awareness level. Personas are a short list of specific people (table `personas`)
   deletes the current drafts (and clears any Claude assignments to them) before adding the new
   list. Once one is active it answers 409: change confirmed personas in Settings.
 
+## Format suggestions
+Claude also suggests each creative's **format** (`FORMATS` / `FORMAT_DEFINITIONS` in
+`shared/taxonomy.ts`). `/unlabeled` returns assets without a format decision, the format list with
+definitions, and up to 3 Meta ad ids per asset (`adIds`). The task gets the video file through the Atria
+tool `get_ad_account_ad`, pulls ~8 frames across it with ffmpeg and judges from them plus Atria's tags
+(media format, production quality, visual hook). `/labels` takes optional `format` (a key, or null if
+none fits), stored in `atria_assets.format_label`. It's a suggestion only: the concept's format stays
+hand-set, then read from names, and Needs Tagging shows "Claude: … · use" to accept it. The task's
+environment must allow `cdn.tryatria.com` (and `*.fbcdn.net`).
+
 ## Motivations
 Why a viewer would buy, separate from who they are (`MOTIVATIONS` in `shared/taxonomy.ts`): proof
 needed, price/value, under-eye puffiness, comfort, convenience, self-care/relaxation and

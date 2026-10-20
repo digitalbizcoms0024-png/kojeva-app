@@ -48,7 +48,7 @@ function sum(list: ReportFigures[]): ReportFigures {
 }
 
 const kindOf = (s: HitStatus) =>
-  s === "winner" ? "Winner (by call)" : s === "super_winner" ? "Super winner (by call)" : s === "late_hit" ? "Late hit" : "Hit";
+  s === "winner" ? "Hit (call)" : s === "super_winner" ? "Super hit (call)" : s === "late_hit" ? "Late hit" : "Hit";
 
 /** "One Step (Static) — 10 purchases, 2.43× ROAS, $11.55 CPA in its test window" */
 function hitLine(k: ReportConcept): Inline[] {
@@ -92,7 +92,7 @@ export function reportBlocks(d: ReportData, text: ReportText | null, podNames: M
       kind: "p",
       parts: [
         { b: "Hit rate" },
-        ` = share of eligible concepts that reach target in their test window: CPA ≤ $${t.targetCpa} ${t.hitRule === "both" ? "and" : "or"} ROAS ≥ ${t.targetRoas}. A concept becomes eligible once one of its ads has spent $${t.minTestSpend}, and counts in the period it launched. Late hits and winners by call count.`,
+        ` = share of eligible concepts that reach target in their test window: CPA ≤ $${t.targetCpa} ${t.hitRule === "both" ? "and" : "or"} ROAS ≥ ${t.targetRoas}. A concept becomes eligible once one of its ads has spent $${t.minTestSpend}, and counts in the period it launched. Late hits and hits by call count.`,
       ],
     },
   ];
@@ -145,7 +145,7 @@ export function reportBlocks(d: ReportData, text: ReportText | null, podNames: M
         h.length ? "Strongest signal: " : "Strongest miss: ",
         { b: best.label },
         ` — ${w.purchases} purchases, ${x(w.roas)} ROAS, ${dollars(w.cpa)} CPA in its test window, ${moneyExact(w.spendCents)} spend.`,
-        ...(best.candidate ? [" Could be a winner: the media buyer's call."] : []),
+        ...(best.candidate ? [" Could be a hit (call): the media buyer's decision."] : []),
       ]);
     }
     const waiting = mine.length - el.length;
@@ -164,7 +164,7 @@ export function reportBlocks(d: ReportData, text: ReportText | null, podNames: M
         .sort((a, b) => b[1].filter((k) => isHit(k.status)).length - a[1].filter((k) => isHit(k.status)).length || b[1].length - a[1].length)
         .map(([f, list]) => {
           const won = list.filter((k) => isHit(k.status));
-          const names = won.map((k) => `${podNames.get(k.podId) ?? k.podId}'s ${k.label}${k.call ? " (by call)" : ""}`).join(", ");
+          const names = won.map((k) => `${podNames.get(k.podId) ?? k.podId}'s ${k.label}${k.call ? " (call)" : ""}`).join(", ");
           return [{ b: `${f}: ${won.length} / ${list.length}` }, names ? ` — ${names}` : ""];
         }),
     },

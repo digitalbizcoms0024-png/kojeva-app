@@ -6,7 +6,7 @@ import { requireService } from "./access.ts";
 import type { AppEnv } from "./env.ts";
 import { bumpVersion } from "./cache.ts";
 import { cleanPersona, confirmed, loadPersonas, MAX_PERSONAS, newPersonaId, nextSort } from "./personas.ts";
-import { MOTIVATIONS } from "../shared/taxonomy.ts";
+import { FORMAT_DEFINITIONS, FORMATS, MOTIVATIONS } from "../shared/taxonomy.ts";
 import { getLatestDate, shiftDay } from "./queries.ts";
 
 export const ATRIA_CATEGORIES = [
@@ -146,14 +146,15 @@ atria.get("/unlabeled", async (c) => {
     db
       .prepare(
         `SELECT t.asset_id, t.tags, SUM(d.spend_cents) AS spend,
-           (SELECT GROUP_CONCAT(n.name, char(10)) FROM (SELECT DISTINCT x.name FROM ads x WHERE x.asset_id = t.asset_id) n) AS ad_names
+           (SELECT GROUP_CONCAT(n.name, char(10)) FROM (SELECT DISTINCT x.name FROM ads x WHERE x.asset_id = t.asset_id) n) AS ad_names,
+           (SELECT GROUP_CONCAT(i.id, char(10)) FROM (SELECT x.id FROM ads x WHERE x.asset_id = t.asset_id ORDER BY x.created_time LIMIT 3) i) AS ad_ids
          FROM atria_assets t JOIN ads a ON a.asset_id = t.asset_id JOIN ad_daily d ON d.ad_id = a.id
          WHERE t.status = 'tagged' AND d.date >= ?1
-           AND (t.labeled_at IS NULL OR t.offer IS NULL OR t.motivations_at IS NULL OR (?3 = 1 AND t.persona_at IS NULL))
+           AND (t.labeled_at IS NULL OR t.offer IS NULL OR t.motivations_at IS NULL OR t.format_at IS NULL OR (?3 = 1 AND t.persona_at IS NULL))
          GROUP BY t.asset_id ORDER BY spend DESC LIMIT ?2`,
       )
       .bind(shiftDay(latest, -89), limit, ready ? 1 : 0)
-      .all<{ asset_id: string; tags: string; spend: number; ad_names: string | null }>(),
+      .all<{ asset_id: string; tags: string; spend: number; ad_names: string | null; ad_ids: string | null }>(),
     db
       .prepare("SELECT belief_group, COUNT(*) AS n FROM atria_assets WHERE belief_group IS NOT NULL GROUP BY belief_group ORDER BY n DESC")
       .all<{ belief_group: string; n: number }>(),
@@ -162,6 +163,8 @@ atria.get("/unlabeled", async (c) => {
     awarenessLevels: AWARENESS_LEVELS,
     // Send `motivations` (any of these keys, or []) for each asset.
     motivations: Object.entries(MOTIVATIONS).map(([key, label]) => ({ key, label })),
+    // Send `format` (one of these keys, or null if none fits) for each asset: a suggestion only.
+    formats: Object.entries(FORMATS).map(([key, label]) => ({ key, label, definition: FORMAT_DEFINITIONS[key] ?? null })),
     beliefGroups: groups.results.map((g) => ({ name: g.belief_group, assets: Number(g.n) })),
     // Until people confirm the list, Claude labels awareness, belief and offer only.
     personasConfirmed: ready,
@@ -170,6 +173,8 @@ atria.get("/unlabeled", async (c) => {
     assets: assets.results.map((r) => ({
       assetId: r.asset_id,
       adNames: (r.ad_names ?? "").split("\n").filter(Boolean).slice(0, 5),
+      // Meta ad ids running it: for the Atria tool get_ad_account_ad (video file, copy).
+      adIds: (r.ad_ids ?? "").split("\n").filter(Boolean),
       tags: JSON.parse(r.tags) as AtriaTags,
       spendCents: Number(r.spend),
     })),
@@ -184,6 +189,7 @@ type IncomingLabel = {
   offer?: unknown;
   personaId?: unknown;
   motivations?: unknown;
+  format?: unknown;
 };
 type Label = {
   assetId: string;
@@ -194,11 +200,15 @@ type Label = {
   persona: { id: string | null } | null;
   /** Sorted JSON array, or null when not sent. */
   motivations: string | null;
+  /** Claude's format suggestion (key, or null for none fits); null when not sent. */
+  format: { key: string | null } | null;
 };
 
 /**
  * Body: { labels: [{ assetId, awareness, belief, beliefGroup, offer, personaId?, motivations? }] }, up to 100.
  * motivations: MOTIVATIONS keys that apply ([] for none); optional so older prompts keep working.
+ * format: a FORMATS key Claude suggests (null if none fits); optional. Only a suggestion: the
+ * concept's format stays hand-set, then read from names, until someone accepts it.
  * personaId (an active persona's id, or null for "fits none") is only accepted once the persona
  * list is confirmed. Writes only changed rows.
  */
@@ -234,7 +244,14 @@ atria.post("/labels", async (c) => {
         return c.json({ error: `motivations for ${l.assetId} must be a list of ${Object.keys(MOTIVATIONS).join(", ")} ([] for none).` }, 400);
       motivations = JSON.stringify([...new Set(l.motivations as string[])].sort());
     }
+    let format: Label["format"] = null;
+    if (l.format !== undefined) {
+      if (l.format !== null && (typeof l.format !== "string" || !(l.format in FORMATS)))
+        return c.json({ error: `format for ${l.assetId} must be one of ${Object.keys(FORMATS).join(", ")}, or null if none fits.` }, 400);
+      format = { key: l.format as string | null };
+    }
     rows.push({
+      format,
       assetId: l.assetId,
       awareness: l.awareness as string,
       belief,
@@ -256,13 +273,15 @@ atria.post("/labels", async (c) => {
     persona_at: string | null;
     motivations: string | null;
     motivations_at: string | null;
+    format_label: string | null;
+    format_at: string | null;
   };
   const stored = new Map<string, Stored>();
   for (let i = 0; i < rows.length; i += 90) {
     const chunk = rows.slice(i, i + 90);
     const { results } = await db
       .prepare(
-        `SELECT asset_id, awareness, belief, belief_group, labeled_at, offer, persona_id, persona_at, motivations, motivations_at
+        `SELECT asset_id, awareness, belief, belief_group, labeled_at, offer, persona_id, persona_at, motivations, motivations_at, format_label, format_at
          FROM atria_assets WHERE asset_id IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")})`,
       )
       .bind(...chunk.map((r) => r.assetId))
@@ -287,7 +306,8 @@ atria.post("/labels", async (c) => {
       old.belief_group === r.beliefGroup &&
       (r.offer == null || old.offer === r.offer) &&
       samePersona &&
-      (r.motivations == null || (old.motivations_at != null && old.motivations === r.motivations))
+      (r.motivations == null || (old.motivations_at != null && old.motivations === r.motivations)) &&
+      (!r.format || (old.format_at != null && old.format_label === r.format.key))
     )
       continue;
     stmts.push(
@@ -295,10 +315,11 @@ atria.post("/labels", async (c) => {
         .prepare(
           `UPDATE atria_assets SET awareness = ?2, belief = ?3, belief_group = ?4, labeled_at = ?5, offer = COALESCE(?6, offer),
              persona_id = CASE WHEN ?7 = 1 THEN ?8 ELSE persona_id END, persona_at = CASE WHEN ?7 = 1 THEN ?5 ELSE persona_at END,
-             motivations = COALESCE(?9, motivations), motivations_at = CASE WHEN ?9 IS NULL THEN motivations_at ELSE ?5 END
+             motivations = COALESCE(?9, motivations), motivations_at = CASE WHEN ?9 IS NULL THEN motivations_at ELSE ?5 END,
+             format_label = CASE WHEN ?10 = 1 THEN ?11 ELSE format_label END, format_at = CASE WHEN ?10 = 1 THEN ?5 ELSE format_at END
            WHERE asset_id = ?1`,
         )
-        .bind(r.assetId, r.awareness, r.belief, r.beliefGroup, now, r.offer, r.persona ? 1 : 0, r.persona?.id ?? null, r.motivations),
+        .bind(r.assetId, r.awareness, r.belief, r.beliefGroup, now, r.offer, r.persona ? 1 : 0, r.persona?.id ?? null, r.motivations, r.format ? 1 : 0, r.format?.key ?? null),
     );
   }
   if (stmts.length) {

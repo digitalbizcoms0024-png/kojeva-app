@@ -111,6 +111,8 @@ export interface CreativeLabels {
   personaId: string | null;
   offer: boolean | null;
   motivations: string[] | null;
+  /** Claude's suggested format (FORMATS key): a suggestion only, never applied without someone accepting it. */
+  format: string | null;
 }
 
 export interface PostSummary {

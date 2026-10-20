@@ -124,17 +124,17 @@ calls.get("/concepts/:id/evidence", async (c) => {
 calls.put("/concepts/:id/call", requireAccess, async (c) => {
   const db = c.env.DB;
   const email = c.get("userEmail");
-  if (!isMediaBuyer(c.env, email)) return c.json({ error: "Only the media buyer can make a winner call." }, 403);
+  if (!isMediaBuyer(c.env, email)) return c.json({ error: "Only the media buyer can make a hit call." }, 403);
   const id = c.req.param("id");
   const body = await c.req.json<{ kind?: string; reason?: string }>().catch(() => null);
   const kind = body?.kind;
   const reason = body?.reason?.trim() ?? "";
-  if (kind !== "winner" && kind !== "super_winner") return c.json({ error: "Pick Winner or Super winner." }, 400);
+  if (kind !== "winner" && kind !== "super_winner") return c.json({ error: "Pick Hit or Super hit." }, 400);
   if (reason.length < 10 || reason.length > 500) return c.json({ error: "Say in a sentence why (10–500 characters)." }, 400);
   const concept = (await loadConcepts(db)).find((k) => k.conceptId === id);
   if (!concept) return c.json({ error: "Concept not found" }, 404);
   // A call is only for a test that missed (or one already called, to change it).
-  if (concept.status !== "miss" && !concept.call) return c.json({ error: "Only a concept that missed its test can be called a winner." }, 409);
+  if (concept.status !== "miss" && !concept.call) return c.json({ error: "Only a concept that missed its test can be called a hit." }, 409);
   const evidence = await callEvidence(db, id);
   await db
     .prepare(
@@ -148,7 +148,7 @@ calls.put("/concepts/:id/call", requireAccess, async (c) => {
 });
 
 calls.delete("/concepts/:id/call", requireAccess, async (c) => {
-  if (!isMediaBuyer(c.env, c.get("userEmail"))) return c.json({ error: "Only the media buyer can undo a winner call." }, 403);
+  if (!isMediaBuyer(c.env, c.get("userEmail"))) return c.json({ error: "Only the media buyer can undo a hit call." }, 403);
   await c.env.DB.prepare("DELETE FROM concept_calls WHERE concept_id = ?1").bind(c.req.param("id")).run();
   return c.json({ ok: true });
 });
