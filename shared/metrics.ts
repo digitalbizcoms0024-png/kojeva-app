@@ -51,6 +51,14 @@ export interface Targets {
   cpaWarnMax: number | null;
   /** Length of the rolling window a day-3 miss can still hit target in (late hit); 0 turns it off. */
   lateWindowDays: number;
+  /** A miss is flagged for a winner call from this ROAS since launch… */
+  winnerMinRoas: number;
+  /** …once it has spent this much ($) since launch… */
+  winnerMinSpend: number;
+  /** …over at least this many days. */
+  winnerMinDays: number;
+  /** A candidate with this much spend ($) is flagged as a possible super winner. */
+  superWinnerMinSpend: number;
 }
 
 export const DEFAULT_TARGETS: Targets = {
@@ -61,6 +69,10 @@ export const DEFAULT_TARGETS: Targets = {
   hitRule: "either",
   cpaWarnMax: null,
   lateWindowDays: 7,
+  winnerMinRoas: 1.5,
+  winnerMinSpend: 1000,
+  winnerMinDays: 5,
+  superWinnerMinSpend: 5000,
 };
 
 export type Band = "good" | "warn" | "bad" | "none";
@@ -84,7 +96,13 @@ export function roasBand(value: number | null, target: number): Band {
   return value >= target * 0.8 ? "warn" : "bad";
 }
 
-export type HitStatus = "hit" | "late_hit" | "miss" | "testing" | "ineligible";
+/** "winner" / "super_winner": a miss the media buyer called a winner (see winnerCandidate). */
+export type HitStatus = "hit" | "late_hit" | "winner" | "super_winner" | "miss" | "testing" | "ineligible";
+
+/** Hits on target, late hits and winners by call all count as hits. */
+export function isHit(s: HitStatus | null | undefined): boolean {
+  return s === "hit" || s === "late_hit" || s === "winner" || s === "super_winner";
+}
 
 /** Whether totals meet the targets under the hit rule (CPA and/or ROAS). */
 export function meetsTargets(totals: Totals, t: Targets): boolean {
@@ -160,7 +178,7 @@ export function judgingWindowEnd(firstSpend: string, qualifiedOn: string | null,
 
 /** (Hits + late hits) / decided (hits, late hits and misses). Testing and ineligible concepts are excluded. */
 export function hitRate(statuses: HitStatus[]): number | null {
-  const hits = statuses.filter((s) => s === "hit" || s === "late_hit").length;
+  const hits = statuses.filter(isHit).length;
   const decided = hits + statuses.filter((s) => s === "miss").length;
   return decided > 0 ? hits / decided : null;
 }
@@ -203,4 +221,20 @@ export function attributedCpa(t: AttributedTotals | null, spendCents: number): n
 /** ROAS under an attribution setting; null without spend or data. */
 export function attributedRoas(t: AttributedTotals | null, spendCents: number): number | null {
   return t && spendCents > 0 ? t.revenueCents / spendCents : null;
+}
+
+/**
+ * Whether a concept that missed its test is worth a winner call: close to target since launch
+ * (ROAS ≥ winnerMinRoas), taking real spend (≥ winnerMinSpend) for at least winnerMinDays days.
+ * Only flags it; the media buyer decides (worker/calls.ts). Null when it doesn't qualify.
+ */
+export function winnerCandidate(
+  k: { status: HitStatus; allTime: Totals; firstSpend: string; lastSpend: string | null },
+  t: Targets,
+): "winner" | "super_winner" | null {
+  if (k.status !== "miss" || !k.lastSpend) return null;
+  const r = roas(k.allTime);
+  const days = Math.round((Date.parse(k.lastSpend) - Date.parse(k.firstSpend)) / 86_400_000) + 1;
+  if (r == null || r < t.winnerMinRoas || k.allTime.spendCents < t.winnerMinSpend * 100 || days < t.winnerMinDays) return null;
+  return k.allTime.spendCents >= t.superWinnerMinSpend * 100 ? "super_winner" : "winner";
 }

@@ -324,6 +324,11 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
   const [min, setMin] = useState(String(t.minTestSpend));
   const [rule, setRule] = useState(t.hitRule);
   const [late, setLate] = useState(String(t.lateWindowDays));
+  const [wRoas, setWRoas] = useState(String(t.winnerMinRoas));
+  const [wSpend, setWSpend] = useState(String(t.winnerMinSpend));
+  const [wDays, setWDays] = useState(String(t.winnerMinDays));
+  const [swSpend, setSwSpend] = useState(String(t.superWinnerMinSpend));
+  const buyer = meta.isMediaBuyer;
   const { busy, run, note } = useSave(onSaved);
   const amberShown = amber ? Number(amber) : Number(cpa) * 1.25;
   const save = () =>
@@ -339,6 +344,10 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           minTestSpend: Number(min),
           hitRule: rule,
           lateWindowDays: Number(late),
+          // Only the media buyer sets these (the server refuses them from anyone else).
+          ...(buyer
+            ? { winnerMinRoas: Number(wRoas), winnerMinSpend: Number(wSpend), winnerMinDays: Number(wDays), superWinnerMinSpend: Number(swSpend) }
+            : {}),
         },
       },
       "Saved. Hit rates use the new targets.",
@@ -435,6 +444,25 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           {Number(late) > 0 && ` A miss that keeps spending becomes a late hit if, from day ${late} on, its totals since launch or any ${late} days in a row reach target (with at least $${min} spent).`} Each
           ad is also judged on its own the same way; one ad hitting makes the concept a hit.
         </span>
+      </div>
+      <h3 className="mt-6 mb-1 font-extrabold text-ink">Winner by call</h3>
+      <p className="mb-3 max-w-[90ch] text-sm text-ink-3">
+        A miss that takes major spend and lifts the account can be called a winner (or super winner) by the media buyer, even below target. The hub
+        flags it for review when it reaches these numbers since launch; the call, and these thresholds, are the media buyer's only.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-7">
+        <Labeled label="Flag from ROAS">
+          <input id="w-roas" type="number" min="0.1" step="0.05" value={wRoas} onChange={(e) => setWRoas(e.target.value)} className={field} disabled={!buyer} />
+        </Labeled>
+        <Labeled label="…on spend of ($)">
+          <input id="w-spend" type="number" min="0" step="100" value={wSpend} onChange={(e) => setWSpend(e.target.value)} className={field} disabled={!buyer} />
+        </Labeled>
+        <Labeled label="…over (days)">
+          <input id="w-days" type="number" min="1" max="90" step="1" value={wDays} onChange={(e) => setWDays(e.target.value)} className={field} disabled={!buyer} />
+        </Labeled>
+        <Labeled label="Super winner from ($)">
+          <input id="w-super" type="number" min="0" step="500" value={swSpend} onChange={(e) => setSwSpend(e.target.value)} className={field} disabled={!buyer} />
+        </Labeled>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button className={primary} disabled={busy || !meta.canEdit} onClick={save}>

@@ -20,7 +20,7 @@ import type {
   TrendGrain,
   TrendsResponse,
 } from "../shared/api.ts";
-import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, roas, type Totals } from "../shared/metrics.ts";
+import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, isHit, roas, type Totals } from "../shared/metrics.ts";
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware } from "./access.ts";
@@ -29,6 +29,7 @@ import type { AppEnv, Env } from "./env.ts";
 import { loadAlerts, loadSuggestions } from "./alerts.ts";
 import { atria } from "./atria.ts";
 import { report } from "./report.ts";
+import { calls, isMediaBuyer } from "./calls.ts";
 import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
 import { adPreview, PREVIEW_FORMATS, type PreviewFormat } from "./meta/preview.ts";
@@ -169,6 +170,7 @@ app.get("/meta", async (c) => {
     editors: editors.results,
     canEdit: canEditWith(c.env, c.get("userEmail"), editAccess),
     viewer: c.get("userEmail"),
+    isMediaBuyer: isMediaBuyer(c.env, c.get("userEmail")),
     // The list itself is for editors only.
     editAccess: canEditWith(c.env, c.get("userEmail"), editAccess) ? editAccess : [],
     needsTagging: untagged.posts,
@@ -358,7 +360,7 @@ app.get("/pods", async (c) => {
       ...g,
       totals: mine.reduce((acc, p) => addTotals(acc, p.totals), ZERO_TOTALS),
       concepts: statuses.length,
-      hits: statuses.filter((s) => s === "hit" || s === "late_hit").length,
+      hits: statuses.filter(isHit).length,
       lateHits: statuses.filter((s) => s === "late_hit").length,
       misses: statuses.filter((s) => s === "miss").length,
       testing: statuses.filter((s) => s === "testing").length,
@@ -641,6 +643,7 @@ app.get("/coverage", async (c) => {
 });
 
 // Mounted last so the read routes above take precedence.
+app.route("/", calls);
 app.route("/", editing);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));

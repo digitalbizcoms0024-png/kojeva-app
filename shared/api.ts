@@ -75,6 +75,8 @@ export interface MetaResponse {
   editors: Editor[];
   /** Whether the signed-in viewer can make changes: Access is on and they're on the edit list (or it's empty). */
   canEdit: boolean;
+  /** The media buyer: the only person who can make winner calls (MEDIA_BUYER_EMAILS). */
+  isMediaBuyer: boolean;
   /** Emails that can edit (sent to editors only; empty for view-only people). Empty for an editor = everyone signed in can. */
   editAccess: string[];
   /** Who is signed in through Cloudflare Access, if anyone. */
@@ -189,8 +191,12 @@ export interface ConceptResult {
   /** Concept totals from first spend to windowEnd. */
   window: Totals;
   allTime: Totals;
-  /** "late_hit" when a day-3 miss later hit target over a rolling window (see lateWindow). */
+  /** "late_hit" when a day-3 miss later hit target over a rolling window (see lateWindow); "winner" / "super_winner" when the media buyer called it (see call). */
   status: HitStatus;
+  /** The media buyer's winner call on a miss, if any. */
+  call: ConceptCall | null;
+  /** A miss close enough to target, on enough spend, to be worth a call (winnerCandidate); null once called. */
+  candidate: "winner" | "super_winner" | null;
   /** The first rolling window that hit target, for late hits. */
   lateWindow: { from: string; to: string; totals: Totals } | null;
   /** Last day with spend. */
@@ -450,4 +456,40 @@ export interface CoverageResponse {
   top: { personaId: string; awareness: string; share: number; offerShare: number | null } | null;
   /** Running posts missing a persona or an awareness level. */
   unplaced: number;
+}
+
+/** Totals for one stretch of days in a winner call's evidence. */
+export interface EvidenceWindow {
+  from: string;
+  to: string;
+  days: number;
+  /** Every ad in the account (Meta). */
+  account: Totals;
+  /** The account without this concept's ads: did the rest improve? */
+  rest: Totals;
+  /** Product- and most-aware ads (MOF/BOF by awareness label), without this concept. */
+  mofBof: Totals;
+  /** This concept. */
+  concept: Totals;
+}
+
+/** What a winner call rests on: the account before the concept launched and since. */
+export interface CallEvidence {
+  conceptId: string;
+  before: EvidenceWindow;
+  since: EvidenceWindow;
+  /** The concept's share of all testing spend and purchases since it launched (0–1). */
+  shareOfTestSpend: number | null;
+  shareOfTestPurchases: number | null;
+  /** Meta's incremental attribution for the concept since launch; null if not synced. */
+  incremental: { spendCents: number; purchases: number; revenueCents: number } | null;
+  computedAt: string;
+}
+
+export interface ConceptCall {
+  kind: "winner" | "super_winner";
+  reason: string;
+  calledBy: string;
+  calledAt: string;
+  evidence: CallEvidence;
 }

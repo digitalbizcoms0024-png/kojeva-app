@@ -1,4 +1,4 @@
-import type { Assignment, ConceptResult, PostSummary } from "../shared/api.ts";
+import type { Assignment, CallEvidence, ConceptCall, ConceptResult, PostSummary } from "../shared/api.ts";
 import { classify } from "../shared/classify.ts";
 import { memoize, memoizeMap } from "./cache.ts";
 import { loadFatigue } from "./fatigue.ts";
@@ -8,6 +8,7 @@ import {
   hitStatus,
   judgingWindowEnd,
   lateHitWindow,
+  winnerCandidate,
   type HitStatus,
   type Targets,
   type Totals,
@@ -152,6 +153,16 @@ function mode(values: string[]): string | null {
   return best;
 }
 
+/** Calls by concept id (small table; read with the concepts' labels, per edit). */
+export async function loadCalls(db: D1Database): Promise<Map<string, ConceptCall>> {
+  const { results } = await db
+    .prepare("SELECT concept_id, kind, reason, evidence, called_by, called_at FROM concept_calls")
+    .all<{ concept_id: string; kind: ConceptCall["kind"]; reason: string; evidence: string; called_by: string; called_at: string }>();
+  return new Map(
+    results.map((r) => [r.concept_id, { kind: r.kind, reason: r.reason, calledBy: r.called_by, calledAt: r.called_at, evidence: JSON.parse(r.evidence) as CallEvidence }]),
+  );
+}
+
 /** Every concept with its test-window totals and hit status (computed once per data version). */
 export function loadConcepts(db: D1Database): Promise<ConceptResult[]> {
   // Labels per edit, on top of the numbers per sync (loadConceptNumbers).
@@ -291,7 +302,7 @@ async function conceptLabels(db: D1Database): Promise<Row[]> {
 
 /** Concepts' labels and tags (per edit) joined to their numbers (per sync). */
 async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
-  const [latest, numbers] = await Promise.all([getLatestDate(db), loadConceptNumbers(db)]);
+  const [latest, numbers, targets, calls] = await Promise.all([getLatestDate(db), loadConceptNumbers(db), getTargets(db), loadCalls(db)]);
   const meta = { results: await conceptLabels(db) };
   const base = meta.results.flatMap((r) => {
     const n = numbers[String(r.id)];
@@ -301,7 +312,10 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
   });
 
   return base.map(({ r, firstSpend, qualifiedOn, windowEnd, window, allTime, status: own, lateWindow }) => {
-    const status: HitStatus = lateWindow ? "late_hit" : own;
+    // The media buyer's call (on a miss) wins over the measured result.
+    const call = calls.get(String(r.id)) ?? null;
+    const measured: HitStatus = lateWindow ? "late_hit" : own;
+    const status: HitStatus = call && measured === "miss" ? call.kind : measured;
     const manualAwareness = r.manual_awareness == null ? null : String(r.manual_awareness);
     const manualBelief = r.manual_belief == null ? null : String(r.manual_belief);
     const awareness = manualAwareness ?? mode(list(r.awareness_list));
@@ -336,6 +350,8 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
       window,
       allTime,
       status,
+      call: status === measured ? null : call,
+      candidate: status === "miss" ? winnerCandidate({ status, allTime, firstSpend, lastSpend }, targets) : null,
       lateWindow,
       lastSpend,
       // Spent in the last 3 synced days.

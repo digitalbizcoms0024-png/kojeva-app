@@ -20,6 +20,7 @@ const usd2 = (v: number) => `$${v.toFixed(2)}`;
  * - fatigue (shared/fatigue.ts): two or more signals vs the ad's first week, or a CPA rise on its own;
  * - concepts whose test window closed in the last 7 days as a hit;
  * - hits (and late hits) that just stopped running everywhere (`hitsTurnedOff`);
+ * - misses close to target on major spend, waiting for the media buyer's winner call (still running);
  * - spend in the last 7 days that no pod or the agency is credited with;
  * - over 60% of the week's spend in one persona × awareness cell (worker/coverage.ts).
  */
@@ -52,6 +53,20 @@ export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null;
   }
 
   alerts.push(...(await hitsTurnedOff(db, concepts, latest)));
+
+  for (const k of concepts
+    .filter((k) => k.candidate && k.stillRunning)
+    .sort((a, b) => b.allTime.spendCents - a.allTime.spendCents)
+    .slice(0, 2)) {
+    alerts.push({
+      id: `candidate:${k.conceptId}`,
+      tone: "good",
+      title: `${k.label} could be a ${k.candidate === "super_winner" ? "super winner" : "winner"}`,
+      detail: `${podById(k.podId)?.name ?? "Unassigned"} · ${(roas(k.allTime) ?? 0).toFixed(2)} ROAS and ${usd2(cpa(k.allTime) ?? 0)} CPA since launch on ${usd(k.allTime.spendCents)} · below target, so it's the media buyer's call`,
+      href: `#/dashboard?concept=${encodeURIComponent(k.conceptId)}`,
+      action: "Review",
+    });
+  }
 
   if (untagged && Number(untagged.posts) > 0) {
     const n = Number(untagged.posts);

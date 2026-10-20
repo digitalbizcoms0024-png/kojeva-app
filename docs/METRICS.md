@@ -94,6 +94,21 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - Until then it stays a **Miss**; one still spending in the last 3 days is labelled "Miss · still running". Once a look hits,
   the late hit is permanent.
 
+## Winner by call (`worker/calls.ts`, `winnerCandidate` in `shared/metrics.ts`)
+A top-of-funnel creative that takes major spend and measurably lifts the account can be called a
+**Winner**, or **Super winner** if it's a real scaler, even when its own ROAS is below target (owner's
+rule, Oct 2026). Only the media buyer makes the call (`MEDIA_BUYER_EMAILS`), tied to the creative's data:
+- **Candidates** are flagged automatically: a concept that missed its test, with ROAS since launch ≥
+  `winnerMinRoas` (1.5) on ≥ `winnerMinSpend` ($1,000) over ≥ `winnerMinDays` (5) days; a possible super
+  winner from `superWinnerMinSpend` ($5,000). The media buyer sets these in Settings → Targets.
+- **Evidence** (concept card): the whole account in the 7 days before the concept's first spend vs its
+  first 14 days (Meta ROAS, CPA, purchases a day), also without the concept's own results ("did the rest
+  improve?"), the MOF/BOF ads (product- and most-aware), the concept's share of test spend and purchases,
+  and its Meta incremental ROAS. It's a before/after comparison, not proof.
+- **The call** needs a one-line reason and stores the evidence as it was. Syncs never change it; the
+  media buyer can undo it. A called concept's status is `winner` / `super_winner` and counts as a hit
+  everywhere (`isHit`), labelled "(call)". MER can't be shown: the hub has Meta numbers only.
+
 ## Spend by pod
 - Pods page section (and a share bar on the Dashboard): spend per pod, the agency and unassigned for the global range, share of
   total, and change vs the period before (same length). Spend changes are shown without good/bad color.

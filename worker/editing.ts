@@ -7,6 +7,7 @@ import type { Targets } from "../shared/metrics.ts";
 import { ANGLES, FORMATS, GROUPS, HOOKS, LANDING_PAGES, AWARENESS, MOTIVATIONS, POD_SLOTS } from "../shared/taxonomy.ts";
 import { requireAccess } from "./access.ts";
 import { loadEditAccess } from "./roles.ts";
+import { isMediaBuyer } from "./calls.ts";
 import { randomToken } from "./crypto.ts";
 import type { AppEnv } from "./env.ts";
 import { bumpStats, bumpVersion } from "./cache.ts";
@@ -150,6 +151,10 @@ function checkTargets(t: Partial<Targets>): Problem {
   if (t.cpaWarnMax !== undefined && t.cpaWarnMax !== null && !num(t.cpaWarnMax, 0.01, 10_000))
     return "The amber CPA limit must be a positive amount, or empty for 25% over target.";
   if (t.cpaWarnMax != null && t.targetCpa !== undefined && t.cpaWarnMax <= t.targetCpa) return "The amber CPA limit must be above the target CPA.";
+  if (t.winnerMinRoas !== undefined && !num(t.winnerMinRoas, 0.1, 20)) return "Winner ROAS must be between 0.1 and 20.";
+  if (t.winnerMinSpend !== undefined && !num(t.winnerMinSpend, 0, 1_000_000)) return "Winner spend must be a positive amount.";
+  if (t.winnerMinDays !== undefined && !(Number.isInteger(t.winnerMinDays) && num(t.winnerMinDays, 1, 90))) return "Winner days must be a whole number from 1 to 90.";
+  if (t.superWinnerMinSpend !== undefined && !num(t.superWinnerMinSpend, 0, 10_000_000)) return "Super winner spend must be a positive amount.";
   return null;
 }
 
@@ -182,6 +187,10 @@ editing.put("/settings", requireAccess, async (c) => {
   if (!body) return c.json({ error: "Send targets and/or attribution as JSON." }, 400);
   const problem = (body.targets && checkTargets(body.targets)) || (body.attribution && checkAttribution(body.attribution));
   if (problem) return c.json({ error: problem }, 400);
+  // Winner thresholds feed the media buyer's calls, so only they set them.
+  const winnerKeys = ["winnerMinRoas", "winnerMinSpend", "winnerMinDays", "superWinnerMinSpend"] as const;
+  if (body.targets && winnerKeys.some((k) => body.targets![k] !== undefined) && !isMediaBuyer(c.env, c.get("userEmail")))
+    return c.json({ error: "Only the media buyer can change the winner thresholds." }, 403);
   const by = c.get("userEmail");
   if (body.targets) {
     await mergeSetting(db, "targets", body.targets, by);

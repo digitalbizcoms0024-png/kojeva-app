@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ConceptDetail, MetaResponse } from "../../shared/api.ts";
 import { cpa, roas, type Totals } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, MOTIVATIONS } from "../../shared/taxonomy.ts";
 import { useApi } from "../api.ts";
 import { dollars, int, money, ratio, shortDate } from "../format.ts";
 import { PlayableThumb } from "./AdPreview.tsx";
+import { WinnerCall } from "./WinnerCall.tsx";
 import { DailyCharts } from "./DailyCharts.tsx";
 import { CpaValue, HitBadge, PodChip, RoasValue, Tag, Thumb } from "./ui.tsx";
 
@@ -49,7 +50,8 @@ function Numbers({ t, meta }: { t: Totals; meta: MetaResponse }) {
  * the numbers it was judged on, its tags, its ads and its daily spend. Esc or the backdrop closes it.
  */
 export function ConceptDrawer({ conceptId, meta, onClose }: { conceptId: string; meta: MetaResponse; onClose: () => void }) {
-  const { data, error } = useApi<ConceptDetail>(`/api/concepts/${encodeURIComponent(conceptId)}`);
+  const [reload, setReload] = useState(0);
+  const { data, error } = useApi<ConceptDetail>(`/api/concepts/${encodeURIComponent(conceptId)}${reload ? `?r=${reload}` : ""}`);
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -110,6 +112,8 @@ export function ConceptDrawer({ conceptId, meta, onClose }: { conceptId: string;
                 </a>
               </div>
             )}
+
+            <WinnerCall k={k} meta={meta} onChanged={() => setReload((n) => n + 1)} />
 
             <section>
               <h3 className="mb-1 font-extrabold text-ink">Test · {range(k.firstSpend, k.windowEnd)}</h3>

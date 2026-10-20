@@ -6,7 +6,7 @@ import { LaunchCadence, type LaunchCell } from "../components/LaunchCadence.tsx"
 import { PodSpend } from "../components/PodSpend.tsx";
 import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { addTotals, cpa, roas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
+import { addTotals, cpa, isHit, roas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
 import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
@@ -34,7 +34,7 @@ function best(concepts: ConceptResult[], key: "angle" | "format"): string | null
     const v = k[key];
     if (!v) continue;
     const e = by.get(v) ?? { hits: 0, spend: 0 };
-    if (k.status === "hit" || k.status === "late_hit") e.hits++;
+    if (isHit(k.status)) e.hits++;
     e.spend += k.window.spendCents;
     by.set(v, e);
   }
@@ -211,8 +211,8 @@ export function ConceptsTable({
   const [pod, setPod] = useState(filter.pod ?? "");
   const [result, setResult] = useState("");
   const { data: all, error } = useApi<ConceptsResponse>(`/api/concepts?${qs({ ...filter, range, pod })}`);
-  const keep = (s: string) =>
-    !result || (result === "hits" ? s === "hit" || s === "late_hit" : result === "ineligible" ? s === "ineligible" : s === result);
+  const keep = (s: ConceptsResponse["rows"][number]["status"]) =>
+    !result || (result === "hits" ? isHit(s) : result === "ineligible" ? s === "ineligible" : s === result);
   const data = all && { ...all, rows: all.rows.filter((k) => keep(k.status)) };
   return (
     <section>

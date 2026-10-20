@@ -1,5 +1,5 @@
 import type { ConceptsResponse, HitBaseline, InsightDimension, InsightPick, InsightRow, InsightsMatrix, InsightsOverview, MatrixDimension } from "../shared/api.ts";
-import { addTotals, cpa, hitRate, hitRateFloor, MIN_DECIDED, ZERO_TOTALS } from "../shared/metrics.ts";
+import { addTotals, cpa, hitRate, hitRateFloor, isHit, MIN_DECIDED, ZERO_TOTALS } from "../shared/metrics.ts";
 
 type Concept = ConceptsResponse["rows"][number];
 
@@ -32,7 +32,7 @@ function summarize(value: string | null, list: Concept[]): InsightRow {
   return {
     value,
     concepts: list.length,
-    hits: statuses.filter((s) => s === "hit" || s === "late_hit").length,
+    hits: statuses.filter(isHit).length,
     lateHits: statuses.filter((s) => s === "late_hit").length,
     misses: statuses.filter((s) => s === "miss").length,
     testing: statuses.filter((s) => s === "testing").length,

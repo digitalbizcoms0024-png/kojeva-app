@@ -1,7 +1,7 @@
 // The coverage map: every running ad placed by persona × awareness level, with each cell's
 // spend, results and all-time concept track record. Read-only.
 import type { ConceptResult, CoverageCell, CoveragePost, CoverageResponse, Persona, PostSummary } from "../shared/api.ts";
-import { addTotals, hitRate, ZERO_TOTALS } from "../shared/metrics.ts";
+import { addTotals, hitRate, isHit, ZERO_TOTALS } from "../shared/metrics.ts";
 import { AWARENESS } from "../shared/taxonomy.ts";
 import { loadPersonas } from "./personas.ts";
 import { loadConcepts, loadPosts } from "./queries.ts";
@@ -64,7 +64,7 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
   for (const k of concepts) {
     const c = cell(persona(k.personaId), level(k.awareness));
     c.concepts++;
-    if (k.status === "hit" || k.status === "late_hit") c.hits++;
+    if (isHit(k.status)) c.hits++;
     if (k.status === "miss") c.misses++;
     if (k.status === "testing") c.testing++;
     const ck = key(c.personaId, c.awareness);

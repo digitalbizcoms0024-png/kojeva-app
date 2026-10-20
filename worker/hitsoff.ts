@@ -1,6 +1,7 @@
 // Winning creatives that are no longer running: shared by the Dashboard alert and the Rankings
 // "Hits turned off" filter. Computed from stored data (read-only), once per data version.
 import type { ConceptResult } from "../shared/api.ts";
+import { isHit } from "../shared/metrics.ts";
 import { memoize } from "./cache.ts";
 import { shiftDay } from "./queries.ts";
 
@@ -57,7 +58,7 @@ export async function loadHitCreatives(db: D1Database, concepts: ConceptResult[]
 }
 
 async function compute(db: D1Database, concepts: ConceptResult[], latest: string): Promise<HitCreative[]> {
-  const hits = new Map(concepts.filter((k) => k.status === "hit" || k.status === "late_hit").map((k) => [k.conceptId, k]));
+  const hits = new Map(concepts.filter((k) => isHit(k.status)).map((k) => [k.conceptId, k]));
   if (hits.size === 0) return [];
   const recentFrom = shiftDay(latest, -2);
   // Each ad's days come by key (see CLAUDE.md on D1 reads).
