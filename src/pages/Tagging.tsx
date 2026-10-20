@@ -55,7 +55,11 @@ type View = "unassigned" | "unplaced" | "all";
 type Period = "month" | "all";
 
 export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged: () => void }) {
-  const [view, setView] = useState<View>("unassigned");
+  // "#/tagging?view=unplaced" (the Coverage map's "place them") opens on that list.
+  const [view, setView] = useState<View>(() => {
+    const v = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("view");
+    return v === "unplaced" || v === "all" ? v : "unassigned";
+  });
   const [period, setPeriod] = useState<Period>("month");
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");

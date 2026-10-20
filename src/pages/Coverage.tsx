@@ -97,7 +97,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                 <div className="num mt-1 text-[40px] leading-none font-extrabold text-ink">{data.unplaced}</div>
                 <div className="mt-1 text-xs text-ink-3">
                   running {data.unplaced === 1 ? "ad has" : "ads have"} no persona or awareness level yet ·{" "}
-                  <a href="#/tagging" className="link">
+                  <a href="#/tagging?view=unplaced" className="link">
                     place them
                   </a>
                 </div>
