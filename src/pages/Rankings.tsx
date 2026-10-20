@@ -189,7 +189,23 @@ export function RankingsPage({
   );
 }
 
-const signed = (v: number) => `${v > 0 ? "+" : "−"}${Math.round(Math.abs(v) * 100)}%`;
+const upDown = (v: number) => `${v >= 0 ? "up" : "down"} ${Math.round(Math.abs(v) * 100)}%`;
+
+/** What tripped the fatigue check (last 3 days vs first week), then the other measures for context. */
+function fatigueText(f: NonNullable<PostDetail["fatigue"]>): string {
+  const phrase = {
+    frequency: f.frequencyChange != null && `frequency ${upDown(f.frequencyChange)} (people see it more often)`,
+    ctr: f.ctrChange != null && `CTR ${upDown(f.ctrChange)} (fewer clicks)`,
+    cpa: f.cpaChange == null || !Number.isFinite(f.cpaChange) ? "no purchases" : `CPA ${upDown(f.cpaChange)}`,
+  };
+  const tripped = f.signals.map((s) => phrase[s]).filter(Boolean);
+  const other = [
+    !f.signals.includes("frequency") && f.frequencyChange != null && `frequency ${upDown(f.frequencyChange)}`,
+    !f.signals.includes("ctr") && f.ctrChange != null && `CTR ${upDown(f.ctrChange)}`,
+    !f.signals.includes("cpa") && f.cpaChange != null && Number.isFinite(f.cpaChange) && `CPA ${upDown(f.cpaChange)}`,
+  ].filter(Boolean);
+  return `${tripped.join(" and ")} in the last 3 days vs its first week.${other.length ? ` Not a concern yet: ${other.join(", ")}.` : ""}`;
+}
 
 const SIGNAL_LABEL = {
   frequency: "frequency up",
@@ -368,18 +384,7 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
       </div>
       {data.fatigue && (
         <p className={`px-3 py-2 text-sm ${data.fatigue.status === "fatigued" ? "bg-bad-soft text-ink" : "bg-warn-soft text-ink"}`}>
-          <b>{data.fatigue.status === "fatigued" ? "✕ Fatiguing" : "! Worth watching"}</b> · last 3 days vs its first week:{" "}
-          {[
-            data.fatigue.frequencyChange != null && `frequency ${signed(data.fatigue.frequencyChange)}`,
-            data.fatigue.ctrChange != null && `CTR ${signed(data.fatigue.ctrChange)}`,
-            data.fatigue.signals.includes("cpa")
-              ? data.fatigue.cpaChange == null
-                ? "no purchases"
-                : `CPA ${signed(data.fatigue.cpaChange)}`
-              : data.fatigue.cpaChange != null && `CPA ${signed(data.fatigue.cpaChange)}`,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
+          <b>{data.fatigue.status === "fatigued" ? "✕ Fatiguing" : "! Worth watching"}</b> · {fatigueText(data.fatigue)}
         </p>
       )}
 
