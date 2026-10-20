@@ -28,6 +28,7 @@ import { bumpVersion, cachedResponse, cacheResponse, dataVersion, memoize, readS
 import type { AppEnv, Env } from "./env.ts";
 import { loadAlerts, loadSuggestions } from "./alerts.ts";
 import { atria } from "./atria.ts";
+import { report } from "./report.ts";
 import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
 import { adPreview, PREVIEW_FORMATS, type PreviewFormat } from "./meta/preview.ts";
@@ -94,6 +95,7 @@ app.use("*", async (c, next) => {
 app.route("/connection", connection);
 app.route("/sync", sync);
 app.route("/ingest/atria", atria);
+app.route("/ingest/report", report);
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 

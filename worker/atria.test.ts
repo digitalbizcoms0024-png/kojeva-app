@@ -249,3 +249,28 @@ describe("Atria ingest", () => {
     });
   });
 });
+
+describe("report numbers", () => {
+  type Report = {
+    concepts: { podId: string; status: string; period: { spendCents: number; cpa: number | null }; allTime: { spendCents: number }; daily: unknown[]; ads: unknown[] }[];
+    pods: { podId: string; testingSpendCents: number }[];
+  };
+
+  it("lists the period's pod concepts with their result, period and lifetime spend", async () => {
+    const res = await call("/api/ingest/report?from=2026-10-01&to=2026-10-05", service);
+    expect(res.status).toBe(200);
+    const r = (await res.json()) as Report;
+    const harris = r.concepts.filter((k) => k.podId === "harris");
+    expect(harris).toHaveLength(2);
+    expect(harris.find((k) => k.period.spendCents === 30000)).toMatchObject({ status: "hit", period: { cpa: 12 } });
+    const dhia = r.concepts.find((k) => k.podId === "dhia")!;
+    // The Oct 9 day is outside the period but counts since launch.
+    expect([dhia.period.spendCents, dhia.allTime.spendCents]).toEqual([10000, 10100]);
+    expect(r.pods.find((p) => p.podId === "harris")!.testingSpendCents).toBe(50000);
+  });
+
+  it("is for the service token only, and checks its dates", async () => {
+    expect((await call("/api/ingest/report?from=2026-10-01&to=2026-10-05", person)).status).toBe(403);
+    expect((await call("/api/ingest/report?from=2026-10-05&to=2026-10-01", service)).status).toBe(400);
+  });
+});
