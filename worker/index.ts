@@ -24,7 +24,7 @@ import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, isHit, roas, type Totals } f
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware } from "./access.ts";
-import { bumpVersion, cachedResponse, cacheResponse, dataVersion, memoize, readSnapshot, writeSnapshot } from "./cache.ts";
+import { bumpVersion, setDeployedVersion, cachedResponse, cacheResponse, dataVersion, memoize, readSnapshot, writeSnapshot } from "./cache.ts";
 import type { AppEnv, Env } from "./env.ts";
 import { loadAlerts, loadSuggestions } from "./alerts.ts";
 import { atria } from "./atria.ts";
@@ -55,6 +55,7 @@ const UNCACHED = /^\/api\/((connection|sync|ingest)(\/|$)|posts\/[^/]+\/preview$
 const SELF_BUMPING = /^\/api\/(sync|ingest)(\/|$)/;
 app.use("*", async (c, next) => {
   const path = new URL(c.req.url).pathname;
+  setDeployedVersion(c.env.CF_VERSION_METADATA?.id);
   // Pods added in Settings, for name matching and validation in this request.
   await loadAddedPods(c.env.DB);
   // After a deploy that changed how ads are credited, re-credit once before answering.

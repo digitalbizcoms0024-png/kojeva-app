@@ -109,6 +109,16 @@ export function cacheResponse(key: string, body: string) {
  *   results that depend on nothing but ad_daily, ads (status, concept), concepts and the targets.
  * - `durable` also stores the JSON result in D1 for other isolates; use it for plain data only.
  */
+/**
+ * The deployed Worker version (set per request from version_metadata). Results computed per edit
+ * are stored under it too, so a result saved by the previous code just before a deploy is never
+ * served by the new code. The per-sync stats keep their own versioning (and rules fingerprint).
+ */
+let deployed = "";
+export function setDeployedVersion(id: string | undefined) {
+  deployed = id ?? "";
+}
+
 export async function memoize<T>(
   db: D1Database,
   name: string,
@@ -119,7 +129,7 @@ export async function memoize<T>(
   const stats = opts.scope === "stats";
   const version = stats ? v.stats : v.data;
   const store = stats ? statsMemos : memos;
-  const stored = `${stats ? "stats" : "memo"}:${name}`;
+  const stored = stats ? `stats:${name}` : `memo:${deployed ? `${deployed}|` : ""}${name}`;
   const key = `${version}|${name}`;
   let p = store.get(key) as Promise<T> | undefined;
   if (!p) {
