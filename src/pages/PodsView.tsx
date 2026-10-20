@@ -2,7 +2,8 @@ import { useState } from "react";
 import type { ConceptResult, ConceptsResponse, MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { qs, useApi } from "../api.ts";
 import { conceptHref } from "../components/ConceptDrawer.tsx";
-import { LaunchCadence, type LaunchCell } from "../components/LaunchCadence.tsx";
+import { openDrill } from "../drill.ts";
+import { LaunchCadence } from "../components/LaunchCadence.tsx";
 import { PodSpend } from "../components/PodSpend.tsx";
 import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
@@ -119,7 +120,6 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
   const pods = useApi<PodsResponse>(`/api/pods?${qs({ range })}`);
   const concepts = useApi<ConceptsResponse>(`/api/concepts?${qs({ range })}`);
   const [open, setOpen] = useState("");
-  const [cell, setCell] = useState<LaunchCell | null>(null);
   const t = meta.targets;
   const rows = pods.data?.rows ?? [];
   const inHouse = rows.filter((r) => r.kind === "pod").sort((a, b) => podOrder(a.podId) - podOrder(b.podId));
@@ -155,7 +155,6 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
                 editors={editorsOf(r.podId)}
                 top={r.kind === "pod" && r.hitRate != null && r.hitRate === topRate}
                 onOpen={() => {
-                  setCell(null);
                   setOpen(r.podId ?? "");
                   document.getElementById("concepts")?.scrollIntoView({ behavior: "smooth" });
                 }}
@@ -173,20 +172,24 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
           </p>
         )}
         <LaunchCadence
-          selected={cell}
-          onSelect={(c) => {
-            setCell(c);
-            if (c) document.getElementById("concepts")?.scrollIntoView({ behavior: "smooth" });
-          }}
+          selected={null}
+          // A week opens its launches in a side card (src/drill.ts); the table below stays as it is.
+          onSelect={(c) =>
+            c &&
+            openDrill({
+              title: `${rows.find((p) => p.podId === c.podId)?.name ?? "Pod"} · launched week of ${shortDate(c.week)}`,
+              range: `custom:${c.week}:${shiftDay(c.week, 6)}`,
+              filter: { pod: c.podId },
+            })
+          }
         />
         <div id="concepts" className="scroll-mt-4">
           <ConceptsTable
-            key={cell ? `${cell.podId}:${cell.week}` : open}
-            range={cell ? `custom:${cell.week}:${shiftDay(cell.week, 6)}` : range}
+            key={open}
+            range={range}
             targets={t}
             pods={rows}
-            filter={{ pod: cell ? cell.podId : open }}
-            title={cell ? `Launched week of ${shortDate(cell.week)}` : undefined}
+            filter={{ pod: open }}
           />
         </div>
       </div>
@@ -200,6 +203,7 @@ export function ConceptsTable({
   pods,
   filter = {},
   title = "Concepts tested",
+  inPanel = false,
 }: {
   range: string;
   targets: Targets;
@@ -207,6 +211,8 @@ export function ConceptsTable({
   /** Any /api/concepts filter: pod, angle, format, awareness, atria_theme, atria_desire, atria_hook, atria_persona, belief. */
   filter?: Record<string, string | undefined>;
   title?: string;
+  /** Inside a side card: no height cap (the card scrolls) and no "Judged on" column (narrower). */
+  inPanel?: boolean;
 }) {
   const [pod, setPod] = useState(filter.pod ?? "");
   const [result, setResult] = useState("");
@@ -292,13 +298,13 @@ export function ConceptsTable({
       {error && <Empty>Couldn't load concepts: {error.message}</Empty>}
       {data && data.rows.length === 0 && <Empty>No concepts started testing in this period.</Empty>}
       {data && data.rows.length > 0 && (
-        <div className="max-h-[36rem] overflow-auto">
-          <table className="w-full text-sm">
+        <div className={inPanel ? "overflow-x-auto" : "max-h-[36rem] overflow-auto"}>
+          <table className={`w-full text-sm ${inPanel ? "min-w-[600px]" : ""}`}>
             <thead className="kicker sticky top-0 bg-page text-left">
               <tr className="border-b-2 border-divider">
                 <th className="py-2 pr-3 font-normal">Pod</th>
                 <th className="py-2 pr-3 font-normal">Concept</th>
-                <th className="py-2 pr-3 font-normal">Judged on</th>
+                {!inPanel && <th className="py-2 pr-3 font-normal">Judged on</th>}
                 <th className="py-2 pr-3 text-right font-normal">Spend</th>
                 <th className="py-2 pr-3 text-right font-normal">CPA</th>
                 <th className="py-2 pr-3 text-right font-normal">ROAS</th>
@@ -343,9 +349,11 @@ export function ConceptsTable({
                       </div>
                     )}
                   </td>
-                  <td className="num py-2.5 pr-3 whitespace-nowrap text-ink-2">
-                    {shortDate(k.firstSpend)} – {shortDate(k.windowEnd)}
-                  </td>
+                  {!inPanel && (
+                    <td className="num py-2.5 pr-3 whitespace-nowrap text-ink-2">
+                      {shortDate(k.firstSpend)} – {shortDate(k.windowEnd)}
+                    </td>
+                  )}
                   <td className="num py-2.5 pr-3 text-right text-ink">{money(k.window.spendCents)}</td>
                   <td className="py-2.5 pr-3 text-right">
                     <CpaValue value={cpa(k.window)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />

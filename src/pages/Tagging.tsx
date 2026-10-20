@@ -5,6 +5,7 @@ import { qs, useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
 import { Empty, PageHeader, PodChip, Segmented, Thumb } from "../components/ui.tsx";
 import { money, pct, shortDate } from "../format.ts";
+import { conceptHref } from "../drill.ts";
 
 async function send(path: string, method: string, body: unknown) {
   const res = await fetch(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -418,9 +419,15 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                         <div className="flex items-center gap-2.5">
                           <Thumb mediaType={r.mediaType} label="" url={r.thumbnailUrl} className="h-11 w-8 shrink-0" />
                           <div className="min-w-0">
-                            <div className="truncate font-bold text-ink" title={r.name}>
-                              {r.name}
-                            </div>
+                            {r.conceptId ? (
+                              <a href={conceptHref(r.conceptId)} className="block truncate font-bold text-ink hover:underline" title={`${r.name} — open its concept`}>
+                                {r.name}
+                              </a>
+                            ) : (
+                              <div className="truncate font-bold text-ink" title={r.name}>
+                                {r.name}
+                              </div>
+                            )}
                             <div className="truncate text-xs text-ink-3" title={r.adsetName ?? ""}>
                               First seen {shortDate(r.launched)} · {r.copies} {r.copies === 1 ? "copy" : "copies"} · {r.adsetName ?? "—"}
                             </div>

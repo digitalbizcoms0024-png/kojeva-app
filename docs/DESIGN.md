@@ -31,3 +31,12 @@ They are never reused as pod or series colors.
 - Every chart has a hover tooltip; target lines are dashed in the accent and labelled ("Target $14").
 - Pod cards carry a 7-day spend sparkline in the pod's color (one series each, hover shows the day).
 - Days with no purchases break the CPA line instead of drawing through zero.
+
+## Side cards
+- Drilling into a group (an Insights row or heatmap cell, a Coverage cell, a Pods launch week) opens a
+  side card over the page, never a section below it. A concept opens its own card; from a group card
+  it opens in place with "← Back to …".
+- Cards live in the URL hash (`src/drill.ts`: `drill`, `dt`, `dr`, `dc`, `dcp`, `concept`), so they
+  are shareable and the browser's Back closes them. Esc, ✕ or the backdrop closes them too.
+- Concept names elsewhere (Needs Tagging, CS Reports) link to the concept's card. Copy for Slack
+  drops the links.

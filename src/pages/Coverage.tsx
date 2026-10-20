@@ -3,10 +3,10 @@ import type { CoverageCell, CoverageResponse, MetaResponse } from "../../shared/
 import { cpa, roas } from "../../shared/metrics.ts";
 import { AWARENESS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
+import { openDrill } from "../drill.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, SectionTitle, Select, Thumb } from "../components/ui.tsx";
 import { downloadCsv, money, pct, plain, plainDollars } from "../format.ts";
-import { ConceptsTable } from "./PodsView.tsx";
 
 const LEVELS = Object.keys(AWARENESS);
 const key = (personaId: string | null, awareness: string | null) => `${personaId ?? "-"}|${awareness ?? "-"}`;
@@ -18,7 +18,6 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
   // "Running" means spent in the period; the map opens on the last 7 days.
   const [range, setRange] = useState<Range>("week");
   const [pod, setPod] = useState("");
-  const [open, setOpen] = useState<{ personaId: string | null; awareness: string | null } | null>(null);
   const { data, error } = useApi<CoverageResponse>(`/api/coverage?${qs({ range, pod })}`);
   const personas = data?.personas ?? [];
   const drafts = meta.personas.filter((p) => p.status === "draft").length;
@@ -30,7 +29,14 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
   const hasNoPersona = (data?.cells ?? []).some((c) => c.personaId == null && c.ads > 0);
   const rows: (string | null)[] = [...personas.map((p) => p.id), ...(hasNoPersona ? [null] : [])];
   const cols: (string | null)[] = [...LEVELS, ...(hasUnlabelled ? [null] : [])];
-  const openCell = open ? cells.get(key(open.personaId, open.awareness)) : undefined;
+  // A cell opens its running ads and every concept tested in it in a side card (src/drill.ts).
+  const openCell = (personaId: string | null, awareness: string | null) =>
+    openDrill({
+      title: `${nameOf(personaId)} × ${levelOf(awareness)}`,
+      range: "all",
+      filter: { persona: personaId ?? "none", awareness: awareness ?? "none", pod: pod === "unassigned" ? "" : pod },
+      coverage: { range, pod },
+    });
 
   return (
     <div>
@@ -112,10 +118,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                     <Select
                       label="Pod"
                       value={pod}
-                      onChange={(v) => {
-                        setPod(v);
-                        setOpen(null);
-                      }}
+                      onChange={setPod}
                       options={[
                         { value: "", label: "All pods" },
                         ...meta.pods.map((p) => ({ value: p.id, label: p.name })),
@@ -149,15 +152,14 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                           </th>
                           {cols.map((a) => {
                             const c = cells.get(key(pid, a));
-                            const active = open?.personaId === pid && open.awareness === a;
                             return (
                               <td key={a ?? "none"} className="border-t border-divider p-1 align-top">
                                 <Cell
                                   c={c}
                                   share={c && total > 0 ? c.totals.spendCents / total : 0}
                                   meta={meta}
-                                  active={active}
-                                  onClick={() => setOpen(active ? null : { personaId: pid, awareness: a })}
+                                  active={false}
+                                  onClick={() => openCell(pid, a)}
                                 />
                               </td>
                             );
@@ -173,30 +175,6 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                 empty cells still show what was tried. Persona and awareness are Claude's labels unless set by hand in Needs Tagging.
               </p>
             </section>
-
-            {open && (
-              <section className="flex flex-col gap-4">
-                <SectionTitle
-                  title={`${nameOf(open.personaId)} × ${levelOf(open.awareness)}`}
-                  right={
-                    <button className="btn btn-ghost text-sm" onClick={() => setOpen(null)}>
-                      Close
-                    </button>
-                  }
-                />
-                <CellAds data={data} open={open} meta={meta} />
-                {(openCell?.concepts ?? 0) > 0 && (
-                  <ConceptsTable
-                    key={key(open.personaId, open.awareness) + pod}
-                    range="all"
-                    targets={meta.targets}
-                    pods={meta.pods.map((p) => ({ podId: p.id, name: p.name }))}
-                    filter={{ persona: open.personaId ?? "none", awareness: open.awareness ?? "none", pod: pod === "unassigned" ? "" : pod }}
-                    title="Every concept tested in this cell"
-                  />
-                )}
-              </section>
-            )}
           </>
         )}
       </div>
@@ -241,7 +219,7 @@ function Cell({ c, share, meta, active, onClick }: { c: CoverageCell | undefined
   );
 }
 
-function CellAds({ data, open, meta }: { data: CoverageResponse; open: { personaId: string | null; awareness: string | null }; meta: MetaResponse }) {
+export function CellAds({ data, open, meta }: { data: CoverageResponse; open: { personaId: string | null; awareness: string | null }; meta: MetaResponse }) {
   const t = meta.targets;
   const ads = data.posts.filter((p) => p.personaId === open.personaId && p.awareness === open.awareness);
   if (!ads.length) return <p className="text-sm text-ink-3">No ads in this cell spent in the selected period.</p>;

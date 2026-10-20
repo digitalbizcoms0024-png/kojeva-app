@@ -4,6 +4,7 @@ import { useApi } from "../api.ts";
 import { Empty, Icon, PageHeader, Select } from "../components/ui.tsx";
 import { dateTime, shortDate } from "../format.ts";
 import { parseText, reportBlocks, toHtml, toMrkdwn, type Block, type Inline } from "../report.ts";
+import { conceptHref } from "../drill.ts";
 
 function Inl({ parts }: { parts: Inline[] }) {
   return (
@@ -11,6 +12,10 @@ function Inl({ parts }: { parts: Inline[] }) {
       {parts.map((p, i) =>
         typeof p === "string" ? (
           <Fragment key={i}>{p}</Fragment>
+        ) : p.concept ? (
+          <a key={i} href={conceptHref(p.concept)} className="font-bold text-ink underline decoration-divider underline-offset-2 hover:decoration-ink">
+            {p.b}
+          </a>
         ) : (
           <b key={i} className="font-bold text-ink">
             {p.b}

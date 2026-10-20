@@ -470,6 +470,7 @@ export async function loadPosts(db: D1Database, from: string, to: string, opts: 
       assignment: toAssignment(r),
       totals: totalsByPost.get(postId) ?? toTotals(undefined),
       hit,
+      conceptId: r.concept_id == null ? null : String(r.concept_id),
       atria: r.atria_tags == null ? null : (JSON.parse(String(r.atria_tags)) as Record<string, string[]>),
       fatigue: fatigueByPost.get(postId) ?? null,
       labels: {

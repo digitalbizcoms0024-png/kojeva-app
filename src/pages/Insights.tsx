@@ -6,7 +6,8 @@ import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { CpaValue, Empty, PageHeader, PodSwatch, SectionTitle, Segmented, Select, Tabs } from "../components/ui.tsx";
 import { money, pct } from "../format.ts";
-import { ConceptsTable, hitRuleText } from "./PodsView.tsx";
+import { hitRuleText } from "./PodsView.tsx";
+import { openDrill } from "../drill.ts";
 
 const LABELS: Record<InsightDimension, Record<string, string>> = {
   angle: ANGLES,
@@ -473,7 +474,6 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
   const [pod, setPod] = useState("");
   const [tab, setTabState] = useState<Tab>(readTab);
   const [sort, setSort] = useState<Sort>("best");
-  const [open, setOpen] = useState<Open>(null);
   const t = meta.targets;
   const personas = Object.fromEntries(meta.personas.filter((p) => p.status === "active").map((p) => [p.id, p.name]));
   // Once the persona list is confirmed, "By persona" uses it instead of Atria's raw persona tags.
@@ -486,14 +486,11 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
       /* per-browser convenience only */
     }
   };
-  const openFrom = (o: NonNullable<Open>) => {
-    setTab(o.tab);
-    setOpen(o);
-  };
-  const toggle = (dimension: InsightDimension) => (value: string | null) => {
-    const v = value ?? "none";
-    setOpen((o) => (o && o.filter[dimension] === v && Object.keys(o.filter).length === 1 ? null : { filter: { [dimension]: v }, title: `${DIM_LABEL[dimension]}: ${name(dimension, value, personas)}`, tab }));
-  };
+  // A row, card or heatmap cell opens its concepts in a side card (src/drill.ts); the page stays put.
+  const openFrom = (o: NonNullable<Open>) =>
+    openDrill({ title: o.title, range, filter: { ...Object.fromEntries(Object.entries(o.filter).map(([k, v]) => [k, v ?? ""])), pod } });
+  const toggle = (dimension: InsightDimension) => (value: string | null) =>
+    openDrill({ title: `${DIM_LABEL[dimension]}: ${name(dimension, value, personas)}`, range, filter: { [dimension]: value ?? "none", pod } });
 
   return (
     <div>
@@ -511,10 +508,7 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
               <Select
                 label="Pod"
                 value={pod}
-                onChange={(v) => {
-                  setPod(v);
-                  setOpen(null);
-                }}
+                onChange={setPod}
                 options={[{ value: "", label: "All pods" }, ...meta.pods.map((p) => ({ value: p.id, label: p.name }))]}
               />
             </div>
@@ -530,7 +524,7 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
         </div>
 
         {tab === "combos" ? (
-          <Matrix range={range} pod={pod} personas={personas} onOpen={openFrom} active={open} />
+          <Matrix range={range} pod={pod} personas={personas} onOpen={openFrom} active={null} />
         ) : (
           <div className="grid gap-8 xl:grid-cols-2">
             {panelsOf(tab).map((d) => (
@@ -542,22 +536,11 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
                 sort={sort}
                 targets={t}
                 personas={personas}
-                active={open && Object.keys(open.filter).length === 1 && open.filter[d] !== undefined ? (open.filter[d] === "none" ? null : open.filter[d]) : undefined}
+                active={undefined}
                 onOpen={toggle(d)}
               />
             ))}
           </div>
-        )}
-
-        {open && open.tab === tab && (
-          <ConceptsTable
-            key={`${JSON.stringify(open.filter)}:${pod}`}
-            range={range}
-            targets={t}
-            pods={meta.pods.map((p) => ({ podId: p.id, name: p.name }))}
-            filter={{ ...open.filter, pod }}
-            title={open.title}
-          />
         )}
       </div>
     </div>

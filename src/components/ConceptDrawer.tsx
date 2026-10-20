@@ -9,11 +9,8 @@ import { WinnerCall } from "./WinnerCall.tsx";
 import { DailyCharts } from "./DailyCharts.tsx";
 import { CpaValue, HitBadge, PodChip, RoasValue, Tag, Thumb } from "./ui.tsx";
 
-/** Opens a concept's card over the current page ("#/<page>?concept=<id>"). */
-export function conceptHref(conceptId: string): string {
-  const page = window.location.hash.replace(/^#\/?/, "").split("?")[0] || "dashboard";
-  return `#/${page}?concept=${encodeURIComponent(conceptId)}`;
-}
+/** Opens a concept's card over the current page (an open group stays underneath; see drill.ts). */
+export { conceptHref } from "../drill.ts";
 
 const range = (from: string, to: string) => (from === to ? shortDate(from) : `${shortDate(from)} – ${shortDate(to)}`);
 
@@ -49,16 +46,27 @@ function Numbers({ t, meta }: { t: Totals; meta: MetaResponse }) {
  * A concept's card, sliding in from the right over whatever page is open: its result and why,
  * the numbers it was judged on, its tags, its ads and its daily spend. Esc or the backdrop closes it.
  */
-export function ConceptDrawer({ conceptId, meta, onClose }: { conceptId: string; meta: MetaResponse; onClose: () => void }) {
+export function ConceptDrawer({
+  conceptId,
+  meta,
+  onClose,
+  back,
+}: {
+  conceptId: string;
+  meta: MetaResponse;
+  onClose: () => void;
+  /** When opened from a group's side card: return to it (Esc does too). */
+  back?: { label: string; onBack: () => void };
+}) {
   const [reload, setReload] = useState(0);
   const { data, error } = useApi<ConceptDetail>(`/api/concepts/${encodeURIComponent(conceptId)}${reload ? `?r=${reload}` : ""}`);
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && (back ? back.onBack() : onClose());
     window.addEventListener("keydown", onKey);
     panel.current?.focus();
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, back]);
 
   const k = data?.concept;
   const t = meta.targets;
@@ -72,6 +80,11 @@ export function ConceptDrawer({ conceptId, meta, onClose }: { conceptId: string;
       <div ref={panel} tabIndex={-1} className="relative flex h-full w-full max-w-[640px] flex-col overflow-y-auto bg-page shadow-xl outline-none">
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b-2 border-divider bg-page px-5 py-4">
           <div className="min-w-0">
+            {back && (
+              <button type="button" onClick={back.onBack} className="link mb-1 block max-w-full truncate text-left text-sm" title={back.label}>
+                ← Back to {back.label}
+              </button>
+            )}
             <div className="kicker">Concept</div>
             <h2 className="truncate text-xl font-extrabold text-ink" title={k?.label}>
               {k?.label ?? "Loading…"}

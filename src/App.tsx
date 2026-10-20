@@ -14,6 +14,8 @@ import { PodsPage } from "./pages/PodsView.tsx";
 import { RankingsPage } from "./pages/Rankings.tsx";
 import { SettingsPage } from "./pages/Settings.tsx";
 import { ReportsPage } from "./pages/Reports.tsx";
+import { GroupDrawer } from "./components/GroupDrawer.tsx";
+import { closeHref, readDrill } from "./drill.ts";
 import { TaggingPage } from "./pages/Tagging.tsx";
 
 
@@ -97,16 +99,21 @@ export default function App() {
   if (m) applyAddedPods(m.pods);
 
   useEffect(() => {
+    let page = currentRoute().path;
     const onHash = () => {
-      setRoute(currentRoute());
+      const next = currentRoute();
+      setRoute(next);
       setMenuOpen(false);
-      window.scrollTo(0, 0);
+      // Opening or closing a side card keeps your place on the page; only a new page starts at the top.
+      if (next.path !== page) window.scrollTo(0, 0);
+      page = next.path;
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
   const path = route.path;
+  const drill = readDrill(route.params);
   const refresh = () => setMetaVersion((v) => v + 1);
   const expires = m?.connectionExpiresInDays;
 
@@ -214,8 +221,17 @@ export default function App() {
         {m && path === "coverage" && <CoveragePage meta={m} />}
         {m && path === "reports" && <ReportsPage meta={m} />}
       </main>
-      {m && route.params.get("concept") && (
-        <ConceptDrawer conceptId={route.params.get("concept")!} meta={m} onClose={() => (window.location.hash = `#/${path}`)} />
+      {/* Side cards over the page, from the URL (src/drill.ts): a group, and a concept on top of it. */}
+      {m && route.params.get("concept") ? (
+        <ConceptDrawer
+          key={route.params.get("concept")!}
+          conceptId={route.params.get("concept")!}
+          meta={m}
+          onClose={() => (window.location.hash = closeHref())}
+          back={drill ? { label: drill.title, onBack: () => (window.location.hash = closeHref("concept")) } : undefined}
+        />
+      ) : (
+        m && drill && <GroupDrawer key={window.location.hash} spec={drill} meta={m} onClose={() => (window.location.hash = closeHref())} />
       )}
     </div>
   );

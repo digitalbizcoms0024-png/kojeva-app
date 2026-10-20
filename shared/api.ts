@@ -136,6 +136,8 @@ export interface PostSummary {
   fatigue: Fatigue | null;
   /** Claude's labels; the hand-set values in `assignment` win over these. */
   labels: CreativeLabels;
+  /** The concept (testing ad set) the post was tested in; null for scaling-only or agency posts. */
+  conceptId: string | null;
 }
 
 export interface RankingsResponse {

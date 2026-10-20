@@ -7,7 +7,8 @@ import { FORMATS } from "../shared/taxonomy.ts";
 import { dollars, moneyExact, ratio, shortDate } from "./format.ts";
 
 /** Plain text, or a bold run. */
-export type Inline = string | { b: string };
+/** A bold run; `concept` links it to that concept's card on the page and is dropped when copied. */
+export type Inline = string | { b: string; concept?: string };
 export type Block =
   | { kind: "h"; text: string }
   | { kind: "p"; parts: Inline[] }
@@ -56,14 +57,14 @@ function hitLine(k: ReportConcept): Inline[] {
   if (k.status === "winner" || k.status === "super_winner") {
     return [
       `${kindOf(k.status)}: `,
-      { b: k.label },
+      { b: k.label, concept: k.conceptId },
       `${tag} — ${k.allTime.purchases} purchases, ${x(k.allTime.roas)} ROAS, ${dollars(k.allTime.cpa)} CPA since launch, ${moneyExact(k.allTime.spendCents)} spend.`,
       ...(k.call ? [` “${k.call.reason}”`] : []),
     ];
   }
   const w = k.status === "late_hit" && k.lateWindow ? k.lateWindow : k.window;
   const when = k.status === "late_hit" && k.lateWindow ? ` over ${shortDate(k.lateWindow.from)}–${shortDate(k.lateWindow.to)}` : " in its test window";
-  return [`${kindOf(k.status)}: `, { b: k.label }, `${tag} — ${w.purchases} purchases, ${x(w.roas)} ROAS, ${dollars(w.cpa)} CPA${when}, ${moneyExact(w.spendCents)} spend.`];
+  return [`${kindOf(k.status)}: `, { b: k.label, concept: k.conceptId }, `${tag} — ${w.purchases} purchases, ${x(w.roas)} ROAS, ${dollars(w.cpa)} CPA${when}, ${moneyExact(w.spendCents)} spend.`];
 }
 
 /** "10 statics, 8 AI UGC, 1 podcast" */
@@ -143,7 +144,7 @@ export function reportBlocks(d: ReportData, text: ReportText | null, podNames: M
       const w = best.window;
       items.push([
         h.length ? "Strongest signal: " : "Strongest miss: ",
-        { b: best.label },
+        { b: best.label, concept: best.conceptId },
         ` — ${w.purchases} purchases, ${x(w.roas)} ROAS, ${dollars(w.cpa)} CPA in its test window, ${moneyExact(w.spendCents)} spend.`,
         ...(best.candidate ? [" Could be a hit (call): the media buyer's decision."] : []),
       ]);
@@ -180,7 +181,7 @@ export function reportBlocks(d: ReportData, text: ReportText | null, podNames: M
           const what = isHit(v.status) ? kindOf(v.status) : "Miss";
           return [
             `${podNames.get(v.podId) ?? v.podId}: `,
-            { b: v.label },
+            { b: v.label, concept: v.conceptId },
             ` — ${what} on ${shortDate(v.verdictOn)} (launched ${shortDate(v.firstSpend)}): ${w.purchases} purchases, ${x(w.roas)} ROAS, ${dollars(w.cpa)} CPA, ${moneyExact(w.spendCents)} spend.`,
           ];
         }),
