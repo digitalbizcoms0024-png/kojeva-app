@@ -167,7 +167,8 @@ app.get("/meta", async (c) => {
     editors: editors.results,
     canEdit: canEditWith(c.env, c.get("userEmail"), editAccess),
     viewer: c.get("userEmail"),
-    editAccess,
+    // The list itself is for editors only.
+    editAccess: canEditWith(c.env, c.get("userEmail"), editAccess) ? editAccess : [],
     needsTagging: untagged.posts,
     personas,
   };

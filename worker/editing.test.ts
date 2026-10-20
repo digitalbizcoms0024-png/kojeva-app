@@ -154,6 +154,21 @@ describe("edit access", () => {
     expect((await call("/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }))).status).toBe(403);
   });
 
+  it("shows the edit list and the connected Meta account to editors only", async () => {
+    await env.DB.prepare(
+      "INSERT INTO meta_connections (id, method, user_name, ad_account_id, token_cipher, token_iv, connected_at, connected_by) VALUES (1, 'pasted', 'Nosa Lawani', 'act_1', 'x', 'x', '2026-10-16T04:33:00Z', 'nosa@kojeva.com')",
+    ).run();
+    await call("/api/edit-access", json("POST", { email: "dhia@kojeva.com" }));
+    const connection = async (h: Record<string, string>) =>
+      ((await (await as(h, "/api/connection", {})).json()) as { connection: { userName: string | null; connectedBy: string | null } }).connection;
+
+    expect((await meta()).editAccess).toEqual(["dhia@kojeva.com", "nosa@kojeva.com"]);
+    expect(await connection(headers)).toMatchObject({ userName: "Nosa Lawani", connectedBy: "nosa@kojeva.com" });
+
+    expect((await meta(harris)).editAccess).toEqual([]);
+    expect(await connection(harris)).toMatchObject({ userName: null, connectedBy: null });
+  });
+
   it("rejects things that aren't emails", async () => {
     expect((await call("/api/edit-access", json("POST", { email: "harris" }))).status).toBe(400);
     expect((await meta()).editAccess).toEqual([]);

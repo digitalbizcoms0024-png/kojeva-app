@@ -57,7 +57,7 @@ Cloudflare Access decides who can open the hub (Zero Trust â†’ Access controls â
 refuses every write route (tags, personas, targets, pods, Meta connection, sync, rebuild) to anyone not
 on it. While the list is empty everyone signed in can edit; the first person added brings the adder
 along, so nobody locks themselves out, and nobody can remove themselves. Emails are matched lower-case.
-Service tokens never edit. `/api/meta` returns `canEdit` and `editAccess` for the signed-in person.
+Service tokens never edit. `/api/meta` returns `canEdit`, and `editAccess` only to editors; `/api/connection` names the connected Facebook account and who connected it only to editors. View-only people don't see the Who can edit section.
 D1 accepts at most 100 bound values per statement; the test adapter enforces the same limit.
 
 ## Configuration

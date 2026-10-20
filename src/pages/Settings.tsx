@@ -189,7 +189,11 @@ function MetaPanel({ onSynced, canEdit }: { onSynced: () => void; canEdit: boole
             <span className="text-good" aria-hidden>
               ●
             </span>{" "}
-            {s.systemToken ? "Connected with a system-user token (never expires)" : `Connected as ${s.connection?.userName ?? "unknown"}`}
+            {s.systemToken
+              ? "Connected with a system-user token (never expires)"
+              : s.connection?.userName
+                ? `Connected as ${s.connection.userName}`
+                : "Connected to Meta"}
           </div>
           {s.connection && !s.systemToken && (
             <div className="text-ink-3">
@@ -912,7 +916,7 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
 
         <AttributionCard meta={meta} onSaved={onSynced} />
 
-        <EditAccessCard meta={meta} onSaved={onSynced} />
+        {meta.canEdit && <EditAccessCard meta={meta} onSaved={onSynced} />}
 
         <section>
           <SectionTitle title="Data sources" />

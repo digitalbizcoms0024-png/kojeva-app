@@ -75,7 +75,7 @@ export interface MetaResponse {
   editors: Editor[];
   /** Whether the signed-in viewer can make changes: Access is on and they're on the edit list (or it's empty). */
   canEdit: boolean;
-  /** Emails that can edit. Empty = everyone signed in can. */
+  /** Emails that can edit (sent to editors only; empty for view-only people). Empty for an editor = everyone signed in can. */
   editAccess: string[];
   /** Who is signed in through Cloudflare Access, if anyone. */
   viewer: string | null;

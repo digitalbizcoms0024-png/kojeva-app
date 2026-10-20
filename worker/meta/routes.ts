@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { ConnectionStatus } from "../../shared/api.ts";
 import { accessConfigured, requireAccess } from "../access.ts";
+import { canEdit } from "../roles.ts";
 import { encrypt, randomToken } from "../crypto.ts";
 import type { AppEnv, Env } from "../env.ts";
 import { appGet, GraphError, graphClient } from "./graph.ts";
@@ -69,6 +70,8 @@ connection.get("/", async (c) => {
   const row = await c.env.DB.prepare(
     "SELECT method, user_name, ad_account_id, expires_at, connected_at, connected_by FROM meta_connections WHERE id = 1",
   ).first<Record<string, string | null>>();
+  // Whose Facebook account is connected, and who connected it, is for editors only.
+  const editor = await canEdit(c.env, c.get("userEmail"));
   const body: ConnectionStatus = {
     accessProtected: accessConfigured(c.env),
     userEmail: c.get("userEmail"),
@@ -80,10 +83,10 @@ connection.get("/", async (c) => {
     connection: row
       ? {
           method: String(row.method),
-          userName: row.user_name ?? null,
+          userName: editor ? (row.user_name ?? null) : null,
           expiresAt: row.expires_at ?? null,
           connectedAt: String(row.connected_at),
-          connectedBy: row.connected_by ?? null,
+          connectedBy: editor ? (row.connected_by ?? null) : null,
         }
       : null,
     maxWindowDays: MAX_WINDOW_DAYS,
