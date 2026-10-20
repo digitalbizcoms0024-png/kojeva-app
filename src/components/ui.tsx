@@ -322,3 +322,26 @@ export function CsvButton({ onClick, disabled }: { onClick: () => void; disabled
     </button>
   );
 }
+
+/** "11–20 of 24" with Previous / Next, for a list shown a page at a time. Renders nothing for one page. */
+export function Pager({ page, size, total, onPage }: { page: number; size: number; total: number; onPage: (page: number) => void }) {
+  const pages = Math.ceil(total / size);
+  if (pages <= 1) return null;
+  const from = page * size + 1;
+  const to = Math.min(total, (page + 1) * size);
+  return (
+    <nav className="mt-2 flex items-center justify-between gap-3 text-sm" aria-label="Pages">
+      <span className="num text-ink-3">
+        {from}–{to} of {total}
+      </span>
+      <span className="flex gap-2">
+        <button type="button" className="btn btn-secondary" disabled={page === 0} onClick={() => onPage(page - 1)}>
+          ‹ Previous
+        </button>
+        <button type="button" className="btn btn-secondary" disabled={page >= pages - 1} onClick={() => onPage(page + 1)}>
+          Next ›
+        </button>
+      </span>
+    </nav>
+  );
+}

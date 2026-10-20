@@ -4,7 +4,7 @@ import { cpa, hitRateFloor, MIN_DECIDED, type Targets } from "../../shared/metri
 import { ANGLES, AWARENESS, FORMATS, MOTIVATIONS, podById } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { CpaValue, Empty, PageHeader, PodSwatch, SectionTitle, Segmented, Select, Tabs } from "../components/ui.tsx";
+import { CpaValue, Empty, PageHeader, Pager, PodSwatch, SectionTitle, Segmented, Select, Tabs } from "../components/ui.tsx";
 import { money, pct } from "../format.ts";
 import { hitRuleText } from "./PodsView.tsx";
 import { openDrill } from "../drill.ts";
@@ -212,6 +212,9 @@ function Overview({ range, pod, targets, personas, onOpen }: { range: Range; pod
   );
 }
 
+/** Rows per page in a dimension's list. */
+const PAGE = 10;
+
 function Panel({
   dimension,
   range,
@@ -235,6 +238,11 @@ function Panel({
   const tagged = sortRows((data?.rows ?? []).filter((r) => r.value !== null), sort);
   const untagged = data?.rows.find((r) => r.value === null);
   const avg = data?.baseline.hitRate ?? null;
+  // A page at a time; back to the first page when the list changes (range, pod, sort).
+  const [page, setPage] = useState({ key: "", n: 0 });
+  const key = `${range}|${pod}|${sort}`;
+  const n = page.key === key ? Math.min(page.n, Math.max(0, Math.ceil(tagged.length / PAGE) - 1)) : 0;
+  const shown = tagged.slice(n * PAGE, (n + 1) * PAGE);
 
   return (
     <section className="min-w-0">
@@ -266,12 +274,13 @@ function Panel({
             </tr>
           </thead>
           <tbody>
-            {tagged.map((r) => (
+            {shown.map((r) => (
               <Row key={r.value} r={r} dimension={dimension} targets={targets} avg={avg} personas={personas} active={active === r.value} onClick={() => onOpen(r.value)} />
             ))}
           </tbody>
         </table>
       )}
+      <Pager page={n} size={PAGE} total={tagged.length} onPage={(p) => setPage({ key, n: p })} />
       {data && data.rows.length > 0 && (
         <p className="mt-2 text-xs text-ink-3">
           {untagged && (
