@@ -7,9 +7,18 @@ import { testDb } from "./testing/db.ts";
 
 let env: Env;
 let headers: Record<string, string>;
+// Made before any request: the hub caches Access's signing keys.
+let harris: Record<string, string>;
+let dhia: Record<string, string>;
+let dhiaUpper: Record<string, string>;
+let service: Record<string, string>;
 
 beforeAll(async () => {
   ({ headers } = await accessFixture());
+  ({ headers: harris } = await accessFixture("harris@kojeva.com"));
+  ({ headers: dhia } = await accessFixture("dhia@kojeva.com"));
+  ({ headers: dhiaUpper } = await accessFixture("DHIA@kojeva.com"));
+  ({ headers: service } = await accessFixture(undefined, "atria-client"));
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -102,6 +111,56 @@ describe("guards", () => {
 
   it("still answers 404 for unknown API paths", async () => {
     expect((await call("/api/nope")).status).toBe(404);
+  });
+});
+
+describe("edit access", () => {
+  const meta = async (h: Record<string, string> = headers) =>
+    (await (await app.fetch(new Request("https://hub.test/api/meta", { headers: h }), env, {} as ExecutionContext)).json()) as {
+      canEdit: boolean;
+      editAccess: string[];
+    };
+  const as = (h: Record<string, string>, path: string, init: RequestInit) =>
+    app.fetch(new Request(`https://hub.test${path}`, { ...init, headers: h }), env, {} as ExecutionContext);
+
+  it("lets everyone signed in edit until someone is added", async () => {
+    const other = harris;
+    expect(await meta(other)).toMatchObject({ canEdit: true, editAccess: [] });
+    expect((await as(other, "/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }))).status).toBe(200);
+  });
+
+  it("adds the first editor together with the person adding, and makes everyone else view-only", async () => {
+    const res = await call("/api/edit-access", json("POST", { email: " Dhia@Kojeva.com " }));
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as { editAccess: string[] }).editAccess).toEqual(["dhia@kojeva.com", "nosa@kojeva.com"]);
+
+    const viewer = harris;
+    expect((await meta(viewer)).canEdit).toBe(false);
+    expect((await as(viewer, "/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }))).status).toBe(403);
+    expect((await as(viewer, "/api/settings", json("PUT", { targets: { targetCpa: 99 } }))).status).toBe(403);
+    expect((await as(viewer, "/api/sync", json("POST", {}))).status).toBe(403);
+    expect((await as(viewer, "/api/edit-access", json("POST", { email: "harris@kojeva.com" }))).status).toBe(403);
+
+    expect((await meta(dhiaUpper)).canEdit).toBe(true);
+    expect((await as(dhiaUpper, "/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }))).status).toBe(200);
+    expect((await meta()).canEdit).toBe(true);
+  });
+
+  it("won't let you remove yourself, but another editor can", async () => {
+    await call("/api/edit-access", json("POST", { email: "dhia@kojeva.com" }));
+    expect((await call("/api/edit-access/nosa%40kojeva.com", { method: "DELETE" })).status).toBe(400);
+    const res = await as(dhia, "/api/edit-access/nosa%40kojeva.com", { method: "DELETE" });
+    expect(((await res.json()) as { editAccess: string[] }).editAccess).toEqual(["dhia@kojeva.com"]);
+    expect((await call("/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }))).status).toBe(403);
+  });
+
+  it("rejects things that aren't emails", async () => {
+    expect((await call("/api/edit-access", json("POST", { email: "harris" }))).status).toBe(400);
+    expect((await meta()).editAccess).toEqual([]);
+  });
+
+  it("never gives a service token edit access", async () => {
+    expect((await as(service, "/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }))).status).toBe(403);
   });
 });
 

@@ -71,7 +71,7 @@ function TokenForm(props: {
   );
 }
 
-function MetaPanel({ onSynced }: { onSynced: () => void }) {
+function MetaPanel({ onSynced, canEdit }: { onSynced: () => void; canEdit: boolean }) {
   const [reload, setReload] = useState(0);
   const { data: s, error } = useApi<ConnectionStatus>(`/api/connection?r=${reload}`);
   const [notice, setNotice] = useState<{ kind: "good" | "bad"; text: string } | null>(null);
@@ -103,7 +103,7 @@ function MetaPanel({ onSynced }: { onSynced: () => void }) {
   if (error) return <p className="text-sm text-bad">Couldn't load connection status: {error.message}</p>;
   if (!s) return <p className="text-sm text-ink-3">Loading…</p>;
 
-  const ready = s.accessProtected && s.missingSecrets.length === 0;
+  const ready = canEdit && s.accessProtected && s.missingSecrets.length === 0;
   const connected = Boolean(s.connection || s.systemToken);
   const expiresIn = s.connection?.expiresAt ? Math.floor((Date.parse(s.connection.expiresAt) - Date.now()) / 86_400_000) : null;
 
@@ -230,14 +230,14 @@ function MetaPanel({ onSynced }: { onSynced: () => void }) {
             </span>
             <button
               className={secondary}
-              disabled={!!busy}
+              disabled={!!busy || !canEdit}
               onClick={rebuild}
               title="Recompute hit results and totals from the stored daily data. Only needed if numbers look out of date; it reads about as much as a sync."
             >
               Rebuild summaries
             </button>
             {s.connection && (
-              <button className={`${secondary} text-bad`} disabled={!!busy} onClick={disconnect}>
+              <button className={`${secondary} text-bad`} disabled={!!busy || !canEdit} onClick={disconnect}>
                 Disconnect
               </button>
             )}
@@ -627,6 +627,77 @@ function PodRosterCard({ meta, podId, onSaved }: { meta: MetaResponse; podId: st
   );
 }
 
+/** Who can change things. Cloudflare Access decides who can open the hub; this list, who can edit. */
+function EditAccessCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => void }) {
+  const { busy, run, note } = useSave(onSaved);
+  const [email, setEmail] = useState("");
+  const me = meta.viewer?.toLowerCase() ?? null;
+  const list = meta.editAccess;
+  const off = !meta.canEdit || busy;
+  const add = async () => {
+    const e = email.trim();
+    if (await run("/api/edit-access", "POST", { email: e }, list.length === 0 ? `Added ${e}. Everyone else is now view-only.` : `Added ${e}.`)) setEmail("");
+  };
+  return (
+    <section>
+      <SectionTitle
+        title="Who can edit"
+        right={list.length === 0 ? "Everyone signed in can edit" : `${list.length} ${list.length === 1 ? "person" : "people"} · everyone else is view-only`}
+      />
+      <p className="mb-3 max-w-[80ch] text-sm text-ink-3">
+        Who can open the hub is set in Cloudflare Access. This list is who can change things: tags, personas, targets, pods and the Meta
+        connection. View-only people see everything but can't edit.{" "}
+        {list.length === 0
+          ? "While the list is empty, everyone signed in can edit; adding the first person (you're added with them) makes everyone else view-only."
+          : "You can't remove yourself; ask another editor."}
+      </p>
+      {list.length > 0 && (
+        <ul className="mb-3 flex flex-wrap gap-1.5">
+          {list.map((e) => (
+            <li key={e} className="inline-flex items-center gap-1 border border-divider bg-surface px-2 py-0.5 text-sm text-ink">
+              {e}
+              {e === me ? (
+                <span className="text-xs text-ink-3">(you)</span>
+              ) : (
+                <button
+                  aria-label={`Remove ${e}`}
+                  className="text-ink-3 hover:text-bad"
+                  disabled={off}
+                  onClick={() => run(`/api/edit-access/${encodeURIComponent(e)}`, "DELETE", {}, `${e} is now view-only.`)}
+                >
+                  ×
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (email.trim()) void add();
+        }}
+      >
+        <input
+          type="email"
+          aria-label="Email to give edit access"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="name@kojeva.com"
+          className={`${field} min-w-64`}
+          disabled={!meta.canEdit}
+        />
+        <button className={secondary} disabled={!email.trim() || off}>
+          Give edit access
+        </button>
+        {note}
+      </form>
+      {!meta.canEdit && meta.accessProtected && <p className="mt-2 text-sm text-ink-3">You have view-only access.</p>}
+    </section>
+  );
+}
+
 const STATUS_LABEL: Record<Persona["status"], string> = { draft: "Draft", active: "In use", suggested: "Suggested by Claude" };
 
 /** One persona, edited in place (saved when a field loses focus). */
@@ -841,6 +912,8 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
 
         <AttributionCard meta={meta} onSaved={onSynced} />
 
+        <EditAccessCard meta={meta} onSaved={onSynced} />
+
         <section>
           <SectionTitle title="Data sources" />
           <div className="border-b border-divider pb-5">
@@ -858,7 +931,7 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
               revising recent results.
               {meta.lastSync?.message && ` Last message: ${meta.lastSync.message}.`}
             </p>
-            <MetaPanel onSynced={onSynced} />
+            <MetaPanel onSynced={onSynced} canEdit={meta.canEdit} />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-divider py-4">
             <div>

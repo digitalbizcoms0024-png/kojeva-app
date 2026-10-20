@@ -44,10 +44,20 @@ Browser ──► Cloudflare Access (Google login for the team)
 | `PUT /api/settings` `{targets?, attribution?}` | edit targets; attribution changes re-credit every post |
 | `POST /api/editors`, `DELETE /api/editors/:id` | editor roster |
 | `POST /api/attribute` | re-credit every post from stored data |
+| `POST /api/edit-access`, `DELETE /api/edit-access/:email` | who can edit (editors only; see below) |
 | `GET /api/ingest/atria/pending`, `POST /api/ingest/atria` | Atria tags in (service token only; see `ATRIA.md`) |
 
 Ranges are relative to the latest synced day, not the wall clock. Connection, sync and editing routes
 return 403 until Cloudflare Access is configured; once it is, every `/api` call needs a valid Access JWT.
+
+### Access: view-only and editors
+Cloudflare Access decides who can open the hub (Zero Trust → Access controls → Applications →
+`kojeva-hub` → Policies; the "Kojeva Team" policy allows the team's emails). The `edit_access` table
+(Settings → Who can edit, `worker/roles.ts`) decides who among them can change things: `requireAccess`
+refuses every write route (tags, personas, targets, pods, Meta connection, sync, rebuild) to anyone not
+on it. While the list is empty everyone signed in can edit; the first person added brings the adder
+along, so nobody locks themselves out, and nobody can remove themselves. Emails are matched lower-case.
+Service tokens never edit. `/api/meta` returns `canEdit` and `editAccess` for the signed-in person.
 D1 accepts at most 100 bound values per statement; the test adapter enforces the same limit.
 
 ## Configuration

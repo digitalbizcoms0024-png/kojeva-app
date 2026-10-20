@@ -2,6 +2,7 @@
 // if the Access setting in the dashboard is switched off by mistake.
 import type { MiddlewareHandler } from "hono";
 import type { AppEnv } from "./env.ts";
+import { canEdit } from "./roles.ts";
 
 interface Jwk extends JsonWebKey {
   kid: string;
@@ -89,7 +90,7 @@ export const accessMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   return next();
 };
 
-/** Guards routes that change data or touch Meta credentials: people only, not service tokens. */
+/** Guards routes that change data or touch Meta credentials: people on the edit list only, not service tokens. */
 export const requireAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
   if (!accessConfigured(c.env))
     return c.json(
@@ -97,6 +98,8 @@ export const requireAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
       403,
     );
   if (c.get("userEmail")?.startsWith("service:")) return c.json({ error: "Service tokens can't do this." }, 403);
+  if (!(await canEdit(c.env, c.get("userEmail"))))
+    return c.json({ error: "You have view-only access. Ask someone on the edit list (Settings → Who can edit) to add you." }, 403);
   return next();
 };
 

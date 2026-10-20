@@ -73,8 +73,10 @@ export interface MetaResponse {
   pods: { id: string; code: string; name: string; color: string; kind: "pod" | "agency"; prefix: string | null; slot: number | null }[];
   attribution: { agencyPrefixes: string[]; podsStartDate: string | null; detected: boolean };
   editors: Editor[];
-  /** Whether the signed-in viewer can make changes (Cloudflare Access is on). */
+  /** Whether the signed-in viewer can make changes: Access is on and they're on the edit list (or it's empty). */
   canEdit: boolean;
+  /** Emails that can edit. Empty = everyone signed in can. */
+  editAccess: string[];
   /** Who is signed in through Cloudflare Access, if anyone. */
   viewer: string | null;
   /** Posts with spend in the last 30 days that no pod or the agency is credited with. */

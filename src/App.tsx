@@ -153,8 +153,11 @@ export default function App() {
           {m?.viewer && !m.viewer.startsWith("service:") && (
             <div className="flex items-center gap-2.5 px-1">
               <span className="grid size-8 shrink-0 place-items-center bg-ink text-xs font-bold text-page">{m.viewer.slice(0, 2).toUpperCase()}</span>
-              <span className="min-w-0 truncate text-xs text-ink-2" title={m.viewer}>
-                {m.viewer}
+              <span className="min-w-0 text-xs text-ink-2">
+                <span className="block truncate" title={m.viewer}>
+                  {m.viewer}
+                </span>
+                <span className="text-ink-3">{m.canEdit ? "Can edit" : "View only"}</span>
               </span>
             </div>
           )}

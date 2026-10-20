@@ -180,7 +180,13 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
       </PageHeader>
 
       <div className="flex flex-col gap-5 px-4 py-6 md:px-8">
-        {disabled && <p className="bg-warn-soft px-3 py-2 text-sm text-ink">Editing is off until Cloudflare Access is set up for this app.</p>}
+        {disabled && (
+          <p className="bg-warn-soft px-3 py-2 text-sm text-ink">
+            {meta.accessProtected
+              ? "You have view-only access. Ask someone on the edit list (Settings → Who can edit) to add you."
+              : "Editing is off until Cloudflare Access is set up for this app."}
+          </p>
+        )}
 
         <div className="flex flex-wrap items-end gap-6">
           <div>

@@ -6,6 +6,7 @@ import type { AttributionSettings } from "../shared/attribution.ts";
 import type { Targets } from "../shared/metrics.ts";
 import { ANGLES, FORMATS, GROUPS, HOOKS, LANDING_PAGES, AWARENESS, MOTIVATIONS, POD_SLOTS } from "../shared/taxonomy.ts";
 import { requireAccess } from "./access.ts";
+import { loadEditAccess } from "./roles.ts";
 import { randomToken } from "./crypto.ts";
 import type { AppEnv } from "./env.ts";
 import { bumpStats, bumpVersion } from "./cache.ts";
@@ -224,6 +225,36 @@ editing.delete("/editors/:id", requireAccess, async (c) => {
     db.prepare("DELETE FROM editors WHERE id = ?1").bind(id),
   ]);
   return c.json({ ok: true });
+});
+
+// ---- Who can edit ----
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Adds someone to the edit list ({ email }). The first time, the person adding is put on it
+ * too, so turning on view-only can't lock them out.
+ */
+editing.post("/edit-access", requireAccess, async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json<{ email?: string }>().catch(() => null);
+  const email = body?.email?.trim().toLowerCase();
+  if (!email || email.length > 254 || !EMAIL.test(email)) return c.json({ error: "Enter an email address." }, 400);
+  const me = c.get("userEmail")!.toLowerCase();
+  const now = new Date().toISOString();
+  const add = (e: string) => db.prepare("INSERT OR IGNORE INTO edit_access (email, added_by, added_at) VALUES (?1, ?2, ?3)").bind(e, me, now);
+  const empty = !(await db.prepare("SELECT 1 AS x FROM edit_access LIMIT 1").first());
+  await db.batch(empty && email !== me ? [add(me), add(email)] : [add(email)]);
+  return c.json({ editAccess: await loadEditAccess(db) }, 201);
+});
+
+/** Takes someone off the edit list (they keep view access). You can't remove yourself. */
+editing.delete("/edit-access/:email", requireAccess, async (c) => {
+  const db = c.env.DB;
+  const email = decodeURIComponent(c.req.param("email")).toLowerCase();
+  if (email === c.get("userEmail")!.toLowerCase()) return c.json({ error: "You can't remove yourself. Ask another editor to." }, 400);
+  await db.prepare("DELETE FROM edit_access WHERE email = ?1").bind(email).run();
+  return c.json({ editAccess: await loadEditAccess(db) });
 });
 
 // ---- Pods ----

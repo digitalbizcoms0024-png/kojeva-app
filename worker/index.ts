@@ -39,6 +39,7 @@ import { loadCoverage } from "./coverage.ts";
 import { loadAddedPods } from "./pods.ts";
 import { ensureAttributed } from "./rules.ts";
 import { loadPersonas } from "./personas.ts";
+import { canEditWith, loadEditAccess } from "./roles.ts";
 
 const app = new Hono<AppEnv>().basePath("/api");
 
@@ -131,7 +132,7 @@ const SORTERS: Record<SortKey, (t: Totals) => number | null> = {
 
 app.get("/meta", async (c) => {
   const db = c.env.DB;
-  const [targets, latestDate, lastRun, pods, live, conn, attr, detected, editors, untagged, personas] = await Promise.all([
+  const [targets, latestDate, lastRun, pods, live, conn, attr, detected, editors, untagged, personas, editAccess] = await Promise.all([
     getTargets(db),
     getLatestDate(db),
     db
@@ -145,6 +146,7 @@ app.get("/meta", async (c) => {
     db.prepare("SELECT id, name, pod_id AS podId FROM editors ORDER BY name").all<Editor>(),
     getLatestDate(db).then((l) => (l ? untaggedSpend(db, shiftDay(l, -29), l) : { posts: 0, spendCents: 0 })),
     loadPersonas(db),
+    loadEditAccess(db),
   ]);
   const attribution = { ...DEFAULT_ATTRIBUTION, ...(attr ? (JSON.parse(attr.value) as Partial<AttributionSettings>) : {}) };
   const body: MetaResponse = {
@@ -162,8 +164,9 @@ app.get("/meta", async (c) => {
       detected: !attribution.podsStartDate,
     },
     editors: editors.results,
-    canEdit: accessConfigured(c.env),
+    canEdit: canEditWith(c.env, c.get("userEmail"), editAccess),
     viewer: c.get("userEmail"),
+    editAccess,
     needsTagging: untagged.posts,
     personas,
   };
