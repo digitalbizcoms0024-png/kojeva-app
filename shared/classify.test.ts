@@ -22,6 +22,9 @@ describe("classify", () => {
     ["KOJEVA 12 | WOMEN OVER 50", "MatureFace", null],
     ["KOJEVA 12 | AI UGC", null, "AIUGC"],
     ["KOJEVA 1 | ANIMSONG-HxM1", null, "Animation"],
+    // The media buyer's format names (Oct 2026), for ad sets named with them from now on.
+    ["KOJEVA 16 | AI DRAMA | Mini Movie", null, "AIDrama"],
+    ["KOJEVA 16 | PIXAR ANIMATION | Husband", "Husband", "Animation"],
     ["KOJEVA STATIC | Offer", "Offer", "Static"],
     ["KOJEVA STATIC | Mature Skin", "MatureFace", "Static"],
     ["Static 3 | Negative Marketing #2", "ProblemAware", "Static"],

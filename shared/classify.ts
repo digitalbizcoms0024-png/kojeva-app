@@ -27,13 +27,14 @@ const ANGLE_RULES: [Angle, RegExp][] = [
 ];
 
 const FORMAT_RULES: [Format, RegExp][] = [
+  ["AIDrama", /\bai drama\b/],
   ["AIUGC", /\bai ugc\b|ai voiceover/],
   ["UGC", /\bugc\b/],
   ["VSL", /\bvsl\b/],
   ["Native", /native ad|advertorial|listicle/],
   ["Podcast", /podcast/],
   ["Interview", /interview/],
-  ["Animation", /\banim/],
+  ["Animation", /\banim|pixar/],
   ["Carousel", /carousel/],
   ["Static", /\bstatics?\b|^st _/],
   ["Video", /\bvideos?\b|greenscreen|green screen/],

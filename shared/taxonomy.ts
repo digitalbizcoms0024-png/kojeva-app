@@ -93,6 +93,7 @@ export const FORMATS: Record<string, string> = {
   Interview: "Interview",
   Podcast: "Podcast",
   Animation: "Animation",
+  AIDrama: "AI drama ad",
   Carousel: "Carousel",
 };
 
