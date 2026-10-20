@@ -79,7 +79,7 @@ definitions; the nightly Atria task suggests a format from the ad's frames and A
 only, accepted in Needs Tagging). Put one in the ad set name
 ("Dhia | AI UGC | Problem Vs Solution 2") and the concept is tagged without anyone doing it by hand.
 Names without one (KOJEVA 15's videos, Dhia's "…_Brief" sets) were tagged by the media buyer in
-migrations 0018 and 0021, after checking each ad.
+migrations 0018, 0021 and 0023, after checking each ad.
 
 ## Open questions
 - Do older ad sets (before the naming habit started) also carry strategist names? If not, a tracker
