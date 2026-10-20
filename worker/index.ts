@@ -28,7 +28,7 @@ import { bumpVersion, cachedResponse, cacheResponse, dataVersion, memoize, readS
 import type { AppEnv, Env } from "./env.ts";
 import { loadAlerts, loadSuggestions } from "./alerts.ts";
 import { atria } from "./atria.ts";
-import { report } from "./report.ts";
+import { report, reports } from "./report.ts";
 import { calls, isMediaBuyer } from "./calls.ts";
 import { editing } from "./editing.ts";
 import { connection, sync } from "./meta/routes.ts";
@@ -643,6 +643,7 @@ app.get("/coverage", async (c) => {
 });
 
 // Mounted last so the read routes above take precedence.
+app.route("/reports", reports);
 app.route("/", calls);
 app.route("/", editing);
 

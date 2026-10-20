@@ -13,6 +13,7 @@ import { NamingToolPage } from "./pages/NamingTool.tsx";
 import { PodsPage } from "./pages/PodsView.tsx";
 import { RankingsPage } from "./pages/Rankings.tsx";
 import { SettingsPage } from "./pages/Settings.tsx";
+import { ReportsPage } from "./pages/Reports.tsx";
 import { TaggingPage } from "./pages/Tagging.tsx";
 
 
@@ -22,6 +23,7 @@ const NAV: { path: string; label: string; icon: IconName }[] = [
   { path: "pods", label: "Pods", icon: "pods" },
   { path: "insights", label: "Creative Insights", icon: "insights" },
   { path: "coverage", label: "Coverage Map", icon: "grid" },
+  { path: "reports", label: "CS Reports", icon: "report" },
   { path: "tagging", label: "Needs Tagging", icon: "tagging" },
   { path: "naming", label: "Naming Tool", icon: "naming" },
   { path: "settings", label: "Settings", icon: "settings" },
@@ -210,6 +212,7 @@ export default function App() {
         {m && path === "settings" && <SettingsPage meta={m} onSynced={refresh} />}
         {m && path === "insights" && <InsightsPage meta={m} range={range} setRange={setRange} />}
         {m && path === "coverage" && <CoveragePage meta={m} />}
+        {m && path === "reports" && <ReportsPage meta={m} />}
       </main>
       {m && route.params.get("concept") && (
         <ConceptDrawer conceptId={route.params.get("concept")!} meta={m} onClose={() => (window.location.hash = `#/${path}`)} />

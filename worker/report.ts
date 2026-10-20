@@ -1,12 +1,17 @@
-// The fortnightly CS performance report's numbers: every pod concept that started testing in
-// the period, with its judged result, its spend in the period and since launch, its days and
-// its ads. Read by the report task through /api/ingest/report (service token only); the
-// learnings are written from this. Built from stored data only (no Meta calls).
+// The fortnightly CS performance report (docs/METRICS.md → "CS report"). Its numbers: every pod
+// concept that started testing in the period (it counts in the period it launched), with its
+// result, spend in the period and since launch, days and ads; earlier concepts whose result came
+// in during the period (late verdicts); and the previous period's hit rate as it stands now.
+// Built from stored data only. The written part (learnings, read) is drafted by a fortnightly
+// Claude task through /api/ingest/report and edited by the team in the hub (reports table).
 import { Hono } from "hono";
+import type { LateVerdict, ReportData, ReportResponse, ReportsListResponse, ReportText } from "../shared/api.ts";
 import { addTotals, cpa, roas, ZERO_TOTALS, type Totals } from "../shared/metrics.ts";
-import { requireService } from "./access.ts";
+import { period, periodFrom, periodsUntil } from "../shared/periods.ts";
+import { requireAccess, requireService } from "./access.ts";
+import { bumpVersion } from "./cache.ts";
 import type { AppEnv } from "./env.ts";
-import { getTargets, loadConcepts, toTotals } from "./queries.ts";
+import { getLatestDate, getTargets, loadConcepts, toTotals } from "./queries.ts";
 import { loadPersonas } from "./personas.ts";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -25,7 +30,15 @@ function figures(t: Totals) {
   };
 }
 
-export async function buildReport(db: D1Database, from: string, to: string) {
+/** When a concept's result came in: its winner call, the end of its late-hit window, or its window closing. */
+function verdictOn(k: Concept): string | null {
+  if (k.call) return k.call.calledAt.slice(0, 10);
+  if (k.status === "late_hit" && k.lateWindow) return k.lateWindow.to;
+  if (k.status === "hit" || k.status === "miss") return k.windowEnd;
+  return null;
+}
+
+export async function buildReport(db: D1Database, from: string, to: string): Promise<ReportData> {
   const [targets, all, personas, pods] = await Promise.all([
     getTargets(db),
     loadConcepts(db),
@@ -69,7 +82,7 @@ export async function buildReport(db: D1Database, from: string, to: string) {
   }
 
   const persona = new Map(personas.map((p) => [p.id, p.name]));
-  const concepts = launched.map((k: Concept) => {
+  const concepts: ReportData["concepts"] = launched.map((k: Concept) => {
     const mine = rows.filter((r) => r.concept_id === k.conceptId);
     const byDay = new Map<string, Totals>();
     const ads = new Map<string, { name: string; status: string; period: Totals; allTime: Totals }>();
@@ -122,22 +135,142 @@ export async function buildReport(db: D1Database, from: string, to: string) {
     };
   });
 
+  const lateVerdicts: LateVerdict[] = all
+    .filter((k) => podIds.has(k.podId) && k.firstSpend < from)
+    .flatMap((k) => {
+      const on = verdictOn(k);
+      if (!on || on < from || on > to) return [];
+      return [
+        {
+          conceptId: k.conceptId,
+          podId: k.podId,
+          label: k.label,
+          format: k.format,
+          status: k.status,
+          firstSpend: k.firstSpend,
+          verdictOn: on,
+          window: figures(k.window),
+          lateWindow: k.lateWindow ? { from: k.lateWindow.from, to: k.lateWindow.to, ...figures(k.lateWindow.totals) } : null,
+          allTime: figures(k.allTime),
+        },
+      ];
+    })
+    .sort((a, b) => a.verdictOn.localeCompare(b.verdictOn) || b.window.spendCents - a.window.spendCents);
+
+  const here = periodFrom(from);
+  const prev = here && here.n > 1 && here.to === to ? period(here.n - 1) : null;
+
   return {
     from,
     to,
+    n: here && here.to === to ? here.n : null,
+    lateVerdicts,
+    previous: prev && {
+      ...prev,
+      concepts: all
+        .filter((k) => podIds.has(k.podId) && k.firstSpend >= prev.from && k.firstSpend <= prev.to)
+        .map((k) => ({ podId: k.podId, label: k.label, status: k.status })),
+    },
     targets,
     pods: pods.results.filter((p) => podIds.has(p.id)).map((p) => ({ podId: p.id, name: p.name, testingSpendCents: testingSpend.get(p.id) ?? 0 })),
     concepts,
   };
 }
 
+async function loadText(db: D1Database, from: string): Promise<ReportText | null> {
+  const r = await db
+    .prepare("SELECT learnings, read, source, updated_by, updated_at FROM reports WHERE period_from = ?1")
+    .bind(from)
+    .first<{ learnings: string; read: string; source: ReportText["source"]; updated_by: string | null; updated_at: string }>();
+  return r && { learnings: r.learnings, read: r.read, source: r.source, updatedBy: r.updated_by, updatedAt: r.updated_at };
+}
+
+const MAX_TEXT = 12_000;
+const cleanText = (v: unknown) => (typeof v === "string" ? v.replace(/\r\n/g, "\n").trim() : null);
+
+// ---- In the hub: everyone signed in reads; editors edit the written part. ----
+
+export const reports = new Hono<AppEnv>();
+
+reports.get("/", async (c) => {
+  const db = c.env.DB;
+  const latest = await getLatestDate(db);
+  const { results } = await db.prepare("SELECT period_from, source FROM reports").all<{ period_from: string; source: ReportText["source"] }>();
+  const text = new Map(results.map((r) => [r.period_from, r.source]));
+  const body: ReportsListResponse = { periods: latest ? periodsUntil(latest).map((p) => ({ ...p, text: text.get(p.from) ?? null })) : [] };
+  return c.json(body);
+});
+
+reports.get("/:from", async (c) => {
+  const p = periodFrom(c.req.param("from"));
+  if (!p) return c.json({ error: "No report period starts on that day." }, 404);
+  const body: ReportResponse = { data: await buildReport(c.env.DB, p.from, p.to), text: await loadText(c.env.DB, p.from) };
+  return c.json(body);
+});
+
+/** { learnings, read }: the team's edit. From then on Claude's draft never replaces it. */
+reports.put("/:from", requireAccess, async (c) => {
+  const p = periodFrom(c.req.param("from"));
+  if (!p) return c.json({ error: "No report period starts on that day." }, 404);
+  const body = await c.req.json<{ learnings?: unknown; read?: unknown }>().catch(() => null);
+  const learnings = cleanText(body?.learnings);
+  const read = cleanText(body?.read);
+  if (learnings == null || read == null || learnings.length > MAX_TEXT || read.length > MAX_TEXT)
+    return c.json({ error: `Send learnings and read as text (up to ${MAX_TEXT} characters each).` }, 400);
+  await c.env.DB.prepare(
+    `INSERT INTO reports (period_from, period_to, learnings, read, source, updated_by, updated_at) VALUES (?1, ?2, ?3, ?4, 'edited', ?5, ?6)
+     ON CONFLICT(period_from) DO UPDATE SET learnings = excluded.learnings, read = excluded.read, source = 'edited',
+       updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+  )
+    .bind(p.from, p.to, learnings, read, c.get("userEmail"), new Date().toISOString())
+    .run();
+  return c.json({ ok: true });
+});
+
+// ---- For the fortnightly Claude task (service token only). ----
+
 export const report = new Hono<AppEnv>();
 report.use("*", requireService("ATRIA_CLIENT_ID"));
 
-/** GET /api/ingest/report?from=YYYY-MM-DD&to=YYYY-MM-DD */
+/** GET /api/ingest/report?from=YYYY-MM-DD&to=YYYY-MM-DD: the numbers for any range. */
 report.get("/", async (c) => {
   const from = c.req.query("from") ?? "";
   const to = c.req.query("to") ?? "";
   if (!DAY.test(from) || !DAY.test(to) || from > to) return c.json({ error: "Give from and to as YYYY-MM-DD." }, 400);
   return c.json(await buildReport(c.env.DB, from, to));
+});
+
+/** The latest closed period without a written part yet, or null: what the task should draft. */
+report.get("/due", async (c) => {
+  const db = c.env.DB;
+  const latest = await getLatestDate(db);
+  if (!latest) return c.json({ due: null });
+  const closed = periodsUntil(latest).filter((p) => p.closed && p.n > 1);
+  const last = closed[0];
+  const drafted = last && (await db.prepare("SELECT 1 AS x FROM reports WHERE period_from = ?1").bind(last.from).first());
+  return c.json({ due: last && !drafted ? last : null });
+});
+
+/** POST { from, learnings, read }: Claude's draft. Refused once the team has edited the report. */
+report.post("/draft", async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json<{ from?: string; learnings?: unknown; read?: unknown }>().catch(() => null);
+  const p = periodFrom(body?.from ?? "");
+  const learnings = cleanText(body?.learnings);
+  const read = cleanText(body?.read);
+  if (!p) return c.json({ error: "from must be the first day of a report period." }, 400);
+  if (!learnings || !read || learnings.length > MAX_TEXT || read.length > MAX_TEXT)
+    return c.json({ error: `Send learnings and read as text (up to ${MAX_TEXT} characters each).` }, 400);
+  const existing = await loadText(db, p.from);
+  if (existing?.source === "edited") return c.json({ error: "The team has edited this report; the draft wasn't saved." }, 409);
+  const res = await db
+    .prepare(
+      `INSERT INTO reports (period_from, period_to, learnings, read, source, updated_by, updated_at) VALUES (?1, ?2, ?3, ?4, 'claude', NULL, ?5)
+       ON CONFLICT(period_from) DO UPDATE SET learnings = excluded.learnings, read = excluded.read, updated_at = excluded.updated_at
+       WHERE reports.source = 'claude' AND (reports.learnings <> excluded.learnings OR reports.read <> excluded.read)`,
+    )
+    .bind(p.from, p.to, learnings, read, new Date().toISOString())
+    .run();
+  if (res.meta.changes > 0) await bumpVersion(db);
+  return c.json({ ok: true, saved: res.meta.changes > 0 });
 });

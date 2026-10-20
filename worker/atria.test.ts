@@ -274,3 +274,36 @@ describe("report numbers", () => {
     expect((await call("/api/ingest/report?from=2026-10-05&to=2026-10-01", service)).status).toBe(400);
   });
 });
+
+describe("report periods and text", () => {
+  it("drafts the latest closed period once, and never replaces the team's edit", async () => {
+    // Data through Oct 20 closes report 2 (Oct 5–18).
+    await env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES ('a1', '2026-10-20', 100, 0, 0)").run();
+    const due = (await (await call("/api/ingest/report/due", service)).json()) as { due: { n: number; from: string; to: string } | null };
+    expect(due.due).toMatchObject({ n: 2, from: "2026-10-05", to: "2026-10-18" });
+
+    const draft = (body: unknown) => call("/api/ingest/report/draft", service, post(body));
+    expect((await draft({ from: "2026-10-06", learnings: "x", read: "y" })).status).toBe(400);
+    expect(((await (await draft({ from: "2026-10-05", learnings: "* One", read: "Read" })).json()) as { saved: boolean }).saved).toBe(true);
+    expect(((await (await draft({ from: "2026-10-05", learnings: "* One", read: "Read" })).json()) as { saved: boolean }).saved).toBe(false);
+    expect(((await (await call("/api/ingest/report/due", service)).json()) as { due: unknown }).due).toBeNull();
+
+    // A person edits it; Claude can't replace it after that, and can't use the person's route.
+    const edit = { method: "PUT", body: JSON.stringify({ learnings: "* Edited", read: "Mine" }) };
+    expect((await call("/api/reports/2026-10-05", service, edit)).status).toBe(403);
+    expect((await call("/api/reports/2026-10-05", person, edit)).status).toBe(200);
+    expect((await draft({ from: "2026-10-05", learnings: "* Two", read: "Read" })).status).toBe(409);
+    const r = (await (await call("/api/reports/2026-10-05", person)).json()) as { text: { learnings: string; source: string; updatedBy: string } };
+    expect(r.text).toMatchObject({ learnings: "* Edited", source: "edited", updatedBy: "nosa@kojeva.com" });
+  });
+
+  it("lists earlier concepts whose result came in during the period as late verdicts", async () => {
+    const r = (await (await call("/api/ingest/report?from=2026-10-02&to=2026-10-15", service)).json()) as {
+      concepts: unknown[];
+      lateVerdicts: { label: string; status: string; verdictOn: string }[];
+    };
+    // Launched Oct 1 (before the range), judged on day 3 (Oct 3), inside it.
+    expect(r.concepts).toHaveLength(0);
+    expect(r.lateVerdicts.map((v) => [v.status, v.verdictOn])).toContainEqual(["hit", "2026-10-03"]);
+  });
+});

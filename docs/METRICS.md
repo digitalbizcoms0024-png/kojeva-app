@@ -109,6 +109,24 @@ rule, Oct 2026). Only the media buyer makes the call (`MEDIA_BUYER_EMAILS`), tie
   media buyer can undo it. A called concept's status is `winner` / `super_winner` and counts as a hit
   everywhere (`isHit`), labelled "(call)". MER can't be shown: the hub has Meta numbers only.
 
+## CS report (`worker/report.ts`, CS Reports page)
+Fortnightly, Monday to Sunday (`shared/periods.ts`): report 1 is Sep 18 – Oct 4, 2026 (written by hand),
+then Oct 5 – 18, Oct 19 – Nov 1, and so on.
+- **A concept counts in the period it launched** (first spend). **Eligible** = an ad reached
+  `minTestSpend`; the hit rate is hits (on target, late hits, winners by call) ÷ eligible.
+- **Spend on this period's concepts**: their spend inside the period. **All testing spend**: every pod
+  concept's spend in the period, including earlier ones still running. Agency and scaling ad sets are
+  never in either.
+- **Late verdicts**: concepts from earlier periods whose result came in during this one (their window
+  closed, a late-hit window ended, or a winner call). They stay in their launch period's numbers, which
+  the report shows "as it stands now" for the previous period.
+- Per pod: totals, hits, the strongest miss (a candidate is marked), and output by format. Formats won
+  count eligible concepts by format.
+- **Learnings and read** are drafted by a scheduled Claude task each Monday after a period closes
+  (`/api/ingest/report/due`, `…/report?from&to`, `…/report/draft`; service token only), and edited by
+  editors in the hub. Once edited, a draft never replaces it. Copy for Slack copies the same text as
+  rich text (bold and bullets survive) with a mrkdwn fallback.
+
 ## Spend by pod
 - Pods page section (and a share bar on the Dashboard): spend per pod, the agency and unassigned for the global range, share of
   total, and change vs the period before (same length). Spend changes are shown without good/bad color.

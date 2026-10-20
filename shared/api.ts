@@ -493,3 +493,86 @@ export interface ConceptCall {
   calledAt: string;
   evidence: CallEvidence;
 }
+
+/** Totals with the ratios people read (CS report). */
+export type ReportFigures = Totals & { cpa: number | null; roas: number | null; cpm: number | null };
+
+/** One pod concept in a CS report. */
+export interface ReportConcept {
+  conceptId: string;
+  podId: string;
+  label: string;
+  adsetName: string;
+  status: HitStatus;
+  call: ConceptCall | null;
+  candidate: "winner" | "super_winner" | null;
+  firstSpend: string;
+  windowEnd: string;
+  lastSpend: string | null;
+  stillRunning: boolean;
+  tags: {
+    angle: string | null;
+    format: string | null;
+    awareness: string | null;
+    persona: string | null;
+    motivations: string[];
+    beliefGroups: string[];
+    atriaThemes: string[];
+    atriaHooks: string[];
+  };
+  window: ReportFigures;
+  lateWindow: ({ from: string; to: string } & ReportFigures) | null;
+  /** Spend in the report's period only. */
+  period: ReportFigures;
+  allTime: ReportFigures;
+  daily: ({ date: string } & ReportFigures)[];
+  ads: { name: string; status: string; period: ReportFigures; allTime: ReportFigures }[];
+}
+
+/** An earlier period's concept whose result came in during this period (CS report → Late verdicts). */
+export interface LateVerdict {
+  conceptId: string;
+  podId: string;
+  label: string;
+  format: string | null;
+  status: HitStatus;
+  firstSpend: string;
+  /** When the result came in: window closed, late-hit window ended, or the winner call. */
+  verdictOn: string;
+  window: ReportFigures;
+  lateWindow: ({ from: string; to: string } & ReportFigures) | null;
+  allTime: ReportFigures;
+}
+
+/** Everything a CS report is written from (GET /api/reports/:from, /api/ingest/report). */
+export interface ReportData {
+  from: string;
+  to: string;
+  /** Report number (1 = Sep 18 – Oct 4, 2026), when the range is a report period. */
+  n: number | null;
+  targets: Targets;
+  pods: { podId: string; name: string; testingSpendCents: number }[];
+  concepts: ReportConcept[];
+  lateVerdicts: LateVerdict[];
+  /** The previous period's concepts' results as they stand now (its hit rate, updated). */
+  previous: { n: number; from: string; to: string; concepts: { podId: string; label: string; status: HitStatus }[] } | null;
+}
+
+/** The written part of a report: Claude's draft, or the team's edit of it. */
+export interface ReportText {
+  learnings: string;
+  read: string;
+  /** "claude" until someone edits it in the hub. */
+  source: "claude" | "edited";
+  updatedBy: string | null;
+  updatedAt: string;
+}
+
+export interface ReportResponse {
+  data: ReportData;
+  text: ReportText | null;
+}
+
+export interface ReportsListResponse {
+  periods: { n: number; from: string; to: string; closed: boolean; text: ReportText["source"] | null }[];
+}

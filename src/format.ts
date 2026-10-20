@@ -11,6 +11,12 @@ export function money(cents: number | null | undefined, opts: { compact?: boolea
   return `$${dollars.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
+/** Cents to "$7,747.11" (reports, where exact amounts are quoted). */
+export function moneyExact(cents: number | null | undefined): string {
+  if (cents == null) return DASH;
+  return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export function dollars(v: number | null | undefined): string {
   if (v == null) return DASH;
   return `$${v.toFixed(2)}`;
