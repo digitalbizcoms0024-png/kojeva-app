@@ -72,7 +72,8 @@ app.use("*", async (c, next) => {
       : "";
   const version = await dataVersion(c.env.DB);
   const url = new URL(c.req.url);
-  const stored = `resp:${url.pathname}${url.search}|${extra}`;
+  // Keyed by the deployed version too: a deploy that changes a response's shape must not serve the old one.
+  const stored = `resp:${c.env.CF_VERSION_METADATA?.id ?? ""}|${url.pathname}${url.search}|${extra}`;
   const key = `${version}|${stored}`;
   const json = { "Content-Type": "application/json; charset=UTF-8" };
   const hit = cachedResponse(key);

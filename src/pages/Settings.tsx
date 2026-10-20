@@ -632,7 +632,7 @@ function EditAccessCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => 
   const { busy, run, note } = useSave(onSaved);
   const [email, setEmail] = useState("");
   const me = meta.viewer?.toLowerCase() ?? null;
-  const list = meta.editAccess;
+  const list = meta.editAccess ?? [];
   const off = !meta.canEdit || busy;
   const add = async () => {
     const e = email.trim();

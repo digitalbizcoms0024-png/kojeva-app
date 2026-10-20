@@ -18,6 +18,8 @@ export interface Env {
   ACCESS_AUD?: string;
   /** Client ID of the Access service token the nightly Atria task uses (not secret on its own). */
   ATRIA_CLIENT_ID?: string;
+  /** The deployed Worker version (wrangler.jsonc version_metadata). Missing in tests and the preview. */
+  CF_VERSION_METADATA?: { id: string };
 }
 
 export type AppEnv = { Bindings: Env; Variables: { userEmail: string | null } };
