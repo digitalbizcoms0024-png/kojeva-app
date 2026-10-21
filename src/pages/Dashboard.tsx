@@ -279,11 +279,16 @@ function Leaderboard({
 }
 
 /**
- * Ads (posts) whose first spend was in the last 7 days, biggest spend first, with CPA and ROAS.
+ * Ads (posts) whose first spend was this week (Monday to the latest synced day, the same Mon–Sun
+ * weeks as the launch grid), biggest spend first, with CPA and ROAS.
  * A row opens the ad on Ad Rankings.
  */
 function NewThisWeek({ meta }: { meta: MetaResponse }) {
-  const { data, error, retry } = useApi<RankingsResponse>(`/api/rankings?${qs({ range: "week", sort: "spend" })}`);
+  const latest = meta.latestDate;
+  // Monday of the latest synced day's week (getUTCDay: Sunday 0 … Saturday 6).
+  const monday = latest ? shiftDay(latest, -((new Date(`${latest}T00:00:00Z`).getUTCDay() + 6) % 7)) : null;
+  const week = monday && latest ? (`custom:${monday}:${latest}` as Range) : null;
+  const { data, error, retry } = useApi<RankingsResponse>(week ? `/api/rankings?${qs({ range: week, sort: "spend" })}` : null);
   const tg = meta.targets;
   const rows = data ? data.items.filter((p) => p.firstSpend != null && p.firstSpend >= data.from) : [];
   return (
@@ -293,13 +298,13 @@ function NewThisWeek({ meta }: { meta: MetaResponse }) {
         right={
           data && (
             <span className="text-sm text-ink-3">
-              {rows.length} ad{rows.length === 1 ? "" : "s"} launched {shortDate(data.from)} – {shortDate(data.to)}
+              {rows.length} ad{rows.length === 1 ? "" : "s"} launched Mon {shortDate(data.from)} – {shortDate(data.to)}
             </span>
           )
         }
       />
       <LoadError error={error} retry={retry} what="new ads" loading={!data} rows={5} />
-      {data && rows.length === 0 && <Empty small>No ads launched in the last 7 days.</Empty>}
+      {data && rows.length === 0 && <Empty small>No ads launched this week (since Monday).</Empty>}
       {rows.length > 0 && (
         <table className="w-full table-fixed text-sm">
           <thead className="kicker text-left">
@@ -340,8 +345,8 @@ function NewThisWeek({ meta }: { meta: MetaResponse }) {
         </table>
       )}
       {rows.length > 8 && (
-        <a href="#/rankings?range=week" className="link mt-2 inline-flex items-center gap-1 text-sm">
-          All {rows.length} on Ad Rankings <Icon name="arrow" size={14} />
+        <a href={`#/rankings?range=${week}`} className="link mt-2 inline-flex items-center gap-1 text-sm">
+          This week on Ad Rankings <Icon name="arrow" size={14} />
         </a>
       )}
     </section>
