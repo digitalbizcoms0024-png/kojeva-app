@@ -55,6 +55,8 @@
     // other than main deploy here (npm run deploy:preview); main deploys the live hub.
     "preview": {
       "name": "kojeva-hub-preview",
+      // Bindings aren't inherited by an env: without this, saved responses outlive a deploy.
+      "version_metadata": { "binding": "CF_VERSION_METADATA" },
       "d1_databases": [
         {
           "binding": "DB",
