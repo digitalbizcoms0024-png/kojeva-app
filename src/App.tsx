@@ -19,16 +19,23 @@ import { closeHref, readDrill } from "./drill.ts";
 import { TaggingPage } from "./pages/Tagging.tsx";
 
 
-const NAV: { path: string; label: string; icon: IconName }[] = [
-  { path: "dashboard", label: "Dashboard", icon: "dashboard" },
-  { path: "rankings", label: "Ad Rankings", icon: "rankings" },
-  { path: "pods", label: "Pods", icon: "pods" },
-  { path: "insights", label: "Creative Insights", icon: "insights" },
-  { path: "coverage", label: "Coverage Map", icon: "grid" },
-  { path: "reports", label: "CS Reports", icon: "report" },
-  { path: "tagging", label: "Needs Tagging", icon: "tagging" },
-  { path: "naming", label: "Naming Tool", icon: "naming" },
-  { path: "settings", label: "Settings", icon: "settings" },
+/** The menu in two groups: pages to read, and work to do (only for people on the edit list). */
+type NavGroup = "analyse" | "do" | "settings";
+const NAV: { path: string; label: string; icon: IconName; group: NavGroup }[] = [
+  { path: "dashboard", label: "Dashboard", icon: "dashboard", group: "analyse" },
+  { path: "rankings", label: "Ad Rankings", icon: "rankings", group: "analyse" },
+  { path: "pods", label: "Pods", icon: "pods", group: "analyse" },
+  { path: "insights", label: "Creative Insights", icon: "insights", group: "analyse" },
+  { path: "coverage", label: "Coverage Map", icon: "grid", group: "analyse" },
+  { path: "reports", label: "CS Reports", icon: "report", group: "analyse" },
+  { path: "tagging", label: "To review", icon: "tagging", group: "do" },
+  { path: "naming", label: "Naming Tool", icon: "naming", group: "do" },
+  { path: "settings", label: "Settings", icon: "settings", group: "settings" },
+];
+const NAV_GROUPS: { group: NavGroup; label: string | null }[] = [
+  { group: "analyse", label: "Analyse" },
+  { group: "do", label: "Do" },
+  { group: "settings", label: null },
 ];
 
 /** "#/rankings?post=123" → { path: "rankings", params: post=123 } */
@@ -137,26 +144,36 @@ export default function App() {
           </button>
         </div>
         <nav id="main-nav" className={`${menuOpen ? "flex" : "hidden"} flex-col gap-0.5 px-2 pb-3 md:flex md:px-0 md:pb-0`}>
-          {NAV.map((n) => {
-            const active = path === n.path;
-            const badge = n.path === "tagging" && m && m.needsTagging > 0 ? m.needsTagging : null;
+          {NAV_GROUPS.map(({ group, label }) => {
+            // View-only people don't get the work pages; they can still open them by link.
+            const items = NAV.filter((x) => x.group === group && (group !== "do" || !m || m.canEdit));
+            if (!items.length) return null;
             return (
-              <a
-                key={n.path}
-                href={`#/${n.path}`}
-                aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-2.5 px-2.5 py-2 text-sm transition ${
-                  active ? "bg-surface font-bold text-accent-ink" : "text-ink hover:bg-surface"
-                }`}
-              >
-                <Icon name={n.icon} />
-                <span className="flex-1">{n.label}</span>
-                {badge != null && (
-                  <span className="bg-accent px-1.5 py-px text-[11px] font-semibold text-on-accent" title="Ads with spend in the last 30 days and no pod">
-                    {badge}
-                  </span>
-                )}
-              </a>
+              <div key={group} className={`flex flex-col gap-0.5 ${group === "analyse" ? "" : "mt-3"} ${group === "settings" ? "border-t border-divider pt-3" : ""}`}>
+                {label && <div className="kicker px-2.5 pb-1">{label}</div>}
+                {items.map((n) => {
+                  const active = path === n.path;
+                  const badge = n.path === "tagging" && m && m.needsTagging > 0 ? m.needsTagging : null;
+                  return (
+                    <a
+                      key={n.path}
+                      href={`#/${n.path}`}
+                      aria-current={active ? "page" : undefined}
+                      className={`flex items-center gap-2.5 px-2.5 py-2 text-sm transition ${
+                        active ? "bg-surface font-bold text-accent-ink" : "text-ink hover:bg-surface"
+                      }`}
+                    >
+                      <Icon name={n.icon} />
+                      <span className="flex-1">{n.label}</span>
+                      {badge != null && (
+                        <span className="bg-accent px-1.5 py-px text-[11px] font-semibold text-on-accent" title="Ads with spend in the last 30 days and no pod">
+                          {badge}
+                        </span>
+                      )}
+                    </a>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>

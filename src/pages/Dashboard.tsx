@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { AlertsResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
-import { cpa, roas, type Targets, type Totals } from "../../shared/metrics.ts";
+import { cpa, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, previousPeriod, rangeLabel, shiftDay, type Range } from "../components/HeaderControls.tsx";
 import { PodSpend } from "../components/PodSpend.tsx";
@@ -85,40 +85,19 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
           />
         </div>
 
+        <AlertsSection alerts={alerts} />
+
         <PodSpend range={range} latest={meta.latestDate} targets={tg} compact />
 
         <section>
           <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by hit rate · ${shortDate(pods.data.from === "2000-01-01" ? null : pods.data.from)} – ${shortDate(pods.data.to)} · Meta`} />
           <LoadError error={pods.error} retry={pods.retry} what="the pods" />
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {ranked.map((r, i) => (
-              <PodCard
-                key={r.podId}
-                r={r}
-                rank={i + 1}
-                targets={tg}
-                sparkDays={sparkDays}
-                launchedThisWeek={launches.data?.rows.find((l) => l.podId === r.podId)?.counts[0] ?? null}
-              />
-            ))}
-          </div>
-          {agency && agency.totals.spendCents > 0 && (
-            <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-2">
-              <PodChip podId="agency" />
-              <span className="num">
-                {money(agency.totals.spendCents, { compact: true })} spend · CPA{" "}
-                <CpaValue value={cpa(agency.totals)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} /> · ROAS{" "}
-                <RoasValue value={roas(agency.totals)} target={tg.targetRoas} />
-              </span>
-              <span className="text-xs text-ink-3">Shown beside the pods, never counted in them.</span>
-            </p>
-          )}
+          <Leaderboard rows={ranked} agency={agency} targets={tg} sparkDays={sparkDays} launches={launches.data} />
         </section>
 
         <TrendsSection meta={meta} range={range} />
 
-        <div className="grid gap-8 xl:grid-cols-2">
-          <section className="min-w-0">
+          <section>
             <SectionTitle
               title={`Top 5 ads ${rangeLabel(range)}`}
               right={
@@ -173,31 +152,6 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
             <p className="mt-2 text-xs text-ink-3">Ranked by spend · CPA and ROAS from Meta · copies grouped by post</p>
           </section>
 
-          <section className="min-w-0">
-            <SectionTitle title="Alerts" right={alerts.data && `${alerts.data.alerts.length} open${alerts.data.asOf ? ` · data through ${shortDate(alerts.data.asOf)}` : ""}`} />
-            <LoadError error={alerts.error} retry={alerts.retry} what="alerts" />
-            {alerts.data && alerts.data.alerts.length === 0 && <p className="py-3 text-sm text-ink-3">Nothing needs a look right now.</p>}
-            <ul>
-              {alerts.data?.alerts.map((a) => (
-                <li key={a.id} className="flex items-start gap-3 border-b border-divider py-3">
-                  <span
-                    className={`mt-0.5 grid size-4 shrink-0 place-items-center text-[10px] font-bold text-page ${a.tone === "bad" ? "bg-bad" : a.tone === "warn" ? "bg-warn" : "bg-good"}`}
-                    aria-label={a.tone === "bad" ? "Problem" : a.tone === "warn" ? "Needs attention" : "Good news"}
-                  >
-                    {a.tone === "bad" ? "✕" : a.tone === "warn" ? "!" : "✓"}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-ink">{a.title}</div>
-                    <div className="text-sm text-ink-3">{a.detail}</div>
-                  </div>
-                  <a href={a.href} className="link shrink-0 text-sm">
-                    {a.action}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </div>
       </div>
     </div>
   );
@@ -238,71 +192,170 @@ function TrendsSection({ meta, range }: { meta: MetaResponse; range: Range }) {
   );
 }
 
-function PodCard({
-  r,
-  rank,
+
+
+/**
+ * The pods ranked by hit rate as one compact table (it replaced a card per pod, which made an empty
+ * pod as tall as a busy one). The agency sits under it, shown but never ranked.
+ */
+function Leaderboard({
+  rows,
+  agency,
   targets,
   sparkDays,
-  launchedThisWeek,
+  launches,
 }: {
-  r: PodRow;
-  rank: number;
+  rows: PodRow[];
+  agency: PodRow | undefined;
   targets: Targets;
   sparkDays: string[];
-  launchedThisWeek: number | null;
+  launches: LaunchesResponse | null;
 }) {
-  const editors = r.editors.filter((e) => e.editorId).length;
-  const decided = r.hits + r.misses;
-  const tot: Totals = r.totals;
-  return (
-    <div className="flex flex-col bg-surface p-4" style={{ borderTop: `4px solid var(--pod-${r.podId})` }}>
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2 text-lg font-extrabold text-ink">
-            <span className="size-2.5" style={{ background: `var(--pod-${r.podId})` }} aria-hidden />
+  const line = (r: PodRow, rank: number | null) => {
+    const decided = r.hits + r.misses;
+    const week = launches?.rows.find((l) => l.podId === r.podId)?.counts[0] ?? null;
+    return (
+      <tr key={r.podId} className={`border-b border-divider ${rank == null ? "text-ink-3" : ""}`}>
+        <td className="num w-8 py-3 align-middle font-bold text-ink-3">{rank ?? ""}</td>
+        <td className="py-3 pr-3">
+          <a href="#/pods" className="inline-flex items-center gap-2 font-bold text-ink hover:underline">
+            <span className="size-2.5 shrink-0" style={{ background: `var(--pod-${r.podId})` }} aria-hidden />
             {r.name}
-          </div>
+          </a>
           <div className="text-xs text-ink-3">
-            Strategist · {editors} {editors === 1 ? "editor" : "editors"} with ads
-            {launchedThisWeek != null && (
-              <>
-                {" · "}
-                <b className="text-ink">{launchedThisWeek}</b> {launchedThisWeek === 1 ? "concept" : "concepts"} this week
-              </>
-            )}
+            {rank == null
+              ? "Shown beside the pods, never counted in them"
+              : `${week ?? 0} ${week === 1 ? "concept" : "concepts"} this week${r.testing ? ` · ${r.testing} testing` : ""}`}
           </div>
-        </div>
-        <span className="num text-sm font-bold text-ink-3">#{rank}</span>
-      </div>
-      <div className="kicker mt-4">Hit rate</div>
-      <div className="num text-[44px] leading-none font-extrabold tracking-[-0.03em] text-ink">{pct(r.hitRate, 0)}</div>
-      <div className="mt-1 text-xs text-ink-3">
-        {decided ? `${r.hits} of ${decided} concepts hit${r.lateHits ? ` (${r.lateHits} late)` : ""}` : "No decided concepts yet"}
-        {r.testing > 0 && ` · ${r.testing} testing`}
-      </div>
-      <div className="mt-4">
-        <Sparkline values={r.spark} days={sparkDays} color={`var(--pod-${r.podId})`} label={r.name} />
-        <div className="mt-1 text-[11px] text-ink-3">Daily spend, last 7 days</div>
-      </div>
-      <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-divider pt-3">
-        <div>
-          <dt className="kicker">Spend</dt>
-          <dd className="num font-bold text-ink">{money(tot.spendCents, { compact: true })}</dd>
-        </div>
-        <div>
-          <dt className="kicker">CPA</dt>
-          <dd>
-            <CpaValue value={cpa(tot)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
-          </dd>
-        </div>
-        <div>
-          <dt className="kicker">ROAS</dt>
-          <dd>
-            <RoasValue value={roas(tot)} target={targets.targetRoas} />
-          </dd>
-        </div>
-      </dl>
-    </div>
+        </td>
+        <td className="py-3 pr-3 text-right">
+          <div className="num text-xl leading-none font-extrabold text-ink">{pct(r.hitRate, 0)}</div>
+          <div className="num text-xs text-ink-3">{decided ? `${r.hits}/${decided}${r.lateHits ? ` · ${r.lateHits} late` : ""}` : "none decided"}</div>
+        </td>
+        <td className="hidden w-36 py-3 pr-3 md:table-cell">
+          <Sparkline values={r.spark} days={sparkDays} color={`var(--pod-${r.podId})`} label={r.name} />
+        </td>
+        <td className="num py-3 pr-3 text-right text-ink">{money(r.totals.spendCents, { compact: true })}</td>
+        <td className="hidden py-3 pr-3 text-right sm:table-cell">
+          <CpaValue value={cpa(r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
+        </td>
+        <td className="hidden py-3 text-right sm:table-cell">
+          <RoasValue value={roas(r.totals)} target={targets.targetRoas} />
+        </td>
+      </tr>
+    );
+  };
+  if (!rows.length) return null;
+  return (
+    <table className="w-full text-sm">
+      <thead className="kicker text-left">
+        <tr className="border-b border-divider">
+          <th className="py-2 font-normal">#</th>
+          <th className="py-2 font-normal">Pod</th>
+          <th className="py-2 pr-3 text-right font-normal">Hit rate</th>
+          <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
+          <th className="py-2 pr-3 text-right font-normal">Spend</th>
+          <th className="hidden py-2 pr-3 text-right font-normal sm:table-cell">CPA</th>
+          <th className="hidden py-2 text-right font-normal sm:table-cell">ROAS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => line(r, i + 1))}
+        {agency && agency.totals.spendCents > 0 && line(agency, null)}
+      </tbody>
+    </table>
   );
 }
 
+const DISMISS_KEY = "dismissed-alerts";
+const WEEK_MS = 7 * 86_400_000;
+
+/** Alerts hidden for a week, in this browser only (a per-viewer convenience). */
+function readDismissed(): Record<string, number> {
+  try {
+    const all = JSON.parse(localStorage.getItem(DISMISS_KEY) ?? "{}") as Record<string, number>;
+    return Object.fromEntries(Object.entries(all).filter(([, until]) => until > Date.now()));
+  } catch {
+    return {};
+  }
+}
+
+/** Alerts first on the page: problems before warnings before good news, five at a time. */
+function AlertsSection({ alerts }: { alerts: { data: AlertsResponse | null; error: Error | null; retry: () => void } }) {
+  const [dismissed, setDismissed] = useState(readDismissed);
+  const [all, setAll] = useState(false);
+  const rank = { bad: 0, warn: 1, good: 2 } as const;
+  const open = (alerts.data?.alerts ?? []).filter((a) => !dismissed[a.id]).sort((a, b) => rank[a.tone] - rank[b.tone]);
+  const shown = all ? open : open.slice(0, 5);
+  const hidden = Object.keys(dismissed).length;
+  const dismiss = (id: string) => {
+    const next = { ...dismissed, [id]: Date.now() + WEEK_MS };
+    setDismissed(next);
+    try {
+      localStorage.setItem(DISMISS_KEY, JSON.stringify(next));
+    } catch {
+      /* per-browser convenience only */
+    }
+  };
+  const restore = () => {
+    setDismissed({});
+    try {
+      localStorage.removeItem(DISMISS_KEY);
+    } catch {
+      /* per-browser convenience only */
+    }
+  };
+  return (
+    <section>
+      <SectionTitle
+        title="Alerts"
+        right={
+          alerts.data && (
+            <span>
+              {open.length} open{alerts.data.asOf ? ` · data through ${shortDate(alerts.data.asOf)}` : ""}
+              {hidden > 0 && (
+                <>
+                  {" · "}
+                  <button type="button" className="link" onClick={restore}>
+                    show {hidden} hidden
+                  </button>
+                </>
+              )}
+            </span>
+          )
+        }
+      />
+      <LoadError error={alerts.error} retry={alerts.retry} what="alerts" />
+      {alerts.data && open.length === 0 && <p className="py-3 text-sm text-ink-3">Nothing needs a look right now.</p>}
+      <ul>
+        {shown.map((a) => (
+          <li key={a.id} className="flex items-start gap-3 border-b border-divider py-3">
+            <span
+              className={`mt-0.5 grid size-4 shrink-0 place-items-center text-[10px] font-bold text-page ${a.tone === "bad" ? "bg-bad" : a.tone === "warn" ? "bg-warn" : "bg-good"}`}
+              aria-label={a.tone === "bad" ? "Problem" : a.tone === "warn" ? "Needs attention" : "Good news"}
+            >
+              {a.tone === "bad" ? "✕" : a.tone === "warn" ? "!" : "✓"}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-ink">{a.title}</div>
+              <div className="text-sm text-ink-3">{a.detail}</div>
+            </div>
+            <span className="flex shrink-0 flex-col items-end gap-1 text-sm">
+              <a href={a.href} className="link">
+                {a.action}
+              </a>
+              <button type="button" className="text-xs text-ink-3 hover:text-ink" onClick={() => dismiss(a.id)} title="Hide this alert for a week, in this browser">
+                Hide for a week
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {open.length > 5 && (
+        <button type="button" className="link mt-2 text-sm" onClick={() => setAll((x) => !x)}>
+          {all ? "Show fewer" : `Show all ${open.length}`}
+        </button>
+      )}
+    </section>
+  );
+}

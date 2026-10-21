@@ -54,7 +54,7 @@ function MotivationPicker({ manual, claude, disabled, onChange }: { manual: stri
   );
 }
 
-type View = "unassigned" | "unplaced" | "all";
+type View = "unassigned" | "unplaced" | "suggestions" | "all";
 type Period = "month" | "all";
 
 const activePersonasCount = (meta: MetaResponse) => meta.personas.filter((p) => p.status === "active").length;
@@ -63,7 +63,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
   // "#/tagging?view=unplaced" (the Coverage map's "place them") opens on that list.
   const [view, setView] = useState<View>(() => {
     const v = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("view");
-    return v === "unplaced" || v === "all" ? v : "unassigned";
+    return v === "unplaced" || v === "suggestions" || v === "all" ? v : "unassigned";
   });
   const [period, setPeriod] = useState<Period>("month");
   const [search, setSearch] = useState("");
@@ -91,13 +91,23 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
   const suggestions = sugg.data?.suggestions ?? {};
   const activePersonas = meta.personas.filter((p) => p.status === "active");
   const personaName = (id: string | null) => activePersonas.find((p) => p.id === id)?.name ?? null;
+  // Claude's open suggestions for a post: a pod, and a format that differs from the one set.
+  const formatSuggestion = (r: PostSummary) => (r.labels.format && r.labels.format !== r.assignment.format ? r.labels.format : null);
+  const suggestionsOf = (r: PostSummary) => (suggestions[r.postId] ? 1 : 0) + (formatSuggestion(r) ? 1 : 0);
   const placed = (r: PostSummary) => !!personaName(r.assignment.personaId ?? r.labels.personaId) && !!(r.assignment.awareness ?? r.labels.awareness);
   useEffect(() => {
     // The map leaves out ads under MIN_MAP_SPEND_CENTS in the period, so this list does too.
-    if (data) setRows(view === "unplaced" ? data.items.filter((r) => !placed(r) && r.totals.spendCents >= MIN_MAP_SPEND_CENTS) : data.items);
+    if (data)
+      setRows(
+        view === "unplaced"
+          ? data.items.filter((r) => !placed(r) && r.totals.spendCents >= MIN_MAP_SPEND_CENTS)
+          : view === "suggestions"
+            ? data.items.filter((r) => suggestionsOf(r) > 0)
+            : data.items,
+      );
     setSelected(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  }, [data, view === "suggestions" ? sugg.data : null]);
 
   const pods = meta.pods;
   const podOptions = [{ value: "", label: "No pod" }, ...pods.map((p) => ({ value: p.id, label: p.name }))];
@@ -160,14 +170,19 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
 
   const acceptSuggestions = async () => {
     const byPod = new Map<string, string[]>();
-    for (const id of selected) {
-      const s = suggestions[id];
-      if (s) byPod.set(s.podId, [...(byPod.get(s.podId) ?? []), id]);
+    const byFormat = new Map<string, string[]>();
+    for (const r of rows) {
+      if (!selected.has(r.postId)) continue;
+      const s = suggestions[r.postId];
+      if (s) byPod.set(s.podId, [...(byPod.get(s.podId) ?? []), r.postId]);
+      const f = formatSuggestion(r);
+      if (f) byFormat.set(f, [...(byFormat.get(f) ?? []), r.postId]);
     }
-    const n = [...byPod.values()].reduce((k, ids) => k + ids.length, 0);
+    const n = [...byPod.values(), ...byFormat.values()].reduce((k, ids) => k + ids.length, 0);
     setBulkMsg("Saving…");
     try {
       for (const [podId, ids] of byPod) await bulk(ids, { podId });
+      for (const [format, ids] of byFormat) await bulk(ids, { format });
       setBulkMsg(`Accepted ${n} ${n === 1 ? "suggestion" : "suggestions"}.`);
       done();
     } catch (e) {
@@ -177,13 +192,13 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
 
   const allChecked = rows.length > 0 && rows.every((r) => selected.has(r.postId));
   const selectedSpend = rows.filter((r) => selected.has(r.postId)).reduce((n, r) => n + r.totals.spendCents, 0);
-  const selectedWithSuggestion = [...selected].filter((id) => suggestions[id]).length;
+  const selectedWithSuggestion = rows.filter((r) => selected.has(r.postId)).reduce((n, r) => n + suggestionsOf(r), 0);
   const stagedCount = Object.values(staged).filter((v) => v !== undefined).length;
   const stage = (k: keyof AssignmentPatch, v: string) => setStaged((s) => ({ ...s, [k]: v === "" ? undefined : v === "__none" ? null : v }));
 
   return (
     <div>
-      <PageHeader title="Needs Tagging" subtitle="Fix what the hub can't work out on its own. Hand-set values are kept when syncs run.">
+      <PageHeader title="To review" subtitle="Fix what the hub can't work out on its own. Hand-set values are kept when syncs run.">
         <HeaderControls meta={meta} />
       </PageHeader>
 
@@ -199,6 +214,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
             ...(activePersonas.length
               ? [{ value: "unplaced" as const, label: `Not on the coverage map${map.data?.unplaced ? ` · ${map.data.unplaced}` : ""}` }]
               : []),
+            { value: "suggestions", label: "Claude's suggestions" },
             { value: "all", label: "All ads" },
           ]}
         />
@@ -241,6 +257,12 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
               awareness in the bar that appears. Press ▶ to watch an ad first.
             </p>
           </div>
+        )}
+        {view === "suggestions" && (
+          <p className="text-sm text-ink-3">
+            Pods and formats Claude suggests, never applied without you. Use one with its <b className="text-ink-2">use</b> link, or tick several and press{" "}
+            <b className="text-ink-2">Accept</b> in the bar that appears.
+          </p>
         )}
         {view === "all" && <p className="text-sm text-ink-3">Every ad, highest spend first, to change any tag by hand.</p>}
 

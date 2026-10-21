@@ -206,7 +206,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
               </div>
               <p className="mt-2 max-w-[100ch] text-xs text-ink-3">
                 Shading = share of spend in the period (Meta). CPA and ROAS are Meta's over the period; hit rate is every concept ever tested in the cell, so
-                empty cells still show what was tried. Persona and awareness are Claude's labels unless set by hand in Needs Tagging.
+                empty cells still show what was tried. Persona and awareness are Claude's labels unless set by hand in To review.
               </p>
             </section>
           </>

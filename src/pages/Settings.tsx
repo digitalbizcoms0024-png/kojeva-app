@@ -504,7 +504,7 @@ function AddedPods({ meta, onSaved }: { meta: MetaResponse; onSaved: () => void 
                 className="btn btn-ghost py-0 text-sm text-bad"
                 disabled={busy || !meta.canEdit}
                 onClick={() => {
-                  if (confirm(`Remove ${p.name}? Its ads go back to automatic crediting (or Needs Tagging).`))
+                  if (confirm(`Remove ${p.name}? Its ads go back to automatic crediting (or To review).`))
                     void run(`/api/pods/${p.id}`, "DELETE", {}, `Removed ${p.name}.`);
                 }}
               >
@@ -931,7 +931,7 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
         <TargetsCard meta={meta} onSaved={onSynced} />
 
         <section>
-          <SectionTitle title="Pod roster" right="Editors aren't in Meta: add them here, then assign them to ads in Needs Tagging." />
+          <SectionTitle title="Pod roster" right="Editors aren't in Meta: add them here, then assign them to ads in To review." />
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {meta.pods
               .filter((p) => p.kind === "pod")

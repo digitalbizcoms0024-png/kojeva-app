@@ -486,7 +486,7 @@ export function EditorsTab({ data, error, targets }: Props) {
         <a href="#/settings" className="link">
           Settings
         </a>{" "}
-        and assign them in Needs Tagging.
+        and assign them in To review.
       </Empty>
     );
   return (
