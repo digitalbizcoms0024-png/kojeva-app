@@ -18,6 +18,7 @@ import { GroupDrawer } from "./components/GroupDrawer.tsx";
 import { closeHref, readDrill } from "./drill.ts";
 import { TaggingPage } from "./pages/Tagging.tsx";
 import { AlertsBell } from "./components/AlertsBell.tsx";
+import { QuickSearch } from "./components/QuickSearch.tsx";
 
 
 /** The menu in two groups: pages to read, and tools (To review only for people on the edit list). */
@@ -147,6 +148,7 @@ export default function App() {
           </button>
           </span>
         </div>
+        <div className={`${menuOpen ? "block" : "hidden"} px-4 pb-2 md:block md:px-0 md:pb-0`}>{m && <QuickSearch meta={m} />}</div>
         <nav id="main-nav" className={`${menuOpen ? "flex" : "hidden"} flex-col gap-0.5 px-2 pb-3 md:flex md:px-0 md:pb-0`}>
           {NAV_GROUPS.map(({ group, label }) => {
             // View-only people don't get the work pages; they can still open them by link.
