@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ConnectionStatus, MetaResponse, Persona } from "../../shared/api.ts";
 import { useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
-import { PageHeader, PodChip, SectionTitle, ViewOnlyNote, Tabs } from "../components/ui.tsx";
+import { PageHeader, PodChip, SectionTitle, ViewOnlyNote, Tabs, Skeleton } from "../components/ui.tsx";
 import { POD_SLOTS } from "../../shared/taxonomy.ts";
 import { dateTime, shortDate } from "../format.ts";
 
@@ -101,7 +101,7 @@ function MetaPanel({ onSynced, canEdit }: { onSynced: () => void; canEdit: boole
   }, []);
 
   if (error) return <p className="text-sm text-bad">Couldn't load connection status: {error.message}</p>;
-  if (!s) return <p className="text-sm text-ink-3">Loading…</p>;
+  if (!s) return <Skeleton rows={4} />;
 
   const ready = canEdit && s.accessProtected && s.missingSecrets.length === 0;
   const connected = Boolean(s.connection || s.systemToken);

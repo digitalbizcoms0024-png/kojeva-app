@@ -114,7 +114,7 @@ export function AlertsBell({ version, compact = false, panelLeft = "md:left-4" }
             </button>
           </div>
           <div className="overflow-y-auto px-4">
-            <LoadError error={alerts.error} retry={alerts.retry} what="alerts" />
+            <LoadError error={alerts.error} retry={alerts.retry} what="alerts" loading={!alerts.data} rows={4} />
             {alerts.data && list.length === 0 && <p className="py-6 text-sm text-ink-3">Nothing needs a look right now.</p>}
             <ul>
               {list.map((a) => (

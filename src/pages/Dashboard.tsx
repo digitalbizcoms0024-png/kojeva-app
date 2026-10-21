@@ -51,8 +51,8 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
   const ranked = (pods.data?.rows ?? []).filter((r) => r.kind === "pod").sort((a, b) => (b.hitRate ?? -1) - (a.hitRate ?? -1) || b.totals.spendCents - a.totals.spendCents);
   const agency = pods.data?.rows.find((r) => r.kind === "agency");
   const pctFmt = (d: number) => pct(Math.abs(d), 1);
-  // While the totals load the cards say so ("…"); "—" is kept for numbers that really are missing.
-  const kpi = (v: ReactNode) => (t ? v : top.loading ? "…" : "—");
+  // While the totals load the cards show a grey bar; "—" is kept for numbers that really are missing.
+  const kpi = (v: ReactNode) => (t ? v : top.loading ? <span className="skeleton mt-1 h-7 w-28" aria-label="Loading" /> : "—");
 
   return (
     <div>
@@ -95,7 +95,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
 
         <section>
           <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by hit rate · ${shortDate(pods.data.from === "2000-01-01" ? null : pods.data.from)} – ${shortDate(pods.data.to)} · Meta`} />
-          <LoadError error={pods.error} retry={pods.retry} what="the pods" />
+          <LoadError error={pods.error} retry={pods.retry} what="the pods" loading={!pods.data} rows={6} />
           <Leaderboard rows={ranked} agency={agency} targets={tg} sparkDays={sparkDays} launches={launches.data} />
         </section>
 
@@ -115,7 +115,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
                 </a>
               }
             />
-            <LoadError error={top.error} retry={top.retry} what="the top ads" />
+            <LoadError error={top.error} retry={top.retry} what="the top ads" loading={!top.data} rows={5} />
             <table className="w-full table-fixed text-sm">
               <thead className="kicker text-left">
                 <tr className="border-b border-divider">
@@ -194,7 +194,7 @@ function TrendsSection({ meta, range }: { meta: MetaResponse; range: Range }) {
           </span>
         }
       />
-      <LoadError error={error} retry={retry} what="trends" />
+      <LoadError error={error} retry={retry} what="trends" loading={!data} rows={6} />
       {data && <TrendCharts points={data.points} targetCpa={meta.targets.targetCpa} targetRoas={meta.targets.targetRoas} />}
       <p className="mt-2 text-xs text-ink-3">Meta numbers. Weeks start on Monday.</p>
     </section>
@@ -298,7 +298,7 @@ function NewThisWeek({ meta }: { meta: MetaResponse }) {
           )
         }
       />
-      <LoadError error={error} retry={retry} what="new ads" />
+      <LoadError error={error} retry={retry} what="new ads" loading={!data} rows={5} />
       {data && rows.length === 0 && <p className="py-3 text-sm text-ink-3">No ads launched in the last 7 days.</p>}
       {rows.length > 0 && (
         <table className="w-full table-fixed text-sm">
@@ -389,7 +389,7 @@ function CoverageGaps() {
           </a>
         }
       />
-      <LoadError error={error} retry={retry} what="coverage" />
+      <LoadError error={error} retry={retry} what="coverage" loading={!data} rows={5} />
       {data && data.personas.length === 0 && (
         <p className="py-3 text-sm text-ink-3">
           Confirm the persona list in{" "}

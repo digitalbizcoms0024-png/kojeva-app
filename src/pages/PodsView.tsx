@@ -10,7 +10,7 @@ import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { addTotals, cpa, isHit, roas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
-import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select, LoadError } from "../components/ui.tsx";
+import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select, LoadError, Skeleton } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
 
 type Props = {
@@ -176,7 +176,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
           <summary className="cursor-pointer text-ink-2">How it's measured</summary>
           <p className="mt-2 max-w-[110ch]">{hitRuleText(t)} Concepts count toward the period in which they first spent.</p>
         </details>
-        <LoadError error={pods.error} retry={pods.retry} what="the pods" />
+        <LoadError error={pods.error} retry={pods.retry} what="the pods" loading={!pods.data} rows={8} />
         {pods.data && (
           <PodsCompare
             columns={columns}
@@ -323,7 +323,7 @@ export function ConceptsTable({
           </span>
         }
       />
-      <LoadError error={error} retry={retry} what="concepts" />
+      <LoadError error={error} retry={retry} what="concepts" loading={!all} rows={6} />
       {data && data.rows.length === 0 && <Empty>No concepts started testing in this period.</Empty>}
       {data && data.rows.length > 0 && (
         <div className={inPanel ? "overflow-x-auto" : "max-h-[36rem] overflow-auto"}>
@@ -411,7 +411,7 @@ export function ConceptsTable({
 /** Pods, the agency and unassigned spend ranked by spend (the Rankings "Pods" tab). */
 export function PodsTable({ data, error, targets }: Props) {
   if (error) return <Empty>Couldn't load pods: {error.message}</Empty>;
-  if (!data) return <Empty>Loading…</Empty>;
+  if (!data) return <Skeleton rows={6} />;
   const rows = data.rows.filter((r) => r.totals.spendCents > 0).sort((a, b) => b.totals.spendCents - a.totals.spendCents);
   return (
     <div className="flex flex-col gap-3">
@@ -496,7 +496,7 @@ export function PodsTable({ data, error, targets }: Props) {
 
 export function EditorsTab({ data, error, targets }: Props) {
   if (error) return <Empty>Couldn't load editors: {error.message}</Empty>;
-  if (!data) return <Empty>Loading…</Empty>;
+  if (!data) return <Skeleton rows={6} />;
   const rows = data.rows
     .flatMap((p) => p.editors.filter((e) => e.editorId).map((e) => ({ ...e, podId: p.podId })))
     .sort((a, b) => b.totals.spendCents - a.totals.spendCents);

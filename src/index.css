@@ -248,6 +248,13 @@ input[type="checkbox"] {
     background: var(--page);
   }
 
+  /* Loading placeholder: a softly pulsing grey bar. */
+  .skeleton {
+    display: block;
+    background: var(--surface-2);
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+
   /* Form controls. */
   .field {
     background: var(--surface);
@@ -279,5 +286,16 @@ input[type="checkbox"] {
   .field,
   select.field {
     min-height: 44px;
+  }
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
   }
 }

@@ -47,7 +47,7 @@ export function CoveragePage({ meta, range, setRange }: { meta: MetaResponse; ra
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
       <div className="flex flex-col gap-8 px-4 py-6 md:px-8">
-        <LoadError error={error} retry={retry} what="the coverage map" />
+        <LoadError error={error} retry={retry} what="the coverage map" loading={!data} rows={6} />
         {data && personas.length === 0 && (
           <div className="border-2 border-divider px-5 py-5 text-sm text-ink-2">
             <h2 className="mb-1 text-lg font-extrabold text-ink">The persona list isn't confirmed yet</h2>
