@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { Info } from "../glossary.tsx";
 import type { CoverageCell, CoverageResponse, MetaResponse } from "../../shared/api.ts";
 import { cpa, roas } from "../../shared/metrics.ts";
 import { AWARENESS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { openDrill } from "../drill.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { CpaValue, CsvButton, HitBadge, PageHeader, PodChip, RoasValue, SectionTitle, Select, Thumb, LoadError } from "../components/ui.tsx";
+import { CpaValue, CsvButton, HitBadge, PageHeader, PodChip, RoasValue, SectionTitle, Select, Thumb, LoadError, Empty } from "../components/ui.tsx";
 import { downloadCsv, money, pct, plain, plainDollars } from "../format.ts";
 
 const LEVELS = Object.keys(AWARENESS);
@@ -14,9 +15,8 @@ const key = (personaId: string | null, awareness: string | null) => `${personaId
 /** Neutral shading by spend share: status colors stay reserved for good/bad. */
 const shade = (share: number) => (share > 0 ? `color-mix(in srgb, var(--ink) ${Math.round(4 + Math.min(1, share / 0.5) * 22)}%, transparent)` : undefined);
 
-export function CoveragePage({ meta }: { meta: MetaResponse }) {
-  // "Running" means spent in the period; the map opens on the last 7 days.
-  const [range, setRange] = useState<Range>("week");
+export function CoveragePage({ meta, range, setRange }: { meta: MetaResponse; range: Range; setRange: (r: Range) => void }) {
+  // "Running" means spent in the period (the date range shared by every page).
   const [pod, setPod] = useState("");
   const { data, error, retry } = useApi<CoverageResponse>(`/api/coverage?${qs({ range, pod })}`);
   const personas = data?.personas ?? [];
@@ -47,7 +47,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
       <div className="flex flex-col gap-8 px-4 py-6 md:px-8">
-        <LoadError error={error} retry={retry} what="the coverage map" />
+        <LoadError error={error} retry={retry} what="the coverage map" loading={!data} rows={6} />
         {data && personas.length === 0 && (
           <div className="border-2 border-divider px-5 py-5 text-sm text-ink-2">
             <h2 className="mb-1 text-lg font-extrabold text-ink">The persona list isn't confirmed yet</h2>
@@ -100,7 +100,9 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                 )}
               </div>
               <div className="bg-page px-4 py-4">
-                <div className="kicker">Not on the map</div>
+                <div className="kicker">
+                  Not on the map <Info id="unplaced" />
+                </div>
                 <div className="num mt-1 text-[40px] leading-none font-extrabold text-ink">
                   {money(data.unplacedSpendCents, { compact: true })}
                 </div>
@@ -142,7 +144,11 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
 
             <section>
               <SectionTitle
-                title="Persona × awareness"
+                title={
+                  <>
+                    Persona <Info id="persona" /> × awareness <Info id="awareness" />
+                  </>
+                }
                 right={
                   <span className="flex flex-wrap items-center gap-3">
                     <Select
@@ -160,11 +166,11 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                 }
               />
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[920px] table-fixed border-collapse text-sm">
+                <table className="pin-first w-full min-w-[760px] table-fixed sm:min-w-[920px] border-collapse text-sm">
                   <thead className="kicker">
                     <tr>
                       {/* The grid's corner: columns are awareness levels, rows are personas. */}
-                      <th className="w-44 py-2 pr-2 text-left font-normal">
+                      <th className="w-28 py-2 pr-2 text-left font-normal sm:w-44">
                         <span className="block whitespace-nowrap text-right">Awareness →</span>
                         <span className="block whitespace-nowrap">Persona ↓</span>
                       </th>
@@ -182,7 +188,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                         <tr key={pid ?? "none"}>
                           <th className="border-t border-divider py-2 pr-2 text-left align-top font-normal">
                             <div className={`font-bold ${pid ? "text-ink" : "text-ink-3"}`}>{nameOf(pid)}</div>
-                            {persona?.description && <div className="line-clamp-2 text-[11px] text-ink-3">{persona.description}</div>}
+                            {persona?.description && <div className="line-clamp-2 hidden text-[11px] text-ink-3 sm:block">{persona.description}</div>}
                           </th>
                           {cols.map((a) => {
                             const c = cells.get(key(pid, a));
@@ -256,7 +262,7 @@ function Cell({ c, share, meta, active, onClick }: { c: CoverageCell | undefined
 export function CellAds({ data, open, meta }: { data: CoverageResponse; open: { personaId: string | null; awareness: string | null }; meta: MetaResponse }) {
   const t = meta.targets;
   const ads = data.posts.filter((p) => p.personaId === open.personaId && p.awareness === open.awareness);
-  if (!ads.length) return <p className="text-sm text-ink-3">No ads in this cell spent in the selected period.</p>;
+  if (!ads.length) return <Empty small>No ads in this cell spent in the selected period.</Empty>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] text-sm">

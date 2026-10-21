@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AlertsResponse } from "../../shared/api.ts";
 import { useApi } from "../api.ts";
 import { shortDate } from "../format.ts";
-import { Icon, LoadError } from "./ui.tsx";
+import { Empty, Icon, LoadError } from "./ui.tsx";
 
 const DISMISS_KEY = "dismissed-alerts";
 const WEEK_MS = 7 * 86_400_000;
@@ -114,8 +114,8 @@ export function AlertsBell({ version, compact = false, panelLeft = "md:left-4" }
             </button>
           </div>
           <div className="overflow-y-auto px-4">
-            <LoadError error={alerts.error} retry={alerts.retry} what="alerts" />
-            {alerts.data && list.length === 0 && <p className="py-6 text-sm text-ink-3">Nothing needs a look right now.</p>}
+            <LoadError error={alerts.error} retry={alerts.retry} what="alerts" loading={!alerts.data} rows={4} />
+            {alerts.data && list.length === 0 && <div className="py-4"><Empty small>Nothing needs a look right now.</Empty></div>}
             <ul>
               {list.map((a) => (
                 <li key={a.id} className="flex items-start gap-3 border-b border-divider py-3 last:border-b-0">

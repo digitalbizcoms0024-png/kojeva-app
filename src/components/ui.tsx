@@ -29,6 +29,7 @@ const ICONS = {
   bell: "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0",
   search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.3-4.3",
   panel: "M3 4h18v16H3zM9 4v16",
+  help: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01",
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -302,8 +303,9 @@ export function Thumb({ mediaType, label, url, className = "" }: { mediaType: st
   );
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <div className="px-6 py-12 text-sm text-ink-3">{children}</div>;
+/** "Nothing here" message, the same look everywhere: a dashed box with the reason. `small` inside a section. */
+export function Empty({ children, small = false }: { children: ReactNode; small?: boolean }) {
+  return <div className={`border border-dashed border-divider px-4 text-center text-sm text-ink-3 ${small ? "py-5" : "py-12"}`}>{children}</div>;
 }
 
 /** Thin horizontal bar against a scale, with an optional dashed target mark. */
@@ -351,9 +353,27 @@ export function Pager({ page, size, total, onPage }: { page: number; size: numbe
   );
 }
 
-/** A panel that couldn't load: what happened and a way to try again, instead of empty values. */
-export function LoadError({ error, retry, what }: { error: Error | null; retry?: () => void; what?: string }) {
-  if (!error) return null;
+/** Grey bars the shape of a list while it loads, so the page doesn't jump when the numbers arrive. */
+export function Skeleton({ rows = 4, className = "" }: { rows?: number; className?: string }) {
+  return (
+    <div className={`flex flex-col ${className}`} aria-busy="true" aria-label="Loading">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-4 border-b border-divider py-3.5">
+          <span className="skeleton h-3.5 flex-1" style={{ maxWidth: `${70 - (i % 3) * 12}%` }} />
+          <span className="skeleton h-3.5 w-14" />
+          <span className="skeleton hidden h-3.5 w-14 sm:block" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A panel that couldn't load: what happened and a way to try again, instead of empty values.
+ * With `loading` (no data yet, first load) it shows grey placeholder rows instead.
+ */
+export function LoadError({ error, retry, what, loading, rows }: { error: Error | null; retry?: () => void; what?: string; loading?: boolean; rows?: number }) {
+  if (!error) return loading ? <Skeleton rows={rows} /> : null;
   return (
     <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-divider px-4 py-3 text-sm text-ink-2">
       <span>

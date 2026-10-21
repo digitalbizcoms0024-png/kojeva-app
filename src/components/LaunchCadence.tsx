@@ -22,7 +22,7 @@ export function LaunchCadence({ selected, onSelect }: { selected: LaunchCell | n
     <section>
       <SectionTitle title="Concepts launched per week" right="By first day of spend · weeks run Monday–Sunday · click a number for its concepts" />
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] table-fixed text-sm">
+        <table className="pin-first w-full min-w-[640px] table-fixed text-sm">
           <thead className="kicker">
             <tr className="border-b-2 border-divider">
               <th className="w-36 py-2 pr-3 text-left font-normal">Pod</th>

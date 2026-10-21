@@ -55,7 +55,28 @@ function RangeSwitch({ range, setRange, latest }: { range: Range; setRange: (r: 
     }`;
   return (
     <div className="relative flex flex-wrap items-center gap-2">
-      <div className="inline-flex flex-wrap" role="tablist" aria-label="Date range">
+      {/* On a phone: one dropdown instead of a row of buttons that wraps. */}
+      <select
+        aria-label="Date range"
+        className="field min-h-11 sm:hidden"
+        value={custom ? "custom" : range}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "custom") setOpen(true);
+          else {
+            setRange(v as Range);
+            setOpen(false);
+          }
+        }}
+      >
+        {(Object.keys(RANGE_LABELS) as (keyof typeof RANGE_LABELS)[]).map((k) => (
+          <option key={k} value={k}>
+            {RANGE_LABELS[k]}
+          </option>
+        ))}
+        <option value="custom">{custom ? `${shortDate(custom.from)} – ${shortDate(custom.to)}` : "Custom…"}</option>
+      </select>
+      <div className="hidden flex-wrap sm:inline-flex" role="tablist" aria-label="Date range">
         {(Object.keys(RANGE_LABELS) as (keyof typeof RANGE_LABELS)[]).map((k) => (
           <button
             key={k}
@@ -76,7 +97,7 @@ function RangeSwitch({ range, setRange, latest }: { range: Range; setRange: (r: 
       </div>
       {open && (
         <form
-          className="absolute top-full right-0 z-30 mt-1 flex flex-wrap items-end gap-2 border-2 border-divider bg-page p-3"
+          className="absolute top-full left-0 z-30 mt-1 flex flex-wrap items-end gap-2 border-2 border-divider bg-page p-3 sm:right-0 sm:left-auto"
           onSubmit={(e) => {
             e.preventDefault();
             if (from && to && from <= to) {

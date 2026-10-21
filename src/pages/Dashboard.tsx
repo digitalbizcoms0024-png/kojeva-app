@@ -1,14 +1,15 @@
 import { useState, type ReactNode } from "react";
-import type { ConceptsResponse, CoverageResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
+import { Info, type TermId } from "../glossary.tsx";
+import type { CoverageResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
 import { cpa, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, previousPeriod, rangeLabel, shiftDay, type Range } from "../components/HeaderControls.tsx";
 import { PodSpend } from "../components/PodSpend.tsx";
 import { AWARENESS } from "../../shared/taxonomy.ts";
-import { conceptHref, openDrill } from "../drill.ts";
+import { openDrill } from "../drill.ts";
 import { Sparkline } from "../components/Sparkline.tsx";
 import { TrendCharts } from "../components/TrendCharts.tsx";
-import { CpaValue, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError } from "../components/ui.tsx";
+import { CpaValue, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError, Empty } from "../components/ui.tsx";
 import { int, money, pct, shortDate } from "../format.ts";
 
 function Delta({ now, before, better, fmt }: { now: number | null; before: number | null; better: "up" | "down"; fmt: (d: number) => string }) {
@@ -22,11 +23,13 @@ function Delta({ now, before, better, fmt }: { now: number | null; before: numbe
   );
 }
 
-function Kpi({ label, source, value, sub }: { label: string; source: string; value: ReactNode; sub: ReactNode }) {
+function Kpi({ label, source, value, sub, term }: { label: string; source: string; value: ReactNode; sub: ReactNode; term?: TermId }) {
   return (
     <div className="min-w-0 px-4 py-4">
       <div className="flex items-start justify-between gap-2">
-        <span className="kicker">{label}</span>
+        <span className="kicker">
+          {label} {term && <Info id={term} />}
+        </span>
         <Tag>{source}</Tag>
       </div>
       <div className="num mt-2 text-[32px] leading-none font-extrabold tracking-[-0.02em] text-ink">{value}</div>
@@ -48,8 +51,8 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
   const ranked = (pods.data?.rows ?? []).filter((r) => r.kind === "pod").sort((a, b) => (b.hitRate ?? -1) - (a.hitRate ?? -1) || b.totals.spendCents - a.totals.spendCents);
   const agency = pods.data?.rows.find((r) => r.kind === "agency");
   const pctFmt = (d: number) => pct(Math.abs(d), 1);
-  // While the totals load the cards say so ("…"); "—" is kept for numbers that really are missing.
-  const kpi = (v: ReactNode) => (t ? v : top.loading ? "…" : "—");
+  // While the totals load the cards show a grey bar; "—" is kept for numbers that really are missing.
+  const kpi = (v: ReactNode) => (t ? v : top.loading ? <span className="skeleton mt-1 h-7 w-28" aria-label="Loading" /> : "—");
 
   return (
     <div>
@@ -74,12 +77,14 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
           />
           <Kpi
             label="CPA"
+            term="cpa"
             source="Meta"
             value={kpi(t && <CpaValue value={cpa(t)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />)}
             sub={<>{b && t && <Delta now={cpa(t)} before={cpa(b)} better="down" fmt={pctFmt} />} Target ${tg.targetCpa.toFixed(2)}</>}
           />
           <Kpi
             label="ROAS"
+            term="roas"
             source="Meta"
             value={kpi(t && <RoasValue value={roas(t)} target={tg.targetRoas} />)}
             sub={<>{b && t && <Delta now={roas(t)} before={roas(b)} better="up" fmt={pctFmt} />} Target {tg.targetRoas.toFixed(2)}</>}
@@ -90,7 +95,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
 
         <section>
           <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by hit rate · ${shortDate(pods.data.from === "2000-01-01" ? null : pods.data.from)} – ${shortDate(pods.data.to)} · Meta`} />
-          <LoadError error={pods.error} retry={pods.retry} what="the pods" />
+          <LoadError error={pods.error} retry={pods.retry} what="the pods" loading={!pods.data} rows={6} />
           <Leaderboard rows={ranked} agency={agency} targets={tg} sparkDays={sparkDays} launches={launches.data} />
         </section>
 
@@ -110,7 +115,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
                 </a>
               }
             />
-            <LoadError error={top.error} retry={top.retry} what="the top ads" />
+            <LoadError error={top.error} retry={top.retry} what="the top ads" loading={!top.data} rows={5} />
             <table className="w-full table-fixed text-sm">
               <thead className="kicker text-left">
                 <tr className="border-b border-divider">
@@ -189,7 +194,7 @@ function TrendsSection({ meta, range }: { meta: MetaResponse; range: Range }) {
           </span>
         }
       />
-      <LoadError error={error} retry={retry} what="trends" />
+      <LoadError error={error} retry={retry} what="trends" loading={!data} rows={6} />
       {data && <TrendCharts points={data.points} targetCpa={meta.targets.targetCpa} targetRoas={meta.targets.targetRoas} />}
       <p className="mt-2 text-xs text-ink-3">Meta numbers. Weeks start on Monday.</p>
     </section>
@@ -256,7 +261,9 @@ function Leaderboard({
         <tr className="border-b border-divider">
           <th className="py-2 font-normal">#</th>
           <th className="py-2 font-normal">Pod</th>
-          <th className="py-2 pr-3 text-right font-normal">Hit rate</th>
+          <th className="py-2 pr-3 text-right font-normal">
+            Hit rate <Info id="hitRate" />
+          </th>
           <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
           <th className="py-2 pr-3 text-right font-normal">Spend</th>
           <th className="hidden py-2 pr-3 text-right font-normal sm:table-cell">CPA</th>
@@ -272,13 +279,13 @@ function Leaderboard({
 }
 
 /**
- * Concepts launched in the last 7 days (first spend), newest first, with how each is tracking.
- * A row opens the concept card.
+ * Ads (posts) whose first spend was in the last 7 days, biggest spend first, with CPA and ROAS.
+ * A row opens the ad on Ad Rankings.
  */
 function NewThisWeek({ meta }: { meta: MetaResponse }) {
-  const { data, error, retry } = useApi<ConceptsResponse>(`/api/concepts?${qs({ range: "week" })}`);
+  const { data, error, retry } = useApi<RankingsResponse>(`/api/rankings?${qs({ range: "week", sort: "spend" })}`);
   const tg = meta.targets;
-  const rows = data?.rows ?? [];
+  const rows = data ? data.items.filter((p) => p.firstSpend != null && p.firstSpend >= data.from) : [];
   return (
     <section>
       <SectionTitle
@@ -286,42 +293,55 @@ function NewThisWeek({ meta }: { meta: MetaResponse }) {
         right={
           data && (
             <span className="text-sm text-ink-3">
-              {rows.length} concept{rows.length === 1 ? "" : "s"} · launched {shortDate(data.from)} – {shortDate(data.to)}
+              {rows.length} ad{rows.length === 1 ? "" : "s"} launched {shortDate(data.from)} – {shortDate(data.to)}
             </span>
           )
         }
       />
-      <LoadError error={error} retry={retry} what="new concepts" />
-      {data && rows.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts launched in the last 7 days.</p>}
-      <ul>
-        {rows.slice(0, 8).map((k) => (
-          <li key={k.conceptId} className="border-b border-divider">
-            <a href={conceptHref(k.conceptId)} className="flex items-center gap-3 py-2.5 hover:bg-surface">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold text-ink" title={k.adsetName}>
-                  {k.label}
-                </span>
-                <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
-                  <PodChip podId={k.podId} />
-                  <span>
-                    Launched {shortDate(k.firstSpend)} · {k.ads} ad{k.ads === 1 ? "" : "s"}
-                  </span>
-                </span>
-              </span>
-              <span className="num w-16 shrink-0 text-right text-sm text-ink">{money(k.allTime.spendCents, { compact: true })}</span>
-              <span className="hidden w-20 shrink-0 text-right sm:block">
-                <CpaValue value={cpa(k.allTime)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />
-              </span>
-              <span className="w-24 shrink-0 text-right">
-                <HitBadge status={k.status} stillRunning={k.stillRunning} />
-              </span>
-            </a>
-          </li>
-        ))}
-      </ul>
+      <LoadError error={error} retry={retry} what="new ads" loading={!data} rows={5} />
+      {data && rows.length === 0 && <Empty small>No ads launched in the last 7 days.</Empty>}
+      {rows.length > 0 && (
+        <table className="w-full table-fixed text-sm">
+          <thead className="kicker text-left">
+            <tr className="border-b border-divider">
+              <th className="py-2 font-normal">Ad · by spend</th>
+              <th className="w-16 py-2 text-right font-normal">Spend</th>
+              <th className="w-20 py-2 text-right font-normal">CPA</th>
+              <th className="w-14 py-2 text-right font-normal">ROAS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 8).map((p) => (
+              <tr key={p.postId} className="border-b border-divider hover:bg-surface">
+                <td className="py-2.5 pr-3">
+                  <a href={`#/rankings?post=${encodeURIComponent(p.postId)}`} className="flex items-center gap-3">
+                    <Thumb mediaType={p.mediaType} label="" url={p.thumbnailUrl} className="h-10 w-7 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-ink" title={p.name}>
+                        {p.name}
+                      </span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+                        <PodChip podId={p.assignment.podId} />
+                        <span>Launched {shortDate(p.firstSpend)}</span>
+                      </span>
+                    </span>
+                  </a>
+                </td>
+                <td className="num py-2.5 text-right text-ink">{money(p.totals.spendCents, { compact: true })}</td>
+                <td className="py-2.5 text-right">
+                  <CpaValue value={cpa(p.totals)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />
+                </td>
+                <td className="py-2.5 text-right">
+                  <RoasValue value={roas(p.totals)} target={tg.targetRoas} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       {rows.length > 8 && (
-        <a href="#/pods" className="link mt-2 inline-flex items-center gap-1 text-sm">
-          {rows.length - 8} more on the Pods page <Icon name="arrow" size={14} />
+        <a href="#/rankings?range=week" className="link mt-2 inline-flex items-center gap-1 text-sm">
+          All {rows.length} on Ad Rankings <Icon name="arrow" size={14} />
         </a>
       )}
     </section>
@@ -358,14 +378,18 @@ function CoverageGaps() {
   return (
     <section>
       <SectionTitle
-        title="Coverage gaps"
+        title={
+          <>
+            Coverage gaps <Info id="coverage" />
+          </>
+        }
         right={
           <a href="#/coverage" className="link inline-flex items-center gap-1 text-sm">
             Coverage Map <Icon name="arrow" size={14} />
           </a>
         }
       />
-      <LoadError error={error} retry={retry} what="coverage" />
+      <LoadError error={error} retry={retry} what="coverage" loading={!data} rows={5} />
       {data && data.personas.length === 0 && (
         <p className="py-3 text-sm text-ink-3">
           Confirm the persona list in{" "}

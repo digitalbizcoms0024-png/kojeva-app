@@ -31,6 +31,7 @@ const PLACES: Item[] = [
   { id: "p:review-sugg", label: "Claude's suggestions", kind: "To review", href: "#/tagging?view=suggestions", keywords: "accept format pod suggested" },
   { id: "p:review-all", label: "Tag any ad", kind: "To review", href: "#/tagging?view=all", keywords: "edit tags all ads" },
   { id: "p:naming", label: "Naming Tool", kind: "Page", href: "#/naming", keywords: "ad name generate check" },
+  { id: "p:glossary", label: "Glossary", kind: "Page", href: "#/glossary", keywords: "help what does mean definition hit rate concept late hit roas cpa awareness persona fatigue" },
   { id: "s:targets", label: "Targets", kind: "Settings", href: "#/settings?tab=targets", keywords: "target cpa roas hit rule testing window late hit call" },
   { id: "s:pods", label: "Pods & editors", kind: "Settings", href: "#/settings?tab=pods", keywords: "roster editors add pod agency codes trybe" },
   { id: "s:personas", label: "Personas", kind: "Settings", href: "#/settings?tab=personas", keywords: "persona add merge suggested" },

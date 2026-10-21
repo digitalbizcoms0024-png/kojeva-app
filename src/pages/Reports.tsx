@@ -168,7 +168,7 @@ export function ReportsPage({ meta }: { meta: MetaResponse }) {
             {dateTime(data.text.updatedAt)}
           </p>
         )}
-        <LoadError error={error} retry={retry} what="this report" />
+        <LoadError error={error} retry={retry} what="this report" loading={!data && !!from} rows={8} />
         {data && editing && (
           <TextEditor
             key={`${from}:${data.text?.updatedAt ?? ""}`}

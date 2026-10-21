@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Info } from "../glossary.tsx";
 import type { InsightDimension, InsightRow, InsightsMatrix, InsightsOverview, InsightsResponse, MatrixDimension, MetaResponse } from "../../shared/api.ts";
 import { cpa, hitRateFloor, MIN_DECIDED, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, MOTIVATIONS, podById } from "../../shared/taxonomy.ts";
@@ -260,14 +261,16 @@ function Panel({
           </span>
         }
       />
-      <LoadError error={error} retry={retry} />
-      {data && data.rows.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts started testing in this period.</p>}
+      <LoadError error={error} retry={retry} loading={!data} rows={8} />
+      {data && data.rows.length === 0 && <Empty small>No concepts started testing in this period.</Empty>}
       {tagged.length > 0 && (
         <table className="w-full table-fixed text-sm">
           <thead className="kicker text-left">
             <tr>
               <th className="w-[40%] py-1.5 font-normal"></th>
-              <th className="py-1.5 font-normal">Hit rate</th>
+              <th className="py-1.5 font-normal">
+                Hit rate <Info id="hitRate" />
+              </th>
               <th className="w-16 py-1.5 text-right font-normal"></th>
               <th className="w-20 py-1.5 text-right font-normal">Test CPA</th>
               <th className="hidden w-16 py-1.5 text-right font-normal sm:table-cell">Spend</th>
@@ -405,11 +408,11 @@ function Matrix({
         }
       />
       {rows === cols && <p className="text-sm text-ink-3">Pick two different dimensions.</p>}
-      <LoadError error={error} retry={retry} />
-      {data && rowValues.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts carry both tags in this period.</p>}
+      <LoadError error={error} retry={retry} loading={!data && rows !== cols} rows={6} />
+      {data && rowValues.length === 0 && <Empty small>No concepts carry both tags in this period.</Empty>}
       {rowValues.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] table-fixed border-separate border-spacing-0.5 text-sm">
+          <table className="pin-first w-full min-w-[640px] table-fixed border-separate border-spacing-0.5 text-sm">
             <thead className="kicker">
               <tr>
                 <th className="w-44 py-1.5 text-left font-normal"></th>

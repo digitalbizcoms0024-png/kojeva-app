@@ -381,7 +381,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
           </div>
         )}
 
-        <LoadError error={error} retry={retry} what="ads" />
+        <LoadError error={error} retry={retry} what="ads" loading={!data} rows={8} />
         {data && rows.length === 0 && (
           <Empty>
             {view === "unassigned"

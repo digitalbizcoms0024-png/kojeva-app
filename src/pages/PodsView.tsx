@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Info, type TermId } from "../glossary.tsx";
 import type { ConceptResult, ConceptsResponse, MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { qs, useApi } from "../api.ts";
 import { conceptHref } from "../components/ConceptDrawer.tsx";
@@ -9,7 +10,7 @@ import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { addTotals, cpa, isHit, roas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
-import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select, LoadError } from "../components/ui.tsx";
+import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select, LoadError, Skeleton } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
 
 type Props = {
@@ -67,21 +68,21 @@ function PodsCompare({
     const mine = concepts.filter((k) => k.podId === r.podId);
     return { r, mine, decided: r.hits + r.misses, testSpend: mine.reduce((acc, k) => addTotals(acc, k.window), ZERO_TOTALS).spendCents };
   });
-  const rows: [string, (d: (typeof data)[number]) => React.ReactNode][] = [
-    ["Concepts launched", (d) => int(d.r.concepts)],
-    ["Concepts decided", (d) => int(d.decided)],
-    ["Hits", (d) => (d.r.lateHits ? `${int(d.r.hits)} (${d.r.lateHits} late)` : int(d.r.hits))],
-    ["Testing now", (d) => int(d.r.testing)],
-    ["Test spend", (d) => money(d.testSpend, { compact: true })],
+  const rows: [string, (d: (typeof data)[number]) => React.ReactNode, TermId?][] = [
+    ["Concepts launched", (d) => int(d.r.concepts), "concept"],
+    ["Concepts decided", (d) => int(d.decided), "hitRate"],
+    ["Hits", (d) => (d.r.lateHits ? `${int(d.r.hits)} (${d.r.lateHits} late)` : int(d.r.hits)), "hit"],
+    ["Testing now", (d) => int(d.r.testing), "testing"],
+    ["Test spend", (d) => money(d.testSpend, { compact: true }), "testSpend"],
     ["Spend", (d) => money(d.r.totals.spendCents, { compact: true })],
-    ["CPA · Meta", (d) => <CpaValue value={cpa(d.r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />],
-    ["ROAS · Meta", (d) => <RoasValue value={roas(d.r.totals)} target={targets.targetRoas} />],
+    ["CPA · Meta", (d) => <CpaValue value={cpa(d.r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />, "cpa"],
+    ["ROAS · Meta", (d) => <RoasValue value={roas(d.r.totals)} target={targets.targetRoas} />, "roas"],
     ["Best angle", (d) => best(d.mine, "angle") ?? "—"],
     ["Best format", (d) => best(d.mine, "format") ?? "—"],
   ];
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] table-fixed text-sm">
+      <table className="pin-first w-full min-w-[720px] table-fixed text-sm">
         <thead>
           <tr>
             <th className="w-40" />
@@ -104,7 +105,9 @@ function PodsCompare({
         </thead>
         <tbody>
           <tr className="border-t border-divider">
-            <th className="kicker py-3 pr-3 text-left align-top font-normal">Hit rate</th>
+            <th className="kicker py-3 pr-3 text-left align-top font-normal">
+              Hit rate <Info id="hitRate" />
+            </th>
             {data.map(({ r, decided }) => (
               <td key={r.podId} className={`px-3 py-3 align-top ${r.kind === "agency" ? "" : "bg-surface"}`}>
                 <div className="num text-[34px] leading-none font-extrabold tracking-[-0.03em] text-ink">{pct(r.hitRate, 0)}</div>
@@ -115,9 +118,11 @@ function PodsCompare({
               </td>
             ))}
           </tr>
-          {rows.map(([label, value]) => (
+          {rows.map(([label, value, term]) => (
             <tr key={label} className="border-t border-divider">
-              <th className="py-2 pr-3 text-left font-normal text-ink-2">{label}</th>
+              <th className="py-2 pr-3 text-left font-normal text-ink-2">
+                {label} {term && <Info id={term} />}
+              </th>
               {data.map((d) => (
                 <td key={d.r.podId} className={`num px-3 py-2 font-bold text-ink ${d.r.kind === "agency" ? "" : "bg-surface"}`}>
                   {value(d)}
@@ -171,7 +176,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
           <summary className="cursor-pointer text-ink-2">How it's measured</summary>
           <p className="mt-2 max-w-[110ch]">{hitRuleText(t)} Concepts count toward the period in which they first spent.</p>
         </details>
-        <LoadError error={pods.error} retry={pods.retry} what="the pods" />
+        <LoadError error={pods.error} retry={pods.retry} what="the pods" loading={!pods.data} rows={8} />
         {pods.data && (
           <PodsCompare
             columns={columns}
@@ -318,7 +323,7 @@ export function ConceptsTable({
           </span>
         }
       />
-      <LoadError error={error} retry={retry} what="concepts" />
+      <LoadError error={error} retry={retry} what="concepts" loading={!all} rows={6} />
       {data && data.rows.length === 0 && <Empty>No concepts started testing in this period.</Empty>}
       {data && data.rows.length > 0 && (
         <div className={inPanel ? "overflow-x-auto" : "max-h-[36rem] overflow-auto"}>
@@ -406,7 +411,7 @@ export function ConceptsTable({
 /** Pods, the agency and unassigned spend ranked by spend (the Rankings "Pods" tab). */
 export function PodsTable({ data, error, targets }: Props) {
   if (error) return <Empty>Couldn't load pods: {error.message}</Empty>;
-  if (!data) return <Empty>Loading…</Empty>;
+  if (!data) return <Skeleton rows={6} />;
   const rows = data.rows.filter((r) => r.totals.spendCents > 0).sort((a, b) => b.totals.spendCents - a.totals.spendCents);
   return (
     <div className="flex flex-col gap-3">
@@ -452,7 +457,9 @@ export function PodsTable({ data, error, targets }: Props) {
               <th className="py-2 pr-3 text-right font-normal">Purchases</th>
               <th className="py-2 pr-3 text-right font-normal">CPA · Meta</th>
               <th className="py-2 pr-3 text-right font-normal">ROAS · Meta</th>
-              <th className="py-2 pr-3 text-right font-normal">Hit rate</th>
+              <th className="py-2 pr-3 text-right font-normal">
+                Hit rate <Info id="hitRate" />
+              </th>
               <th className="py-2 text-right font-normal">Concepts</th>
             </tr>
           </thead>
@@ -489,7 +496,7 @@ export function PodsTable({ data, error, targets }: Props) {
 
 export function EditorsTab({ data, error, targets }: Props) {
   if (error) return <Empty>Couldn't load editors: {error.message}</Empty>;
-  if (!data) return <Empty>Loading…</Empty>;
+  if (!data) return <Skeleton rows={6} />;
   const rows = data.rows
     .flatMap((p) => p.editors.filter((e) => e.editorId).map((e) => ({ ...e, podId: p.podId })))
     .sort((a, b) => b.totals.spendCents - a.totals.spendCents);

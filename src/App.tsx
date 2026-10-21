@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { MetaResponse } from "../shared/api.ts";
-import { SIGNED_OUT_EVENT, useApi } from "./api.ts";
+import { RANGE_LABELS, SIGNED_OUT_EVENT, useApi } from "./api.ts";
 import { ConceptDrawer } from "./components/ConceptDrawer.tsx";
-import type { Range } from "./components/HeaderControls.tsx";
+import { customRange, type Range } from "./components/HeaderControls.tsx";
 import { Empty, Icon, type IconName } from "./components/ui.tsx";
 import { shortDate } from "./format.ts";
 import { DashboardPage } from "./pages/Dashboard.tsx";
@@ -19,6 +19,7 @@ import { closeHref, readDrill } from "./drill.ts";
 import { TaggingPage } from "./pages/Tagging.tsx";
 import { AlertsBell } from "./components/AlertsBell.tsx";
 import { QuickSearch } from "./components/QuickSearch.tsx";
+import { GlossaryPage, setGlossaryTargets } from "./glossary.tsx";
 
 
 /** The menu in two groups: pages to read, and tools (To review only for people on the edit list). */
@@ -33,6 +34,7 @@ const NAV: { path: string; label: string; icon: IconName; group: NavGroup }[] = 
   { path: "reports", label: "CS Reports", icon: "report", group: "do" },
   { path: "naming", label: "Naming Tool", icon: "naming", group: "do" },
   { path: "settings", label: "Settings", icon: "settings", group: "settings" },
+  { path: "glossary", label: "Glossary", icon: "help", group: "settings" },
 ];
 const NAV_GROUPS: { group: NavGroup; label: string | null }[] = [
   { group: "analyse", label: "Analyse" },
@@ -41,6 +43,15 @@ const NAV_GROUPS: { group: NavGroup; label: string | null }[] = [
 ];
 
 /** "#/rankings?post=123" → { path: "rankings", params: post=123 } */
+/** The date range in the link (?range=week, ?range=custom:2026-10-01:2026-10-15), if it's a valid one. */
+function rangeFromHash(): Range | null {
+  const v = currentRoute().params.get("range");
+  return v && (v in RANGE_LABELS || customRange(v as Range)) ? (v as Range) : null;
+}
+
+/** Pages with the date-range switch; they all share one range, kept in the link. */
+const RANGED = new Set(["dashboard", "rankings", "pods", "insights", "coverage"]);
+
 function currentRoute() {
   const [p = "", q = ""] = window.location.hash.replace(/^#\/?/, "").split("?");
   return { path: NAV.find((n) => n.path === p)?.path ?? "dashboard", params: new URLSearchParams(q) };
@@ -97,7 +108,8 @@ function Banner({ tone, children, onClose }: { tone: "warn" | "bad"; children: R
 
 export default function App() {
   const [route, setRoute] = useState(currentRoute);
-  const [range, setRange] = useState<Range>("month");
+  // One date range for every page, kept in the link so a shared link opens on the same period.
+  const [range, setRange] = useState<Range>(() => rangeFromHash() ?? "month");
   const [metaVersion, setMetaVersion] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   // Desktop sidebar folded down to icons; remembered in this browser.
@@ -122,13 +134,18 @@ export default function App() {
   const meta = useApi<MetaResponse>(`/api/meta?v=${metaVersion}`);
   // Pods added in Settings must be registered before any page renders them.
   const m = meta.data;
-  if (m) applyAddedPods(m.pods);
+  if (m) {
+    applyAddedPods(m.pods);
+    setGlossaryTargets(m.targets);
+  }
 
   useEffect(() => {
     let page = currentRoute().path;
     const onHash = () => {
       const next = currentRoute();
       setRoute(next);
+      const r = rangeFromHash();
+      if (r) setRange(r);
       setMenuOpen(false);
       // Opening or closing a side card keeps your place on the page; only a new page starts at the top.
       if (next.path !== page) window.scrollTo(0, 0);
@@ -139,6 +156,17 @@ export default function App() {
   }, []);
 
   const path = route.path;
+  // Write the range into the link of a ranged page (without a new history entry); other pages leave it out.
+  useEffect(() => {
+    const [page = "", q = ""] = window.location.hash.replace(/^#\/?/, "").split("?");
+    const params = new URLSearchParams(q);
+    const want = RANGED.has(path) && range !== "month" ? range : null;
+    if (params.get("range") === want) return;
+    if (want) params.set("range", want);
+    else params.delete("range");
+    const qs = params.toString();
+    history.replaceState(null, "", `#/${page || path}${qs ? `?${qs}` : ""}`);
+  }, [path, range, route]);
   const drill = readDrill(route.params);
   const refresh = () => setMetaVersion((v) => v + 1);
   const expires = m?.connectionExpiresInDays;
@@ -310,8 +338,9 @@ export default function App() {
         {m && path === "naming" && <NamingToolPage meta={m} />}
         {m && path === "settings" && <SettingsPage meta={m} onSynced={refresh} />}
         {m && path === "insights" && <InsightsPage meta={m} range={range} setRange={setRange} />}
-        {m && path === "coverage" && <CoveragePage meta={m} />}
+        {m && path === "coverage" && <CoveragePage meta={m} range={range} setRange={setRange} />}
         {m && path === "reports" && <ReportsPage meta={m} />}
+        {m && path === "glossary" && <GlossaryPage meta={m} />}
       </main>
       {/* Side cards over the page, from the URL (src/drill.ts): a group, and a concept on top of it. */}
       {m && route.params.get("concept") ? (

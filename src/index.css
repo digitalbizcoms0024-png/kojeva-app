@@ -240,6 +240,21 @@ input[type="checkbox"] {
     border-color: var(--ink-3);
   }
 
+  /* Wide tables that scroll sideways keep their first column (the row label) in view. */
+  .pin-first tr > :first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--page);
+  }
+
+  /* Loading placeholder: a softly pulsing grey bar. */
+  .skeleton {
+    display: block;
+    background: var(--surface-2);
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+
   /* Form controls. */
   .field {
     background: var(--surface);
@@ -262,5 +277,25 @@ input[type="checkbox"] {
   }
   .link:hover {
     color: var(--accent);
+  }
+}
+
+/* Touch screens: buttons and form controls are at least 44px tall, so they're easy to tap. */
+@media (pointer: coarse) {
+  .btn,
+  .field,
+  select.field {
+    min-height: 44px;
+  }
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
   }
 }

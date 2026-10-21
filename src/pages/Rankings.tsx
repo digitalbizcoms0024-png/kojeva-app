@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Info } from "../glossary.tsx";
 import type { AttributionResponse, MetaResponse, PodsResponse, PostDetail, PostSummary, RankingsResponse, SortKey } from "../../shared/api.ts";
 import { attributedCpa, attributedRoas, cpa, ctr, roas, type Targets, type Totals } from "../../shared/metrics.ts";
 import { ANGLES, FORMATS } from "../../shared/taxonomy.ts";
@@ -6,7 +7,7 @@ import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { PlayableThumb } from "../components/AdPreview.tsx";
 import { DailyCharts } from "../components/DailyCharts.tsx";
-import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb, LoadError, Pager } from "../components/ui.tsx";
+import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb, LoadError, Pager, Skeleton } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, ratio, shortDate } from "../format.ts";
 import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
@@ -167,7 +168,7 @@ export function RankingsPage({
                 <p className="text-xs text-ink-2">
                   {rankings.data.minSpendCents != null ? (
                     <>
-                      Only ads with <b className="text-ink">{money(rankings.data.minSpendCents, { compact: true })}+</b> spend ($
+                      <Info id="rankMin" /> Only ads with <b className="text-ink">{money(rankings.data.minSpendCents, { compact: true })}+</b> spend ($
                       {meta.targets.rankMinSpendPerDay}/day × {rankings.data.minDays} days) are ranked
                       {rankings.data.belowMin > 0 && ` · ${int(rankings.data.belowMin)} below that left out`} ·{" "}
                       <button type="button" className="link" onClick={() => setShowAll(true)}>
@@ -192,7 +193,7 @@ export function RankingsPage({
 
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <div className="min-w-0">
-                <LoadError error={rankings.error} retry={rankings.retry} what="rankings" />
+                <LoadError error={rankings.error} retry={rankings.retry} what="rankings" loading={!rankings.data} rows={8} />
                 {rankings.data && items.length === 0 && (
                   <Empty>{status === "hits_off" ? "No hits are turned off: every winner still has a copy running." : "No ads with spend match these filters."}</Empty>
                 )}
@@ -420,7 +421,7 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
   const attr = useApi<AttributionResponse>(`/api/attribution?${qs({ range, level: "post", post: postId })}`);
   const click7 = attr.data?.rows[0]?.click7 ?? null;
   if (error) return <Empty>Couldn't load this ad: {error.message}</Empty>;
-  if (!data || data.postId !== postId) return <Empty>Loading…</Empty>;
+  if (!data || data.postId !== postId) return <Skeleton rows={8} />;
   const a = data.assignment;
   const tags: [string, string | null][] = [
     ["Angle", a.angle ? (ANGLES[a.angle] ?? a.angle) : null],
