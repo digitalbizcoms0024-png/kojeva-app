@@ -127,7 +127,7 @@ export function PodSpend({ range, latest, targets, compact = false }: { range: R
       />
       <ShareBar rows={rows} total={total} />
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="pin-first w-full text-sm">
           <thead className="kicker text-left">
             <tr className="border-b-2 border-divider">
               <th className="py-2 pr-3 font-normal">Group</th>

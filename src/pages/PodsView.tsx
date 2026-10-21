@@ -81,7 +81,7 @@ function PodsCompare({
   ];
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] table-fixed text-sm">
+      <table className="pin-first w-full min-w-[720px] table-fixed text-sm">
         <thead>
           <tr>
             <th className="w-40" />

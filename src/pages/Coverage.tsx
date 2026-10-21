@@ -14,9 +14,8 @@ const key = (personaId: string | null, awareness: string | null) => `${personaId
 /** Neutral shading by spend share: status colors stay reserved for good/bad. */
 const shade = (share: number) => (share > 0 ? `color-mix(in srgb, var(--ink) ${Math.round(4 + Math.min(1, share / 0.5) * 22)}%, transparent)` : undefined);
 
-export function CoveragePage({ meta }: { meta: MetaResponse }) {
-  // "Running" means spent in the period; the map opens on the last 7 days.
-  const [range, setRange] = useState<Range>("week");
+export function CoveragePage({ meta, range, setRange }: { meta: MetaResponse; range: Range; setRange: (r: Range) => void }) {
+  // "Running" means spent in the period (the date range shared by every page).
   const [pod, setPod] = useState("");
   const { data, error, retry } = useApi<CoverageResponse>(`/api/coverage?${qs({ range, pod })}`);
   const personas = data?.personas ?? [];
@@ -160,11 +159,11 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                 }
               />
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[920px] table-fixed border-collapse text-sm">
+                <table className="pin-first w-full min-w-[760px] table-fixed sm:min-w-[920px] border-collapse text-sm">
                   <thead className="kicker">
                     <tr>
                       {/* The grid's corner: columns are awareness levels, rows are personas. */}
-                      <th className="w-44 py-2 pr-2 text-left font-normal">
+                      <th className="w-28 py-2 pr-2 text-left font-normal sm:w-44">
                         <span className="block whitespace-nowrap text-right">Awareness →</span>
                         <span className="block whitespace-nowrap">Persona ↓</span>
                       </th>
@@ -182,7 +181,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                         <tr key={pid ?? "none"}>
                           <th className="border-t border-divider py-2 pr-2 text-left align-top font-normal">
                             <div className={`font-bold ${pid ? "text-ink" : "text-ink-3"}`}>{nameOf(pid)}</div>
-                            {persona?.description && <div className="line-clamp-2 text-[11px] text-ink-3">{persona.description}</div>}
+                            {persona?.description && <div className="line-clamp-2 hidden text-[11px] text-ink-3 sm:block">{persona.description}</div>}
                           </th>
                           {cols.map((a) => {
                             const c = cells.get(key(pid, a));

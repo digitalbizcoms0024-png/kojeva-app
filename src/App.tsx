@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { MetaResponse } from "../shared/api.ts";
-import { SIGNED_OUT_EVENT, useApi } from "./api.ts";
+import { RANGE_LABELS, SIGNED_OUT_EVENT, useApi } from "./api.ts";
 import { ConceptDrawer } from "./components/ConceptDrawer.tsx";
-import type { Range } from "./components/HeaderControls.tsx";
+import { customRange, type Range } from "./components/HeaderControls.tsx";
 import { Empty, Icon, type IconName } from "./components/ui.tsx";
 import { shortDate } from "./format.ts";
 import { DashboardPage } from "./pages/Dashboard.tsx";
@@ -41,6 +41,15 @@ const NAV_GROUPS: { group: NavGroup; label: string | null }[] = [
 ];
 
 /** "#/rankings?post=123" → { path: "rankings", params: post=123 } */
+/** The date range in the link (?range=week, ?range=custom:2026-10-01:2026-10-15), if it's a valid one. */
+function rangeFromHash(): Range | null {
+  const v = currentRoute().params.get("range");
+  return v && (v in RANGE_LABELS || customRange(v as Range)) ? (v as Range) : null;
+}
+
+/** Pages with the date-range switch; they all share one range, kept in the link. */
+const RANGED = new Set(["dashboard", "rankings", "pods", "insights", "coverage"]);
+
 function currentRoute() {
   const [p = "", q = ""] = window.location.hash.replace(/^#\/?/, "").split("?");
   return { path: NAV.find((n) => n.path === p)?.path ?? "dashboard", params: new URLSearchParams(q) };
@@ -97,7 +106,8 @@ function Banner({ tone, children, onClose }: { tone: "warn" | "bad"; children: R
 
 export default function App() {
   const [route, setRoute] = useState(currentRoute);
-  const [range, setRange] = useState<Range>("month");
+  // One date range for every page, kept in the link so a shared link opens on the same period.
+  const [range, setRange] = useState<Range>(() => rangeFromHash() ?? "month");
   const [metaVersion, setMetaVersion] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   // Desktop sidebar folded down to icons; remembered in this browser.
@@ -129,6 +139,8 @@ export default function App() {
     const onHash = () => {
       const next = currentRoute();
       setRoute(next);
+      const r = rangeFromHash();
+      if (r) setRange(r);
       setMenuOpen(false);
       // Opening or closing a side card keeps your place on the page; only a new page starts at the top.
       if (next.path !== page) window.scrollTo(0, 0);
@@ -139,6 +151,17 @@ export default function App() {
   }, []);
 
   const path = route.path;
+  // Write the range into the link of a ranged page (without a new history entry); other pages leave it out.
+  useEffect(() => {
+    const [page = "", q = ""] = window.location.hash.replace(/^#\/?/, "").split("?");
+    const params = new URLSearchParams(q);
+    const want = RANGED.has(path) && range !== "month" ? range : null;
+    if (params.get("range") === want) return;
+    if (want) params.set("range", want);
+    else params.delete("range");
+    const qs = params.toString();
+    history.replaceState(null, "", `#/${page || path}${qs ? `?${qs}` : ""}`);
+  }, [path, range, route]);
   const drill = readDrill(route.params);
   const refresh = () => setMetaVersion((v) => v + 1);
   const expires = m?.connectionExpiresInDays;
@@ -310,7 +333,7 @@ export default function App() {
         {m && path === "naming" && <NamingToolPage meta={m} />}
         {m && path === "settings" && <SettingsPage meta={m} onSynced={refresh} />}
         {m && path === "insights" && <InsightsPage meta={m} range={range} setRange={setRange} />}
-        {m && path === "coverage" && <CoveragePage meta={m} />}
+        {m && path === "coverage" && <CoveragePage meta={m} range={range} setRange={setRange} />}
         {m && path === "reports" && <ReportsPage meta={m} />}
       </main>
       {/* Side cards over the page, from the URL (src/drill.ts): a group, and a concept on top of it. */}

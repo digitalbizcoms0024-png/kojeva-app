@@ -1,14 +1,14 @@
 import { useState, type ReactNode } from "react";
-import type { ConceptsResponse, CoverageResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
+import type { CoverageResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
 import { cpa, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, previousPeriod, rangeLabel, shiftDay, type Range } from "../components/HeaderControls.tsx";
 import { PodSpend } from "../components/PodSpend.tsx";
 import { AWARENESS } from "../../shared/taxonomy.ts";
-import { conceptHref, openDrill } from "../drill.ts";
+import { openDrill } from "../drill.ts";
 import { Sparkline } from "../components/Sparkline.tsx";
 import { TrendCharts } from "../components/TrendCharts.tsx";
-import { CpaValue, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError } from "../components/ui.tsx";
+import { CpaValue, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError } from "../components/ui.tsx";
 import { int, money, pct, shortDate } from "../format.ts";
 
 function Delta({ now, before, better, fmt }: { now: number | null; before: number | null; better: "up" | "down"; fmt: (d: number) => string }) {
@@ -272,13 +272,13 @@ function Leaderboard({
 }
 
 /**
- * Concepts launched in the last 7 days (first spend), newest first, with how each is tracking.
- * A row opens the concept card.
+ * Ads (posts) whose first spend was in the last 7 days, biggest spend first, with CPA and ROAS.
+ * A row opens the ad on Ad Rankings.
  */
 function NewThisWeek({ meta }: { meta: MetaResponse }) {
-  const { data, error, retry } = useApi<ConceptsResponse>(`/api/concepts?${qs({ range: "week" })}`);
+  const { data, error, retry } = useApi<RankingsResponse>(`/api/rankings?${qs({ range: "week", sort: "spend" })}`);
   const tg = meta.targets;
-  const rows = data?.rows ?? [];
+  const rows = data ? data.items.filter((p) => p.firstSpend != null && p.firstSpend >= data.from) : [];
   return (
     <section>
       <SectionTitle
@@ -286,42 +286,55 @@ function NewThisWeek({ meta }: { meta: MetaResponse }) {
         right={
           data && (
             <span className="text-sm text-ink-3">
-              {rows.length} concept{rows.length === 1 ? "" : "s"} · launched {shortDate(data.from)} – {shortDate(data.to)}
+              {rows.length} ad{rows.length === 1 ? "" : "s"} launched {shortDate(data.from)} – {shortDate(data.to)}
             </span>
           )
         }
       />
-      <LoadError error={error} retry={retry} what="new concepts" />
-      {data && rows.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts launched in the last 7 days.</p>}
-      <ul>
-        {rows.slice(0, 8).map((k) => (
-          <li key={k.conceptId} className="border-b border-divider">
-            <a href={conceptHref(k.conceptId)} className="flex items-center gap-3 py-2.5 hover:bg-surface">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold text-ink" title={k.adsetName}>
-                  {k.label}
-                </span>
-                <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
-                  <PodChip podId={k.podId} />
-                  <span>
-                    Launched {shortDate(k.firstSpend)} · {k.ads} ad{k.ads === 1 ? "" : "s"}
-                  </span>
-                </span>
-              </span>
-              <span className="num w-16 shrink-0 text-right text-sm text-ink">{money(k.allTime.spendCents, { compact: true })}</span>
-              <span className="hidden w-20 shrink-0 text-right sm:block">
-                <CpaValue value={cpa(k.allTime)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />
-              </span>
-              <span className="w-24 shrink-0 text-right">
-                <HitBadge status={k.status} stillRunning={k.stillRunning} />
-              </span>
-            </a>
-          </li>
-        ))}
-      </ul>
+      <LoadError error={error} retry={retry} what="new ads" />
+      {data && rows.length === 0 && <p className="py-3 text-sm text-ink-3">No ads launched in the last 7 days.</p>}
+      {rows.length > 0 && (
+        <table className="w-full table-fixed text-sm">
+          <thead className="kicker text-left">
+            <tr className="border-b border-divider">
+              <th className="py-2 font-normal">Ad · by spend</th>
+              <th className="w-16 py-2 text-right font-normal">Spend</th>
+              <th className="w-20 py-2 text-right font-normal">CPA</th>
+              <th className="w-14 py-2 text-right font-normal">ROAS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.slice(0, 8).map((p) => (
+              <tr key={p.postId} className="border-b border-divider hover:bg-surface">
+                <td className="py-2.5 pr-3">
+                  <a href={`#/rankings?post=${encodeURIComponent(p.postId)}`} className="flex items-center gap-3">
+                    <Thumb mediaType={p.mediaType} label="" url={p.thumbnailUrl} className="h-10 w-7 shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold text-ink" title={p.name}>
+                        {p.name}
+                      </span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+                        <PodChip podId={p.assignment.podId} />
+                        <span>Launched {shortDate(p.firstSpend)}</span>
+                      </span>
+                    </span>
+                  </a>
+                </td>
+                <td className="num py-2.5 text-right text-ink">{money(p.totals.spendCents, { compact: true })}</td>
+                <td className="py-2.5 text-right">
+                  <CpaValue value={cpa(p.totals)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />
+                </td>
+                <td className="py-2.5 text-right">
+                  <RoasValue value={roas(p.totals)} target={tg.targetRoas} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       {rows.length > 8 && (
-        <a href="#/pods" className="link mt-2 inline-flex items-center gap-1 text-sm">
-          {rows.length - 8} more on the Pods page <Icon name="arrow" size={14} />
+        <a href="#/rankings?range=week" className="link mt-2 inline-flex items-center gap-1 text-sm">
+          All {rows.length} on Ad Rankings <Icon name="arrow" size={14} />
         </a>
       )}
     </section>

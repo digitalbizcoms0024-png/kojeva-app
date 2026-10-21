@@ -409,7 +409,7 @@ function Matrix({
       {data && rowValues.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts carry both tags in this period.</p>}
       {rowValues.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] table-fixed border-separate border-spacing-0.5 text-sm">
+          <table className="pin-first w-full min-w-[640px] table-fixed border-separate border-spacing-0.5 text-sm">
             <thead className="kicker">
               <tr>
                 <th className="w-44 py-1.5 text-left font-normal"></th>
