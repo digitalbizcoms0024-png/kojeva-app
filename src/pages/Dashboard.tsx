@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Info, type TermId } from "../glossary.tsx";
 import type { CoverageResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
 import { cpa, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
@@ -22,11 +23,13 @@ function Delta({ now, before, better, fmt }: { now: number | null; before: numbe
   );
 }
 
-function Kpi({ label, source, value, sub }: { label: string; source: string; value: ReactNode; sub: ReactNode }) {
+function Kpi({ label, source, value, sub, term }: { label: string; source: string; value: ReactNode; sub: ReactNode; term?: TermId }) {
   return (
     <div className="min-w-0 px-4 py-4">
       <div className="flex items-start justify-between gap-2">
-        <span className="kicker">{label}</span>
+        <span className="kicker">
+          {label} {term && <Info id={term} />}
+        </span>
         <Tag>{source}</Tag>
       </div>
       <div className="num mt-2 text-[32px] leading-none font-extrabold tracking-[-0.02em] text-ink">{value}</div>
@@ -74,12 +77,14 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
           />
           <Kpi
             label="CPA"
+            term="cpa"
             source="Meta"
             value={kpi(t && <CpaValue value={cpa(t)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />)}
             sub={<>{b && t && <Delta now={cpa(t)} before={cpa(b)} better="down" fmt={pctFmt} />} Target ${tg.targetCpa.toFixed(2)}</>}
           />
           <Kpi
             label="ROAS"
+            term="roas"
             source="Meta"
             value={kpi(t && <RoasValue value={roas(t)} target={tg.targetRoas} />)}
             sub={<>{b && t && <Delta now={roas(t)} before={roas(b)} better="up" fmt={pctFmt} />} Target {tg.targetRoas.toFixed(2)}</>}
@@ -256,7 +261,9 @@ function Leaderboard({
         <tr className="border-b border-divider">
           <th className="py-2 font-normal">#</th>
           <th className="py-2 font-normal">Pod</th>
-          <th className="py-2 pr-3 text-right font-normal">Hit rate</th>
+          <th className="py-2 pr-3 text-right font-normal">
+            Hit rate <Info id="hitRate" />
+          </th>
           <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
           <th className="py-2 pr-3 text-right font-normal">Spend</th>
           <th className="hidden py-2 pr-3 text-right font-normal sm:table-cell">CPA</th>
@@ -371,7 +378,11 @@ function CoverageGaps() {
   return (
     <section>
       <SectionTitle
-        title="Coverage gaps"
+        title={
+          <>
+            Coverage gaps <Info id="coverage" />
+          </>
+        }
         right={
           <a href="#/coverage" className="link inline-flex items-center gap-1 text-sm">
             Coverage Map <Icon name="arrow" size={14} />

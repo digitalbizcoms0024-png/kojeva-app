@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Info } from "../glossary.tsx";
 import type { AttributionResponse, MetaResponse, PodsResponse, PostDetail, PostSummary, RankingsResponse, SortKey } from "../../shared/api.ts";
 import { attributedCpa, attributedRoas, cpa, ctr, roas, type Targets, type Totals } from "../../shared/metrics.ts";
 import { ANGLES, FORMATS } from "../../shared/taxonomy.ts";
@@ -167,7 +168,7 @@ export function RankingsPage({
                 <p className="text-xs text-ink-2">
                   {rankings.data.minSpendCents != null ? (
                     <>
-                      Only ads with <b className="text-ink">{money(rankings.data.minSpendCents, { compact: true })}+</b> spend ($
+                      <Info id="rankMin" /> Only ads with <b className="text-ink">{money(rankings.data.minSpendCents, { compact: true })}+</b> spend ($
                       {meta.targets.rankMinSpendPerDay}/day × {rankings.data.minDays} days) are ranked
                       {rankings.data.belowMin > 0 && ` · ${int(rankings.data.belowMin)} below that left out`} ·{" "}
                       <button type="button" className="link" onClick={() => setShowAll(true)}>

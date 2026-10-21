@@ -19,6 +19,7 @@ import { closeHref, readDrill } from "./drill.ts";
 import { TaggingPage } from "./pages/Tagging.tsx";
 import { AlertsBell } from "./components/AlertsBell.tsx";
 import { QuickSearch } from "./components/QuickSearch.tsx";
+import { GlossaryPage, setGlossaryTargets } from "./glossary.tsx";
 
 
 /** The menu in two groups: pages to read, and tools (To review only for people on the edit list). */
@@ -33,6 +34,7 @@ const NAV: { path: string; label: string; icon: IconName; group: NavGroup }[] = 
   { path: "reports", label: "CS Reports", icon: "report", group: "do" },
   { path: "naming", label: "Naming Tool", icon: "naming", group: "do" },
   { path: "settings", label: "Settings", icon: "settings", group: "settings" },
+  { path: "glossary", label: "Glossary", icon: "help", group: "settings" },
 ];
 const NAV_GROUPS: { group: NavGroup; label: string | null }[] = [
   { group: "analyse", label: "Analyse" },
@@ -132,7 +134,10 @@ export default function App() {
   const meta = useApi<MetaResponse>(`/api/meta?v=${metaVersion}`);
   // Pods added in Settings must be registered before any page renders them.
   const m = meta.data;
-  if (m) applyAddedPods(m.pods);
+  if (m) {
+    applyAddedPods(m.pods);
+    setGlossaryTargets(m.targets);
+  }
 
   useEffect(() => {
     let page = currentRoute().path;
@@ -335,6 +340,7 @@ export default function App() {
         {m && path === "insights" && <InsightsPage meta={m} range={range} setRange={setRange} />}
         {m && path === "coverage" && <CoveragePage meta={m} range={range} setRange={setRange} />}
         {m && path === "reports" && <ReportsPage meta={m} />}
+        {m && path === "glossary" && <GlossaryPage meta={m} />}
       </main>
       {/* Side cards over the page, from the URL (src/drill.ts): a group, and a concept on top of it. */}
       {m && route.params.get("concept") ? (

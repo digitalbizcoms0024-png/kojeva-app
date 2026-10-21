@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Info } from "../glossary.tsx";
 import type { InsightDimension, InsightRow, InsightsMatrix, InsightsOverview, InsightsResponse, MatrixDimension, MetaResponse } from "../../shared/api.ts";
 import { cpa, hitRateFloor, MIN_DECIDED, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, MOTIVATIONS, podById } from "../../shared/taxonomy.ts";
@@ -267,7 +268,9 @@ function Panel({
           <thead className="kicker text-left">
             <tr>
               <th className="w-[40%] py-1.5 font-normal"></th>
-              <th className="py-1.5 font-normal">Hit rate</th>
+              <th className="py-1.5 font-normal">
+                Hit rate <Info id="hitRate" />
+              </th>
               <th className="w-16 py-1.5 text-right font-normal"></th>
               <th className="w-20 py-1.5 text-right font-normal">Test CPA</th>
               <th className="hidden w-16 py-1.5 text-right font-normal sm:table-cell">Spend</th>

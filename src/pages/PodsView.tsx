@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Info, type TermId } from "../glossary.tsx";
 import type { ConceptResult, ConceptsResponse, MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { qs, useApi } from "../api.ts";
 import { conceptHref } from "../components/ConceptDrawer.tsx";
@@ -67,15 +68,15 @@ function PodsCompare({
     const mine = concepts.filter((k) => k.podId === r.podId);
     return { r, mine, decided: r.hits + r.misses, testSpend: mine.reduce((acc, k) => addTotals(acc, k.window), ZERO_TOTALS).spendCents };
   });
-  const rows: [string, (d: (typeof data)[number]) => React.ReactNode][] = [
-    ["Concepts launched", (d) => int(d.r.concepts)],
-    ["Concepts decided", (d) => int(d.decided)],
-    ["Hits", (d) => (d.r.lateHits ? `${int(d.r.hits)} (${d.r.lateHits} late)` : int(d.r.hits))],
-    ["Testing now", (d) => int(d.r.testing)],
-    ["Test spend", (d) => money(d.testSpend, { compact: true })],
+  const rows: [string, (d: (typeof data)[number]) => React.ReactNode, TermId?][] = [
+    ["Concepts launched", (d) => int(d.r.concepts), "concept"],
+    ["Concepts decided", (d) => int(d.decided), "hitRate"],
+    ["Hits", (d) => (d.r.lateHits ? `${int(d.r.hits)} (${d.r.lateHits} late)` : int(d.r.hits)), "hit"],
+    ["Testing now", (d) => int(d.r.testing), "testing"],
+    ["Test spend", (d) => money(d.testSpend, { compact: true }), "testSpend"],
     ["Spend", (d) => money(d.r.totals.spendCents, { compact: true })],
-    ["CPA · Meta", (d) => <CpaValue value={cpa(d.r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />],
-    ["ROAS · Meta", (d) => <RoasValue value={roas(d.r.totals)} target={targets.targetRoas} />],
+    ["CPA · Meta", (d) => <CpaValue value={cpa(d.r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />, "cpa"],
+    ["ROAS · Meta", (d) => <RoasValue value={roas(d.r.totals)} target={targets.targetRoas} />, "roas"],
     ["Best angle", (d) => best(d.mine, "angle") ?? "—"],
     ["Best format", (d) => best(d.mine, "format") ?? "—"],
   ];
@@ -104,7 +105,9 @@ function PodsCompare({
         </thead>
         <tbody>
           <tr className="border-t border-divider">
-            <th className="kicker py-3 pr-3 text-left align-top font-normal">Hit rate</th>
+            <th className="kicker py-3 pr-3 text-left align-top font-normal">
+              Hit rate <Info id="hitRate" />
+            </th>
             {data.map(({ r, decided }) => (
               <td key={r.podId} className={`px-3 py-3 align-top ${r.kind === "agency" ? "" : "bg-surface"}`}>
                 <div className="num text-[34px] leading-none font-extrabold tracking-[-0.03em] text-ink">{pct(r.hitRate, 0)}</div>
@@ -115,9 +118,11 @@ function PodsCompare({
               </td>
             ))}
           </tr>
-          {rows.map(([label, value]) => (
+          {rows.map(([label, value, term]) => (
             <tr key={label} className="border-t border-divider">
-              <th className="py-2 pr-3 text-left font-normal text-ink-2">{label}</th>
+              <th className="py-2 pr-3 text-left font-normal text-ink-2">
+                {label} {term && <Info id={term} />}
+              </th>
               {data.map((d) => (
                 <td key={d.r.podId} className={`num px-3 py-2 font-bold text-ink ${d.r.kind === "agency" ? "" : "bg-surface"}`}>
                   {value(d)}
@@ -452,7 +457,9 @@ export function PodsTable({ data, error, targets }: Props) {
               <th className="py-2 pr-3 text-right font-normal">Purchases</th>
               <th className="py-2 pr-3 text-right font-normal">CPA · Meta</th>
               <th className="py-2 pr-3 text-right font-normal">ROAS · Meta</th>
-              <th className="py-2 pr-3 text-right font-normal">Hit rate</th>
+              <th className="py-2 pr-3 text-right font-normal">
+                Hit rate <Info id="hitRate" />
+              </th>
               <th className="py-2 text-right font-normal">Concepts</th>
             </tr>
           </thead>

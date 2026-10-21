@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Info } from "../glossary.tsx";
 import type { CoverageCell, CoverageResponse, MetaResponse } from "../../shared/api.ts";
 import { cpa, roas } from "../../shared/metrics.ts";
 import { AWARENESS } from "../../shared/taxonomy.ts";
@@ -99,7 +100,9 @@ export function CoveragePage({ meta, range, setRange }: { meta: MetaResponse; ra
                 )}
               </div>
               <div className="bg-page px-4 py-4">
-                <div className="kicker">Not on the map</div>
+                <div className="kicker">
+                  Not on the map <Info id="unplaced" />
+                </div>
                 <div className="num mt-1 text-[40px] leading-none font-extrabold text-ink">
                   {money(data.unplacedSpendCents, { compact: true })}
                 </div>
@@ -141,7 +144,11 @@ export function CoveragePage({ meta, range, setRange }: { meta: MetaResponse; ra
 
             <section>
               <SectionTitle
-                title="Persona × awareness"
+                title={
+                  <>
+                    Persona <Info id="persona" /> × awareness <Info id="awareness" />
+                  </>
+                }
                 right={
                   <span className="flex flex-wrap items-center gap-3">
                     <Select
