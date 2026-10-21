@@ -100,7 +100,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
         </section>
 
         <div className="grid gap-10 lg:grid-cols-2">
-          <NewThisWeek meta={meta} />
+          <NewLaunches meta={meta} />
           <CoverageGaps />
         </div>
 
@@ -279,14 +279,15 @@ function Leaderboard({
 }
 
 /**
- * Ads (posts) whose first spend was this week (Monday to the latest synced day, the same Mon–Sun
- * weeks as the launch grid), biggest spend first, with CPA and ROAS.
+ * Ads (posts) whose first spend was in the last two weeks (Monday of last week to the latest synced
+ * day, the same Mon–Sun weeks as the launch grid), biggest spend first, with CPA and ROAS. Two weeks,
+ * not one: a new ad spends little in its first days, so early in a week this week's alone are near $0.
  * A row opens the ad on Ad Rankings.
  */
-function NewThisWeek({ meta }: { meta: MetaResponse }) {
+function NewLaunches({ meta }: { meta: MetaResponse }) {
   const latest = meta.latestDate;
-  // Monday of the latest synced day's week (getUTCDay: Sunday 0 … Saturday 6).
-  const monday = latest ? shiftDay(latest, -((new Date(`${latest}T00:00:00Z`).getUTCDay() + 6) % 7)) : null;
+  // Monday of the week before the latest synced day's week (getUTCDay: Sunday 0 … Saturday 6).
+  const monday = latest ? shiftDay(latest, -((new Date(`${latest}T00:00:00Z`).getUTCDay() + 6) % 7) - 7) : null;
   const week = monday && latest ? (`custom:${monday}:${latest}` as Range) : null;
   const { data, error, retry } = useApi<RankingsResponse>(week ? `/api/rankings?${qs({ range: week, sort: "spend" })}` : null);
   const tg = meta.targets;
@@ -294,7 +295,7 @@ function NewThisWeek({ meta }: { meta: MetaResponse }) {
   return (
     <section>
       <SectionTitle
-        title="New this week"
+        title="New in the last 2 weeks"
         right={
           data && (
             <span className="text-sm text-ink-3">
@@ -304,7 +305,7 @@ function NewThisWeek({ meta }: { meta: MetaResponse }) {
         }
       />
       <LoadError error={error} retry={retry} what="new ads" loading={!data} rows={5} />
-      {data && rows.length === 0 && <Empty small>No ads launched this week (since Monday).</Empty>}
+      {data && rows.length === 0 && <Empty small>No ads launched in the last 2 weeks.</Empty>}
       {rows.length > 0 && (
         <table className="w-full table-fixed text-sm">
           <thead className="kicker text-left">
@@ -346,7 +347,7 @@ function NewThisWeek({ meta }: { meta: MetaResponse }) {
       )}
       {rows.length > 8 && (
         <a href={`#/rankings?range=${week}`} className="link mt-2 inline-flex items-center gap-1 text-sm">
-          This week on Ad Rankings <Icon name="arrow" size={14} />
+          These 2 weeks on Ad Rankings <Icon name="arrow" size={14} />
         </a>
       )}
     </section>
