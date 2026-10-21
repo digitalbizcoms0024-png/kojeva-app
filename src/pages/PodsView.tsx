@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import { useState } from "react";
 import type { ConceptResult, ConceptsResponse, MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { qs, useApi } from "../api.ts";
@@ -45,74 +44,99 @@ function best(concepts: ConceptResult[], key: "angle" | "format"): string | null
   return (key === "angle" ? ANGLES : FORMATS)[top[0]] ?? top[0];
 }
 
-function PodColumn({
-  r,
+/**
+ * The pods side by side: one column each (the agency last, dashed), one row per measure. It replaced a
+ * tall card per pod, so the same number sits on the same line for every pod.
+ */
+function PodsCompare({
+  columns,
   concepts,
   targets,
-  editors,
-  top,
+  editorsOf,
+  topRate,
   onOpen,
 }: {
-  r: PodRow;
+  columns: PodRow[];
   concepts: ConceptResult[];
   targets: Targets;
-  editors: string[];
-  top: boolean;
-  onOpen: () => void;
+  editorsOf: (podId: string | null) => string[];
+  topRate: number;
+  onOpen: (podId: string) => void;
 }) {
-  const mine = concepts.filter((k) => k.podId === r.podId);
-  const decided = r.hits + r.misses;
-  const testSpend = mine.reduce((acc, k) => addTotals(acc, k.window), ZERO_TOTALS).spendCents;
-  const agency = r.kind === "agency";
-  const rows: [string, React.ReactNode][] = [
-    ["Concepts launched", int(r.concepts)],
-    ["Concepts decided", int(decided)],
-    ["Hits", r.lateHits ? `${int(r.hits)} (${r.lateHits} late)` : int(r.hits)],
-    ["Test spend", money(testSpend, { compact: true })],
-    ["Spend", money(r.totals.spendCents, { compact: true })],
-    ["CPA · Meta", <CpaValue key="c" value={cpa(r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />],
-    ["ROAS · Meta", <RoasValue key="r" value={roas(r.totals)} target={targets.targetRoas} />],
-    ["Best angle", best(mine, "angle") ?? "—"],
-    ["Best format", best(mine, "format") ?? "—"],
+  const data = columns.map((r) => {
+    const mine = concepts.filter((k) => k.podId === r.podId);
+    return { r, mine, decided: r.hits + r.misses, testSpend: mine.reduce((acc, k) => addTotals(acc, k.window), ZERO_TOTALS).spendCents };
+  });
+  const rows: [string, (d: (typeof data)[number]) => React.ReactNode][] = [
+    ["Concepts launched", (d) => int(d.r.concepts)],
+    ["Concepts decided", (d) => int(d.decided)],
+    ["Hits", (d) => (d.r.lateHits ? `${int(d.r.hits)} (${d.r.lateHits} late)` : int(d.r.hits))],
+    ["Testing now", (d) => int(d.r.testing)],
+    ["Test spend", (d) => money(d.testSpend, { compact: true })],
+    ["Spend", (d) => money(d.r.totals.spendCents, { compact: true })],
+    ["CPA · Meta", (d) => <CpaValue value={cpa(d.r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />],
+    ["ROAS · Meta", (d) => <RoasValue value={roas(d.r.totals)} target={targets.targetRoas} />],
+    ["Best angle", (d) => best(d.mine, "angle") ?? "—"],
+    ["Best format", (d) => best(d.mine, "format") ?? "—"],
   ];
   return (
-    <div
-      className={`flex min-w-0 flex-col p-4 ${agency ? "bg-page" : "bg-surface"}`}
-      style={{
-        borderTop: `4px ${agency ? "dashed" : "solid"} var(--pod-${r.podId})`,
-      }}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 text-xl font-extrabold text-ink">
-          <span className="size-2.5" style={{ background: `var(--pod-${r.podId})` }} aria-hidden />
-          {r.name}
-        </div>
-        {top && <span className="bg-accent-soft px-1.5 py-px text-[11px] font-semibold text-accent-ink">Top hit rate</span>}
-      </div>
-      <div className="mt-0.5 min-h-4 text-xs text-ink-3">
-        {agency ? "Before the in-house pods · not counted in them" : editors.length ? `Strategist · ${editors.join(", ")}` : "Strategist"}
-      </div>
-      <div className="mt-4 border-t border-divider pt-3">
-        <div className="kicker">Hit rate</div>
-        <div className="num text-[52px] leading-none font-extrabold tracking-[-0.03em] text-ink">{pct(r.hitRate, 0)}</div>
-        <div className="mt-1 text-xs text-ink-3">
-          {decided
-            ? `${r.hits} ${r.hits === 1 ? "hit" : "hits"} from ${decided} decided concepts${r.lateHits ? ` (${r.lateHits} late)` : ""}`
-            : "No decided concepts yet"}
-          {r.testing > 0 && ` · ${r.testing} testing`}
-        </div>
-      </div>
-      <dl className="mt-4 flex-1 text-sm">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex items-baseline justify-between gap-3 border-t border-divider py-2">
-            <dt className="text-ink-2">{k}</dt>
-            <dd className="num text-right font-bold text-ink">{v}</dd>
-          </div>
-        ))}
-      </dl>
-      <button onClick={onOpen} className="btn btn-secondary mt-3 w-full">
-        Open {r.name} {agency ? "" : "pod"} <Icon name="arrow" size={14} />
-      </button>
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[720px] table-fixed text-sm">
+        <thead>
+          <tr>
+            <th className="w-40" />
+            {data.map(({ r }) => (
+              <th
+                key={r.podId}
+                className={`px-3 pt-3 pb-2 text-left align-top font-normal ${r.kind === "agency" ? "" : "bg-surface"}`}
+                style={{ borderTop: `4px ${r.kind === "agency" ? "dashed" : "solid"} var(--pod-${r.podId})` }}
+              >
+                <span className="flex items-center gap-2 text-base font-extrabold text-ink">
+                  <span className="size-2.5 shrink-0" style={{ background: `var(--pod-${r.podId})` }} aria-hidden />
+                  {r.name}
+                </span>
+                <span className="block truncate text-xs text-ink-3" title={editorsOf(r.podId).join(", ")}>
+                  {r.kind === "agency" ? "Not counted in the pods" : editorsOf(r.podId).length ? editorsOf(r.podId).join(", ") : "No editors yet"}
+                </span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-t border-divider">
+            <th className="kicker py-3 pr-3 text-left align-top font-normal">Hit rate</th>
+            {data.map(({ r, decided }) => (
+              <td key={r.podId} className={`px-3 py-3 align-top ${r.kind === "agency" ? "" : "bg-surface"}`}>
+                <div className="num text-[34px] leading-none font-extrabold tracking-[-0.03em] text-ink">{pct(r.hitRate, 0)}</div>
+                <div className="num mt-1 text-xs text-ink-3">{decided ? `${r.hits} of ${decided} decided` : "None decided yet"}</div>
+                {r.kind === "pod" && r.hitRate != null && r.hitRate === topRate && (
+                  <span className="mt-1 inline-block bg-accent-soft px-1.5 py-px text-[11px] font-semibold text-accent-ink">Top hit rate</span>
+                )}
+              </td>
+            ))}
+          </tr>
+          {rows.map(([label, value]) => (
+            <tr key={label} className="border-t border-divider">
+              <th className="py-2 pr-3 text-left font-normal text-ink-2">{label}</th>
+              {data.map((d) => (
+                <td key={d.r.podId} className={`num px-3 py-2 font-bold text-ink ${d.r.kind === "agency" ? "" : "bg-surface"}`}>
+                  {value(d)}
+                </td>
+              ))}
+            </tr>
+          ))}
+          <tr className="border-t border-divider">
+            <th />
+            {data.map(({ r }) => (
+              <td key={r.podId} className={`px-3 py-3 ${r.kind === "agency" ? "" : "bg-surface"}`}>
+                <button onClick={() => onOpen(r.podId ?? "")} className="link inline-flex items-center gap-1 text-sm">
+                  Concepts <Icon name="arrow" size={14} />
+                </button>
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -149,27 +173,17 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
         </details>
         <LoadError error={pods.error} retry={pods.retry} what="the pods" />
         {pods.data && (
-          <div
-            // One row of cards on wide screens, however many pods there are (the agency included), so
-            // no card sits alone on a grey row.
-            className="grid gap-0.5 border-2 border-divider bg-divider sm:grid-cols-2 xl:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
-            style={{ "--cols": columns.length } as CSSProperties}
-          >
-            {columns.map((r) => (
-              <PodColumn
-                key={r.podId}
-                r={r}
-                concepts={concepts.data?.rows ?? []}
-                targets={t}
-                editors={editorsOf(r.podId)}
-                top={r.kind === "pod" && r.hitRate != null && r.hitRate === topRate}
-                onOpen={() => {
-                  setOpen(r.podId ?? "");
-                  document.getElementById("concepts")?.scrollIntoView({ behavior: "smooth" });
-                }}
-              />
-            ))}
-          </div>
+          <PodsCompare
+            columns={columns}
+            concepts={concepts.data?.rows ?? []}
+            targets={t}
+            editorsOf={editorsOf}
+            topRate={topRate}
+            onOpen={(podId) => {
+              setOpen(podId);
+              document.getElementById("concepts")?.scrollIntoView({ behavior: "smooth" });
+            }}
+          />
         )}
         {unassigned && unassigned.totals.spendCents > 0 && (
           <p className="text-sm text-ink-2">
