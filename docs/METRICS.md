@@ -78,6 +78,9 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - Spend (Meta), CPA and ROAS by day or by Monday-start week, for the account, one pod or unassigned ads. Defaults to weekly
   for ranges over ~2 months.
 
+## Ad Rankings minimum spend (`/api/rankings`)
+Ranking by purchases, ROAS, CTR or CPA only includes posts that spent at least `rankMinSpendPerDay` (Settings → Targets, default $50) × the days in the range; All time counts from the first day anything spent. Ranking by spend, and the turned-off-hits list, show every post. `?all=1` (the page's "Include them") lifts the minimum. Changing it doesn't recompute the summaries (it's applied per request).
+
 ## CSV export
 - Rankings (current filters), Concepts and the Pods table. Money in plain dollars, every value labelled with its source;
   missing values are empty cells, never 0.

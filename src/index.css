@@ -256,11 +256,11 @@ input[type="checkbox"] {
     color: var(--ink-3);
   }
 
-  a.link {
+  .link {
     color: var(--accent-ink);
     font-weight: 700;
   }
-  a.link:hover {
+  .link:hover {
     color: var(--accent);
   }
 }

@@ -328,6 +328,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
   const [wSpend, setWSpend] = useState(String(t.winnerMinSpend));
   const [wDays, setWDays] = useState(String(t.winnerMinDays));
   const [swSpend, setSwSpend] = useState(String(t.superWinnerMinSpend));
+  const [rankMin, setRankMin] = useState(String(t.rankMinSpendPerDay));
   const buyer = meta.isMediaBuyer;
   const { busy, run, note } = useSave(onSaved);
   const amberShown = amber ? Number(amber) : Number(cpa) * 1.25;
@@ -344,6 +345,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           minTestSpend: Number(min),
           hitRule: rule,
           lateWindowDays: Number(late),
+          rankMinSpendPerDay: Number(rankMin),
           // Only the media buyer sets these (the server refuses them from anyone else).
           ...(buyer
             ? { winnerMinRoas: Number(wRoas), winnerMinSpend: Number(wSpend), winnerMinDays: Number(wDays), superWinnerMinSpend: Number(swSpend) }
@@ -444,6 +446,17 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           {Number(late) > 0 && ` A miss that keeps spending becomes a late hit if, from day ${late} on, its totals since launch or any ${late} days in a row reach target (with at least $${min} spent).`} Each
           ad is also judged on its own the same way; one ad hitting makes the concept a hit.
         </span>
+      </div>
+      <h3 className="mt-6 mb-1 font-extrabold text-ink">Ad Rankings</h3>
+      <p className="mb-3 max-w-[90ch] text-sm text-ink-3">
+        Ranking by purchases, ROAS, CTR or CPA only includes ads that spent at least this much per day of the selected range, so a lucky ad on
+        a few dollars doesn't top the list. At ${Number(rankMin) || 0}/day: last 7 days ${(Number(rankMin) || 0) * 7}, last 30 days $
+        {(Number(rankMin) || 0) * 30}. Ranking by spend shows every ad.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-7">
+        <Labeled label="Minimum spend ($ per day)">
+          <input id="t-rankmin" type="number" min="0" step="5" value={rankMin} onChange={(e) => setRankMin(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
       </div>
       <h3 className="mt-6 mb-1 font-extrabold text-ink">Hit (call)</h3>
       <p className="mb-3 max-w-[90ch] text-sm text-ink-3">

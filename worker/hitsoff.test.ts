@@ -84,3 +84,17 @@ describe("hits turned off", () => {
     expect((await app.fetch(new Request("https://hub.test/api/concepts/nope"), env, {} as ExecutionContext)).status).toBe(404);
   });
 });
+
+describe("ranking minimum", () => {
+  it("ranks by a ratio only posts with the per-day minimum for the range, and spend shows them all", async () => {
+    // Last 7 days (Oct 9–15): p2 spent $400, p4 $700. At $60/day the minimum is $420.
+    await env.DB.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('targets', ?1)").bind(JSON.stringify({ rankMinSpendPerDay: 60 })).run();
+    const byRoas = await rankings("range=week&sort=roas");
+    expect(byRoas.items.map((p) => p.postId)).toEqual(["p4"]);
+    expect(byRoas).toMatchObject({ minSpendCents: 42000, belowMin: 1, minDays: 7 });
+    expect((await rankings("range=week&sort=roas&all=1")).items.map((p) => p.postId).sort()).toEqual(["p2", "p4"]);
+    expect((await rankings("range=week&sort=spend")).minSpendCents).toBeNull();
+    // All time counts from the first day anything spent (Sep 10), not from 2000.
+    expect((await rankings("range=all&sort=cpa")).minDays).toBe(36);
+  });
+});

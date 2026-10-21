@@ -59,6 +59,8 @@ export interface Targets {
   winnerMinDays: number;
   /** A candidate with this much spend ($) is flagged as a possible super winner. */
   superWinnerMinSpend: number;
+  /** Ad Rankings by purchases, ROAS, CTR or CPA only rank posts that spent this much ($) per day of the range. */
+  rankMinSpendPerDay: number;
 }
 
 export const DEFAULT_TARGETS: Targets = {
@@ -73,6 +75,7 @@ export const DEFAULT_TARGETS: Targets = {
   winnerMinSpend: 1000,
   winnerMinDays: 5,
   superWinnerMinSpend: 5000,
+  rankMinSpendPerDay: 50,
 };
 
 export type Band = "good" | "warn" | "bad" | "none";

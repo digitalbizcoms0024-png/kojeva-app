@@ -238,14 +238,16 @@ export function Segmented<T extends string>({
 /** Underlined tabs ("Ads · Pods · Editors"). */
 export function Tabs<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
   return (
-    <div className="flex gap-6 overflow-x-auto border-b-2 border-divider" role="tablist">
+    // The line is an inset shadow, not a border: with a border the active underline (pulled 2px over it)
+    // overflows the scrolling row and the browser shows a scrollbar.
+    <div className="flex gap-6 overflow-x-auto shadow-[inset_0_-2px_0_var(--divider)]" role="tablist">
       {options.map((o) => (
         <button
           key={o.value}
           role="tab"
           aria-selected={o.value === value}
           onClick={() => onChange(o.value)}
-          className={`-mb-0.5 border-b-2 pb-2 text-[15px] whitespace-nowrap transition ${
+          className={`border-b-2 pb-2 text-[15px] whitespace-nowrap transition ${
             o.value === value ? "border-accent font-bold text-ink" : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >

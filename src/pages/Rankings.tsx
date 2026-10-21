@@ -65,7 +65,10 @@ export function RankingsPage({
     if (initialStatus) setStatus(initialStatus);
   }, [initialStatus]);
 
-  const rankings = useApi<RankingsResponse>(tab === "ads" ? `/api/rankings?${qs({ range, sort, pod, status, q, format, angle })}` : null);
+  const [showAll, setShowAll] = useState(false);
+  const rankings = useApi<RankingsResponse>(
+    tab === "ads" ? `/api/rankings?${qs({ range, sort, pod, status, q, format, angle, all: showAll && sort !== "spend" ? "1" : undefined })}` : null,
+  );
   const pods = useApi<PodsResponse>(tab !== "ads" ? `/api/pods?${qs({ range })}` : null);
 
   const items = rankings.data?.items ?? [];
@@ -159,6 +162,31 @@ export function RankingsPage({
                   </p>
                   <CsvButton disabled={items.length === 0} onClick={() => exportRankings(items, rankings.data!.from, rankings.data!.to)} />
                 </div>
+              )}
+              {sort !== "spend" && status !== "hits_off" && rankings.data && (rankings.data.minSpendCents != null || showAll) && (
+                <p className="text-xs text-ink-2">
+                  {rankings.data.minSpendCents != null ? (
+                    <>
+                      Only ads with <b className="text-ink">{money(rankings.data.minSpendCents, { compact: true })}+</b> spend ($
+                      {meta.targets.rankMinSpendPerDay}/day × {rankings.data.minDays} days) are ranked
+                      {rankings.data.belowMin > 0 && ` · ${int(rankings.data.belowMin)} below that left out`} ·{" "}
+                      <button type="button" className="link" onClick={() => setShowAll(true)}>
+                        Include them
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      Every ad is ranked, however little it spent ·{" "}
+                      <button type="button" className="link" onClick={() => setShowAll(false)}>
+                        Apply the ${meta.targets.rankMinSpendPerDay}/day minimum
+                      </button>
+                    </>
+                  )}{" "}
+                  ·{" "}
+                  <a href="#/settings?tab=targets" className="link">
+                    Change
+                  </a>
+                </p>
               )}
             </div>
 
