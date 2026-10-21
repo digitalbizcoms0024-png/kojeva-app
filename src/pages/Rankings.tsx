@@ -24,6 +24,9 @@ const SORTS: { value: SortKey; label: string }[] = [
 const vocab = (v: Record<string, string>, all: string) => [{ value: "", label: all }, ...Object.entries(v).map(([value, label]) => ({ value, label }))];
 
 /** Cost per 1,000 impressions, in dollars; null without impressions. */
+/** Ads shown at a time. */
+const PAGE = 25;
+
 function cpm(t: Totals): number | null {
   return t.impressions > 0 ? t.spendCents / 100 / (t.impressions / 1000) : null;
 }
@@ -67,6 +70,12 @@ export function RankingsPage({
 
   const items = rankings.data?.items ?? [];
   const activeId = selected ?? items[0]?.postId ?? null;
+  // 25 at a time (the full list ran to hundreds of cards); a new filter starts over.
+  const query = `${range}|${sort}|${pod}|${status}|${q}|${format}|${angle}`;
+  const [shown, setShown] = useState({ query, n: PAGE });
+  const limit = shown.query === query ? shown.n : PAGE;
+  // On a phone the ad's details open over the list instead of below all of it.
+  const [sheet, setSheet] = useState(false);
   const rank = items.findIndex((p) => p.postId === activeId) + 1;
 
   return (
@@ -159,19 +168,40 @@ export function RankingsPage({
                   <Empty>{status === "hits_off" ? "No hits are turned off: every winner still has a copy running." : "No ads with spend match these filters."}</Empty>
                 )}
                 <ol className="flex flex-col gap-2">
-                  {items.map((p, i) => (
+                  {items.slice(0, limit).map((p, i) => (
                     <RankCard
                       key={p.postId}
                       post={p}
                       rank={i + 1}
                       targets={meta.targets}
                       active={p.postId === activeId}
-                      onSelect={() => setSelected(p.postId)}
+                      onSelect={() => {
+                        setSelected(p.postId);
+                        setSheet(true);
+                      }}
                     />
                   ))}
                 </ol>
+                {items.length > limit && (
+                  <button type="button" className="btn btn-secondary mt-3 w-full" onClick={() => setShown({ query, n: limit + PAGE })}>
+                    Show {Math.min(PAGE, items.length - limit)} more · {int(limit)} of {int(items.length)} shown
+                  </button>
+                )}
               </div>
-              <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:overscroll-contain">
+              {sheet && activeId && (
+                <div className="fixed inset-0 z-50 flex flex-col bg-page lg:hidden" role="dialog" aria-modal="true" aria-label="Ad details">
+                  <div className="flex items-center justify-between border-b-2 border-divider px-4 py-3">
+                    <span className="kicker">Ad #{rank}</span>
+                    <button className="btn btn-secondary" onClick={() => setSheet(false)} aria-label="Close">
+                      ✕
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto px-4 py-4">
+                    <PostDetailPanel postId={activeId} range={range} targets={meta.targets} rank={rank} sortLabel={SORTS.find((s) => s.value === sort)!.label} />
+                  </div>
+                </div>
+              )}
+              <div className="hidden min-w-0 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:overscroll-contain">
                 {activeId ? (
                   <PostDetailPanel postId={activeId} range={range} targets={meta.targets} rank={rank} sortLabel={SORTS.find((s) => s.value === sort)!.label} />
                 ) : (
