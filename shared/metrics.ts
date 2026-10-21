@@ -238,3 +238,9 @@ export function winnerCandidate(
   if (r == null || r < t.winnerMinRoas || k.allTime.spendCents < t.winnerMinSpend * 100 || days < t.winnerMinDays) return null;
   return k.allTime.spendCents >= t.superWinnerMinSpend * 100 ? "super_winner" : "winner";
 }
+
+/**
+ * The coverage map places ads that spent at least this much in the period (cents). Smaller tests
+ * still count everywhere else; they'd only clutter the map and its "not on the map" count.
+ */
+export const MIN_MAP_SPEND_CENTS = 5000;

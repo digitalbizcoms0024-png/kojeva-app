@@ -137,3 +137,10 @@ To look at an ad (format, and labels for creatives Atria hasn't tagged) it calls
 `GET /api/ingest/atria/media/<ad id>`, which reads the ad's copy and a video or image link through
 the hub's own Meta connection (`worker/meta/media.ts`, read-only). When Meta hides a video from
 `ads_read` ("Post ID" ads) the route still returns the copy and a thumbnail.
+
+## Coverage map: what's mapped
+The map places ads that spent at least `MIN_MAP_SPEND_CENTS` ($50) in the selected period
+(`shared/metrics.ts`); smaller tests still count everywhere else and are listed as "not mapped".
+"Not on the map" is shown as spend (and its share of mapped spend), with the biggest unplaced ads,
+so small tests don't inflate it. Needs Tagging → Not on the coverage map lists the same ads: tick
+several and set a persona and awareness once to place them all (hand-set, so never overwritten).

@@ -73,8 +73,8 @@ first, read the concept label, then the ad set name, then ad names. Add keywords
 using the real name) as naming evolves. Hand-set tags always win.
 
 Format words the rules know: Static, UGC static, UGC, AI UGC, AI voiceover / B-roll, UGC montage, AI drama,
-Song, Product demo, Mixed media, VSL, Video, Native ad / advertorial / listicle, Podcast, Interview, Animation
-(or "Pixar"), Carousel. What each means is in `FORMAT_DEFINITIONS` (`shared/taxonomy.ts`), the media buyer's
+Song, Pixar song ("ANIMSONG", or Pixar / animation together with "song"), Product demo, Mixed media, VSL,
+Video, Native ad / advertorial / listicle, Podcast, Interview, Animation (or "Pixar", without a song), Carousel. What each means is in `FORMAT_DEFINITIONS` (`shared/taxonomy.ts`), the media buyer's
 definitions; the nightly Atria task suggests a format from the ad's frames and Atria's tags (a suggestion
 only, accepted in Needs Tagging). Put one in the ad set name
 ("Dhia | AI UGC | Problem Vs Solution 2") and the concept is tagged without anyone doing it by hand.

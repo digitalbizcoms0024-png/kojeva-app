@@ -21,7 +21,8 @@ describe("classify", () => {
     ["KOJEVA 15 | STREET INTERVIEW", null, "Interview"],
     ["KOJEVA 12 | WOMEN OVER 50", "MatureFace", null],
     ["KOJEVA 12 | AI UGC", null, "AIUGC"],
-    ["KOJEVA 1 | ANIMSONG-HxM1", null, "Animation"],
+    ["KOJEVA 1 | ANIMSONG-HxM1", null, "PixarSong"],
+    ["KOJEVA 17 | PIXAR SONG | Husband", "Husband", "PixarSong"],
     // The media buyer's format names (Oct 2026), for ad sets named with them from now on.
     ["KOJEVA 16 | AI DRAMA | Mini Movie", null, "AIDrama"],
     ["AI Voiceover + Brolls | Apology", "ProblemAware", "AIVoiceover"],

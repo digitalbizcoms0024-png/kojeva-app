@@ -44,6 +44,7 @@ Before pushing: `npm run typecheck && npm test && npm run build` must all pass.
 - Incrementality: Meta's 7-day click and incremental attribution sit in extra `ad_daily` columns (synced by a second request) and are only compared on the Incrementality page and the ad detail. They're report-only: hit rate and targets stay on the standard numbers. See `docs/METRICS.md`.
 - Atria tags arrive via `/api/ingest/atria` from a nightly Claude task signed in with an Access service token (`requireService`); service tokens can't use any other write route. See `docs/ATRIA.md`.
 - Connection, sync and editing routes require Cloudflare Access and a place on the edit list (`worker/access.ts`, `requireAccess` on each write route; `worker/roles.ts`, Settings → Who can edit). Everyone else signed in is view-only. Don't weaken that; new write routes use `requireAccess` too.
+- **Never share an unfinished promise between requests** (module-level caches in `worker/cache.ts` hold only finished results): if the request that started it is cancelled, its I/O never completes and every request awaiting it hangs.
 - D1 allows at most **100 bound values per statement**; chunk anything built from a list. `worker/testing/sqljs-d1.ts` enforces it in tests.
 - **Read-only on Meta, permanently** (`ads_read`). The hub reports and analyses; it never creates, edits or pauses ads. Ad management is out of scope.
 - Secrets (`META_APP_SECRET`, `TOKEN_KEY`) are Worker secrets, never in code or `wrangler.jsonc`. The Meta user token is stored encrypted in D1.

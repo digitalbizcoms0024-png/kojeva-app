@@ -208,6 +208,9 @@ describe("coverage map", () => {
     expect(map.unplaced).toBe(1); // p3 has no persona
     expect(map.unplacedWhy).toEqual({ waiting: 0, none: 1 }); // labelled, fits no persona
     expect(map.posts.find((p) => p.postId === "p3")?.why).toBe("none");
+    expect(map.unplacedSpendCents).toBe(20000);
+    expect(map.unplacedTop).toEqual([{ postId: "p3", name: "Static 3", spendCents: 20000 }]);
+    expect(map.small).toEqual({ ads: 0, spendCents: 0 });
     expect(map.top).toEqual({ personaId: lisa, awareness: "product", share: 0.7, offerShare: 1 });
     const cell = map.cells.find((c) => c.personaId === sam && c.awareness === "unaware")!;
     expect(cell).toMatchObject({ ads: 1, offerSpendCents: 0, offerKnownSpendCents: 10000, concepts: 1 });
@@ -228,6 +231,21 @@ describe("coverage map", () => {
     expect(harris.posts.map((p) => p.postId).sort()).toEqual(["p1", "p2"]);
     const insights = await json<{ rows: { value: string | null; concepts: number }[] }>(call("/api/insights?range=all&dimension=persona", person));
     expect(Object.fromEntries(insights.rows.map((r) => [r.value ?? "none", r.concepts]))).toEqual({ [lisa]: 1, [sam]: 2 });
+  });
+
+  it("leaves ads under $50 in the period off the map, and counts them apart", async () => {
+    await confirmTwo();
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO posts (id, media_type) VALUES ('p4', 'video')"),
+      env.DB.prepare(
+        "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time) VALUES ('a4', 'p4', 'Tiny test', 's4', 'Dhia | Test', 'ACTIVE', '2026-10-01T00:00:00.000Z')",
+      ),
+      env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES ('a4', '2026-10-10', 4999, 0, 0)"),
+    ]);
+    const map = await json<CoverageResponse>(call("/api/coverage?range=all", person));
+    expect(map.posts.map((p) => p.postId)).not.toContain("p4");
+    expect(map.small).toEqual({ ads: 1, spendCents: 4999 });
+    expect(map.minSpendCents).toBe(5000);
   });
 
   it("raises a dashboard alert when most of the week's spend sits in one cell", async () => {

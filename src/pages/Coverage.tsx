@@ -81,7 +81,8 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                   <span className="text-2xl text-ink-3"> of {data.defined}</span>
                 </div>
                 <div className="mt-1 text-xs text-ink-3">
-                  {personas.length} personas × 5 awareness levels · {data.posts.length} ads spent in this period
+                  {personas.length} personas × 5 awareness levels · {data.posts.length} ads spent {money(data.minSpendCents)}+ in this period
+                  {data.small.ads > 0 && ` · ${data.small.ads} smaller ads (${money(data.small.spendCents, { compact: true })}) aren't mapped`}
                 </div>
               </div>
               <div className="bg-page px-4 py-4">
@@ -100,13 +101,28 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
               </div>
               <div className="bg-page px-4 py-4">
                 <div className="kicker">Not on the map</div>
-                <div className="num mt-1 text-[40px] leading-none font-extrabold text-ink">{data.unplaced}</div>
+                <div className="num mt-1 text-[40px] leading-none font-extrabold text-ink">
+                  {money(data.unplacedSpendCents, { compact: true })}
+                </div>
                 <div className="mt-1 text-xs text-ink-3">
-                  running {data.unplaced === 1 ? "ad has" : "ads have"} no persona or awareness level yet ·{" "}
+                  of spend on ads with no persona or awareness level yet
+                  {data.totals.spendCents > 0 ? ` (${pct(data.unplacedSpendCents / data.totals.spendCents, 0)})` : ""} · {data.unplaced}{" "}
+                  {data.unplaced === 1 ? "ad" : "ads"} ·{" "}
                   <a href="#/tagging?view=unplaced" className="link">
                     place them
                   </a>
                 </div>
+                {data.unplacedTop.length > 0 && (
+                  <div className="num mt-2 text-xs text-ink-2">
+                    Biggest:{" "}
+                    {data.unplacedTop.map((t, i) => (
+                      <span key={t.postId}>
+                        {i > 0 && " · "}
+                        <span className="text-ink">{t.name}</span> {money(t.spendCents, { compact: true })}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {data.unplaced > 0 && (
                   <ul className="num mt-2 flex flex-col gap-0.5 text-xs text-ink-2">
                     {data.unplacedWhy.none > 0 && (
