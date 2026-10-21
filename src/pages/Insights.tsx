@@ -370,13 +370,22 @@ function Matrix({
   onOpen: (o: NonNullable<Open>) => void;
   active: Open;
 }) {
-  const [rows, setRows] = useState<MatrixDimension>("angle");
-  const [cols, setCols] = useState<MatrixDimension>("format");
+  // "#/insights?tab=combos&rows=persona&cols=awareness" (the Coverage map's link) opens on that pair.
+  const [rows, setRows] = useState<MatrixDimension>(() => hashDim("rows") ?? "angle");
+  const [cols, setCols] = useState<MatrixDimension>(() => hashDim("cols") ?? "format");
   const { data, error } = useApi<InsightsMatrix>(rows === cols ? null : `/api/insights/matrix?${qs({ range, pod, rows, cols })}`);
   const cell = new Map((data?.cells ?? []).map((c) => [`${c.row}\u0000${c.col}`, c]));
   const avg = data?.baseline.hitRate ?? null;
-  const rowValues = data?.rowValues.slice(0, 14) ?? [];
-  const colValues = data?.colValues.slice(0, 8) ?? [];
+  // Awareness runs along the buying journey and personas follow their list (as on the Coverage map),
+  // so the two read the same way; other dimensions keep the most-used values first.
+  const ordered = (d: MatrixDimension, values: string[]) => {
+    const order = d === "awareness" ? Object.keys(AWARENESS) : d === "persona" ? Object.keys(personas) : null;
+    if (!order) return values;
+    const at = (v: string) => (order.indexOf(v) < 0 ? order.length : order.indexOf(v));
+    return [...values].sort((a, b) => at(a) - at(b));
+  };
+  const rowValues = ordered(rows, data?.rowValues.slice(0, 14) ?? []);
+  const colValues = ordered(cols, data?.colValues.slice(0, 8) ?? []);
   const isActive = (r: string, c: string) => active?.filter[rows] === r && active.filter[cols] === c;
 
   return (
@@ -470,7 +479,19 @@ function Matrix({
   );
 }
 
+/** A query parameter of the current hash route ("#/insights?tab=combos&rows=persona"). */
+function hashParam(name: string): string | null {
+  return new URLSearchParams(window.location.hash.split("?")[1] ?? "").get(name);
+}
+
+function hashDim(name: "rows" | "cols"): MatrixDimension | null {
+  const v = hashParam(name);
+  return v && MATRIX_OPTIONS.some((o) => o.value === v) ? (v as MatrixDimension) : null;
+}
+
 function readTab(): Tab {
+  const fromLink = hashParam("tab");
+  if (TABS.some((x) => x.value === fromLink)) return fromLink as Tab;
   try {
     const t = localStorage.getItem("insights-tab");
     return TABS.some((x) => x.value === t) ? (t as Tab) : "creative";

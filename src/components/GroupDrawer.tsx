@@ -33,6 +33,10 @@ export function GroupDrawer({ spec, meta, onClose }: { spec: DrillSpec; meta: Me
   const hits = rows.filter((k) => isHit(k.status));
   const tested = rows.reduce((acc, k) => addTotals(acc, k.window), ZERO_TOTALS);
   const nullable = (v: string | undefined) => (v == null || v === "none" ? null : v);
+  // A persona × awareness group links to the same pair on the other page: spend on the Coverage map,
+  // hit rate in Creative Insights → Combinations.
+  const pair = !!nullable(spec.filter.persona) && !!nullable(spec.filter.awareness);
+  const onCoverage = window.location.hash.startsWith("#/coverage");
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={spec.title}>
@@ -50,6 +54,11 @@ export function GroupDrawer({ spec, meta, onClose }: { spec: DrillSpec; meta: Me
                 <b className="text-ink">{decided.length ? pct(hits.length / decided.length, 0) : "—"}</b> ({hits.length}/{decided.length}) · test CPA{" "}
                 <CpaValue value={cpa(tested)} target={t.targetCpa} warnMax={t.cpaWarnMax} /> · {money(tested.spendCents)} tested
               </p>
+            )}
+            {pair && (
+              <a href={onCoverage ? "#/insights?tab=combos&rows=persona&cols=awareness" : "#/coverage"} className="link mt-1 inline-block text-sm">
+                {onCoverage ? "Hit rate of persona × awareness in Creative Insights →" : "Spend on this combination on the Coverage map →"}
+              </a>
             )}
           </div>
           <button onClick={onClose} className="btn btn-secondary shrink-0" aria-label="Close">
