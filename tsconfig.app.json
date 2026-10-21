@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["vite/client", "@cloudflare/workers-types"]
+  },
+  "include": ["src", "shared", "demo", "worker"],
+  "exclude": ["worker/testing/db.ts", "**/*.test.ts"]
+}

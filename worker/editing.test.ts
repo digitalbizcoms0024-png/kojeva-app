@@ -1,0 +1,269 @@
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import app from "./index.ts";
+import type { Env } from "./env.ts";
+import { attribute } from "./meta/sync.ts";
+import { accessFixture, TEST_TEAM } from "./testing/access.ts";
+import { testDb } from "./testing/db.ts";
+
+let env: Env;
+let headers: Record<string, string>;
+// Made before any request: the hub caches Access's signing keys.
+let harris: Record<string, string>;
+let dhia: Record<string, string>;
+let dhiaUpper: Record<string, string>;
+let service: Record<string, string>;
+
+beforeAll(async () => {
+  ({ headers } = await accessFixture());
+  ({ headers: harris } = await accessFixture("harris@kojeva.com"));
+  ({ headers: dhia } = await accessFixture("dhia@kojeva.com"));
+  ({ headers: dhiaUpper } = await accessFixture("DHIA@kojeva.com"));
+  ({ headers: service } = await accessFixture(undefined, "atria-client"));
+});
+afterEach(() => vi.clearAllMocks());
+
+beforeEach(async () => {
+  env = {
+    DB: await testDb(),
+    META_APP_ID: "x",
+    META_AD_ACCOUNT_ID: "act_1",
+    META_GRAPH_VERSION: "v26.0",
+    ACCESS_TEAM_DOMAIN: TEST_TEAM,
+  };
+  const posts: [string, string, string, string][] = [
+    // post, ad, ad name, ad set
+    ["p_harris", "a1", "HxM-1-ANIMSONG", "IH | Harris | KOJEVA 1 | ANIMSONG-HxM1"],
+    ["p_agency", "a2", "V457 | CBO", "ME | R2-S12 | Statics"],
+    ["p_unknown1", "a3", "Video 612", "Top Spenders From ABO"],
+    ["p_unknown2", "a4", "Video 613", "Top Spenders From ABO"],
+  ];
+  await env.DB.batch(
+    posts.flatMap(([post, ad, name, adset]) => [
+      env.DB.prepare("INSERT INTO posts (id, media_type) VALUES (?1, 'video')").bind(post),
+      env.DB.prepare(
+        "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time) VALUES (?1, ?2, ?3, ?4, ?5, 'ACTIVE', '2026-10-05T00:00:00.000Z')",
+      ).bind(ad, post, name, `as_${ad}`, adset),
+    ]),
+  );
+  // Pods started Oct 1, so the untraceable Oct 5 posts are unassigned, not agency.
+  await env.DB.prepare(
+    `UPDATE settings SET value = '{"agencyPrefixes":["ME","QW","TV","YD"],"podsStartDate":"2026-10-01T00:00:00.000Z"}' WHERE key = 'attribution'`,
+  ).run();
+  await attribute(env.DB);
+});
+
+const call = (path: string, init: RequestInit = {}, e: Env = env) =>
+  app.fetch(new Request(`https://hub.test${path}`, { ...init, headers: { ...headers, ...(init.headers ?? {}) } }), e, {} as ExecutionContext);
+const json = (method: string, body: unknown) => ({ method, body: JSON.stringify(body) });
+const pod = async (post: string) =>
+  env.DB.prepare("SELECT pod_id, pod_source, editor_id, angle, tags_source, updated_by FROM assignments WHERE post_id = ?1")
+    .bind(post)
+    .first<Record<string, string | null>>();
+
+describe("tagging", () => {
+  it("sets a pod by hand, and a later re-attribution keeps it", async () => {
+    expect((await pod("p_unknown1"))!.pod_id).toBeNull();
+    const res = await call("/api/posts/p_unknown1/assignment", json("PATCH", { podId: "shameer", angle: "Depuff" }));
+    expect(res.status).toBe(200);
+    expect(await pod("p_unknown1")).toMatchObject({
+      pod_id: "shameer",
+      pod_source: "manual",
+      angle: "Depuff",
+      tags_source: "manual",
+      updated_by: "nosa@kojeva.com",
+    });
+    await attribute(env.DB);
+    expect(await pod("p_unknown1")).toMatchObject({ pod_id: "shameer", pod_source: "manual", angle: "Depuff" });
+  });
+
+  it("resets a post back to automatic", async () => {
+    await call("/api/posts/p_harris/assignment", json("PATCH", { podId: "dhia" }));
+    expect((await pod("p_harris"))!.pod_id).toBe("dhia");
+    await call("/api/posts/p_harris/assignment", json("PATCH", { reset: ["pod"] }));
+    expect(await pod("p_harris")).toMatchObject({ pod_id: "harris", pod_source: "adset" });
+  });
+
+  it("assigns many posts at once", async () => {
+    const res = await call("/api/assignments/bulk", json("POST", { postIds: ["p_unknown1", "p_unknown2"], patch: { podId: "ali" } }));
+    expect(await res.json()).toEqual({ ok: true, updated: 2 });
+    expect((await pod("p_unknown1"))!.pod_id).toBe("ali");
+    expect((await pod("p_unknown2"))!.pod_id).toBe("ali");
+  });
+
+  it("rejects values outside the vocabularies", async () => {
+    expect((await call("/api/posts/p_harris/assignment", json("PATCH", { angle: "Nope" }))).status).toBe(400);
+    expect((await call("/api/posts/p_harris/assignment", json("PATCH", { podId: "bob" }))).status).toBe(400);
+    expect((await call("/api/posts/missing/assignment", json("PATCH", { podId: "ali" }))).status).toBe(404);
+  });
+});
+
+describe("guards", () => {
+  it("refuses edits without Cloudflare Access", async () => {
+    const open = { ...env, ACCESS_TEAM_DOMAIN: "" };
+    expect((await call("/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }), open)).status).toBe(403);
+    expect((await call("/api/settings", json("PUT", { targets: { targetCpa: 15 } }), open)).status).toBe(403);
+  });
+
+  it("refuses edits with a missing or forged sign-in", async () => {
+    const bare = new Request("https://hub.test/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }));
+    expect((await app.fetch(bare, env, {} as ExecutionContext)).status).toBe(401);
+  });
+
+  it("still answers 404 for unknown API paths", async () => {
+    expect((await call("/api/nope")).status).toBe(404);
+  });
+});
+
+describe("edit access", () => {
+  const meta = async (h: Record<string, string> = headers) =>
+    (await (await app.fetch(new Request("https://hub.test/api/meta", { headers: h }), env, {} as ExecutionContext)).json()) as {
+      canEdit: boolean;
+      editAccess: string[];
+    };
+  const as = (h: Record<string, string>, path: string, init: RequestInit) =>
+    app.fetch(new Request(`https://hub.test${path}`, { ...init, headers: h }), env, {} as ExecutionContext);
+
+  it("lets everyone signed in edit until someone is added", async () => {
+    const other = harris;
+    expect(await meta(other)).toMatchObject({ canEdit: true, editAccess: [] });
+    expect((await as(other, "/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }))).status).toBe(200);
+  });
+
+  it("adds the first editor together with the person adding, and makes everyone else view-only", async () => {
+    const res = await call("/api/edit-access", json("POST", { email: " Dhia@Kojeva.com " }));
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as { editAccess: string[] }).editAccess).toEqual(["dhia@kojeva.com", "nosa@kojeva.com"]);
+
+    const viewer = harris;
+    expect((await meta(viewer)).canEdit).toBe(false);
+    expect((await as(viewer, "/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }))).status).toBe(403);
+    expect((await as(viewer, "/api/settings", json("PUT", { targets: { targetCpa: 99 } }))).status).toBe(403);
+    expect((await as(viewer, "/api/sync", json("POST", {}))).status).toBe(403);
+    expect((await as(viewer, "/api/edit-access", json("POST", { email: "harris@kojeva.com" }))).status).toBe(403);
+
+    expect((await meta(dhiaUpper)).canEdit).toBe(true);
+    expect((await as(dhiaUpper, "/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }))).status).toBe(200);
+    expect((await meta()).canEdit).toBe(true);
+  });
+
+  it("won't let you remove yourself, but another editor can", async () => {
+    await call("/api/edit-access", json("POST", { email: "dhia@kojeva.com" }));
+    expect((await call("/api/edit-access/nosa%40kojeva.com", { method: "DELETE" })).status).toBe(400);
+    const res = await as(dhia, "/api/edit-access/nosa%40kojeva.com", { method: "DELETE" });
+    expect(((await res.json()) as { editAccess: string[] }).editAccess).toEqual(["dhia@kojeva.com"]);
+    expect((await call("/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }))).status).toBe(403);
+  });
+
+  it("shows the edit list and the connected Meta account to editors only", async () => {
+    await env.DB.prepare(
+      "INSERT INTO meta_connections (id, method, user_name, ad_account_id, token_cipher, token_iv, connected_at, connected_by) VALUES (1, 'pasted', 'Nosa Lawani', 'act_1', 'x', 'x', '2026-10-16T04:33:00Z', 'nosa@kojeva.com')",
+    ).run();
+    await call("/api/edit-access", json("POST", { email: "dhia@kojeva.com" }));
+    const connection = async (h: Record<string, string>) =>
+      ((await (await as(h, "/api/connection", {})).json()) as { connection: { userName: string | null; connectedBy: string | null } }).connection;
+
+    expect((await meta()).editAccess).toEqual(["dhia@kojeva.com", "nosa@kojeva.com"]);
+    expect(await connection(headers)).toMatchObject({ userName: "Nosa Lawani", connectedBy: "nosa@kojeva.com" });
+
+    expect((await meta(harris)).editAccess).toEqual([]);
+    expect(await connection(harris)).toMatchObject({ userName: null, connectedBy: null });
+  });
+
+  it("rejects things that aren't emails", async () => {
+    expect((await call("/api/edit-access", json("POST", { email: "harris" }))).status).toBe(400);
+    expect((await meta()).editAccess).toEqual([]);
+  });
+
+  it("never gives a service token edit access", async () => {
+    expect((await as(service, "/api/posts/p_harris/assignment", json("PATCH", { podId: "ali" }))).status).toBe(403);
+  });
+});
+
+describe("settings", () => {
+  it("saves targets and shows them back", async () => {
+    expect((await call("/api/settings", json("PUT", { targets: { targetCpa: 15, hitRule: "either" } }))).status).toBe(200);
+    const meta = (await (await call("/api/meta")).json()) as { targets: Record<string, unknown>; canEdit: boolean };
+    expect(meta.targets).toMatchObject({ targetCpa: 15, targetRoas: 1.7, hitRule: "either", minTestSpend: 100 });
+    expect(meta.canEdit).toBe(true);
+  });
+
+  it("saves and clears the amber CPA limit", async () => {
+    expect((await call("/api/settings", json("PUT", { targets: { cpaWarnMax: 18 } }))).status).toBe(200);
+    let meta = (await (await call("/api/meta")).json()) as { targets: Record<string, unknown> };
+    expect(meta.targets.cpaWarnMax).toBe(18);
+    expect((await call("/api/settings", json("PUT", { targets: { cpaWarnMax: null } }))).status).toBe(200);
+    meta = (await (await call("/api/meta")).json()) as { targets: Record<string, unknown> };
+    expect(meta.targets.cpaWarnMax).toBeNull();
+  });
+
+  it("validates targets", async () => {
+    for (const targets of [{ targetCpa: -1 }, { testWindowDays: 2.5 }, { hitRule: "sometimes" }, { targetCpa: 14, cpaWarnMax: 12 }])
+      expect((await call("/api/settings", json("PUT", { targets }))).status).toBe(400);
+  });
+
+  it("re-credits posts when the agency codes change", async () => {
+    expect((await pod("p_agency"))!.pod_id).toBe("agency");
+    await call("/api/settings", json("PUT", { attribution: { agencyPrefixes: ["qw", "TV"] } }));
+    expect((await pod("p_agency"))!.pod_id).toBeNull();
+    const meta = (await (await call("/api/meta")).json()) as { attribution: { agencyPrefixes: string[] } };
+    expect(meta.attribution.agencyPrefixes).toEqual(["QW", "TV"]);
+  });
+
+  it("re-credits posts when the pods start date changes", async () => {
+    expect((await pod("p_unknown1"))!.pod_id).toBeNull();
+    await call("/api/settings", json("PUT", { attribution: { podsStartDate: "2026-10-10" } }));
+    expect(await pod("p_unknown1")).toMatchObject({ pod_id: "agency", pod_source: "era" });
+  });
+});
+
+describe("editors", () => {
+  it("adds an editor, assigns them, and clears assignments on delete", async () => {
+    const res = await call("/api/editors", json("POST", { name: "Tolu", podId: "harris" }));
+    expect(res.status).toBe(201);
+    const editor = (await res.json()) as { id: string };
+    await call("/api/posts/p_harris/assignment", json("PATCH", { editorId: editor.id }));
+    expect((await pod("p_harris"))!.editor_id).toBe(editor.id);
+    const meta = (await (await call("/api/meta")).json()) as { editors: { name: string }[] };
+    expect(meta.editors.map((e) => e.name)).toEqual(["Tolu"]);
+    await call(`/api/editors/${editor.id}`, { method: "DELETE" });
+    expect((await pod("p_harris"))!.editor_id).toBeNull();
+  });
+});
+
+describe("insights", () => {
+  it("groups concepts by angle and format, preferring hand-set tags", async () => {
+    // Two in-house concepts named for their angle, plus spend so they have results.
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO posts (id, media_type) VALUES ('p_s1', 'image'), ('p_s2', 'image')"),
+      env.DB.prepare(
+        `INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time) VALUES
+         ('s1', 'p_s1', 'scarcity v1', 'as_s1', 'IH | Harris | KOJEVA 3 | STATIC | Scarcity', 'ACTIVE', '2026-10-02T00:00:00.000Z'),
+         ('s2', 'p_s2', 'v1', 'as_s2', 'Shameer | Static 3 | Negative Marketing #2', 'ACTIVE', '2026-10-02T00:00:00.000Z')`,
+      ),
+      env.DB.prepare(
+        `INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES
+         ('s1', '2026-10-02', 15000, 12, 30000), ('s2', '2026-10-02', 15000, 5, 9000), ('a1', '2026-10-10', 100, 0, 0)`,
+      ),
+    ]);
+    await attribute(env.DB);
+
+    const get = async (q: string) => (await (await call(`/api/insights?range=all&${q}`)).json()) as { rows: { value: string | null; concepts: number; hits: number; misses: number }[] };
+    const byAngle = await get("dimension=angle");
+    expect(byAngle.rows).toContainEqual(expect.objectContaining({ value: "Scarcity", concepts: 1, hits: 1 }));
+    expect(byAngle.rows).toContainEqual(expect.objectContaining({ value: "ProblemAware", concepts: 1, misses: 1 }));
+    const byFormat = await get("dimension=format");
+    expect(byFormat.rows).toContainEqual(expect.objectContaining({ value: "Static", concepts: 2 }));
+
+    // The post's own tags were filled from the ad set name too.
+    expect((await pod("p_s1"))!.angle).toBe("Scarcity");
+
+    // Tag Shameer's concept by hand: the hand-set angle wins.
+    await call("/api/posts/p_s2/assignment", json("PATCH", { angle: "SocialProof" }));
+    const after = await get("dimension=angle");
+    expect(after.rows).toContainEqual(expect.objectContaining({ value: "SocialProof", concepts: 1 }));
+    expect(after.rows.find((r) => r.value === "ProblemAware")).toBeUndefined();
+
+    const drill = (await (await call("/api/concepts?range=all&angle=SocialProof")).json()) as { rows: { label: string; tagsSource: string }[] };
+    expect(drill.rows).toEqual([expect.objectContaining({ label: "Static 3 | Negative Marketing #2", tagsSource: "manual" })]);
+  });
+});

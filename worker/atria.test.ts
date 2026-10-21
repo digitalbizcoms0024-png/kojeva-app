@@ -1,0 +1,382 @@
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import app from "./index.ts";
+import type { Env } from "./env.ts";
+import { attribute } from "./meta/sync.ts";
+import { accessFixture, TEST_TEAM } from "./testing/access.ts";
+import { testDb } from "./testing/db.ts";
+
+const CLIENT_ID = "abc123.access";
+let env: Env;
+let service: Record<string, string>;
+let person: Record<string, string>;
+
+beforeAll(async () => {
+  ({ headers: service } = await accessFixture(undefined, CLIENT_ID));
+  ({ headers: person } = await accessFixture("nosa@kojeva.com"));
+});
+
+// Real Atria tags for two Kojeva creatives (Oct 2026).
+const VIDEO_TAGS = {
+  theme: ["Problem & Solution", "Product Demo", "Comparison"],
+  core_desire: ["Health", "Aesthetics", "Security"],
+  media_format: ["UGC Video"],
+  visual_hook: ["Transformation Start", "Product Drop", "Direct Eye Contact"],
+};
+const IMAGE_TAGS = {
+  theme: ["Scarcity", "Promotion/Discount", "Social proof"],
+  core_desire: ["Belonging", "Security", "Saving"],
+  offer_type: ["Percentage Off", "Limited Time", "Flash Sale"],
+};
+
+beforeEach(async () => {
+  env = {
+    DB: await testDb(),
+    META_APP_ID: "x",
+    META_AD_ACCOUNT_ID: "act_1",
+    META_GRAPH_VERSION: "v26.0",
+    ACCESS_TEAM_DOMAIN: TEST_TEAM,
+    ATRIA_CLIENT_ID: CLIENT_ID,
+  };
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO posts (id, media_type) VALUES ('p1', 'video'), ('p2', 'image'), ('p3', 'video')"),
+    env.DB.prepare(
+      `INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time, asset_id) VALUES
+       ('a1', 'p1', 'v1', 's1', 'IH | Harris | KOJEVA 15 | FAKE BRUSH', 'ACTIVE', '2026-10-01T00:00:00.000Z', 'v:1053927990294150'),
+       ('a2', 'p2', 'i1', 's2', 'IH | Harris | KOJEVA 3 | STATIC | Scarcity', 'ACTIVE', '2026-10-01T00:00:00.000Z', 'i:b1679ce60dbda9e125c26e84d9f82e94'),
+       ('a3', 'p3', 'v2', 's3', 'Dhia | Static 26 | More Women', 'ACTIVE', '2026-10-01T00:00:00.000Z', 'v:999')`,
+    ),
+    env.DB.prepare(
+      `INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES
+       ('a1', '2026-10-01', 30000, 25, 60000), ('a2', '2026-10-01', 20000, 10, 20000), ('a3', '2026-10-01', 10000, 5, 9000),
+       ('a3', '2026-10-09', 100, 0, 0)`,
+    ),
+  ]);
+  await attribute(env.DB);
+});
+
+const call = (path: string, headers: Record<string, string>, init: RequestInit = {}) =>
+  app.fetch(new Request(`https://hub.test${path}`, { ...init, headers: { ...headers, ...(init.headers ?? {}) } }), env, {} as ExecutionContext);
+const post = (body: unknown) => ({ method: "POST", body: JSON.stringify(body) });
+
+describe("Atria ingest", () => {
+  it("lists assets needing tags, highest spend first", async () => {
+    const res = await call("/api/ingest/atria/pending", service);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { assets: unknown[] }).assets).toEqual([
+      { assetId: "v:1053927990294150", videoId: "1053927990294150", imageHash: null, spendCents: 30000 },
+      { assetId: "i:b1679ce60dbda9e125c26e84d9f82e94", videoId: null, imageHash: "b1679ce60dbda9e125c26e84d9f82e94", spendCents: 20000 },
+      { assetId: "v:999", videoId: "999", imageHash: null, spendCents: 10100 },
+    ]);
+  });
+
+  it("only lets the service token in, and keeps the service token out of edits", async () => {
+    expect((await call("/api/ingest/atria/pending", person)).status).toBe(403);
+    expect((await call("/api/ingest/atria/pending", {})).status).toBe(401);
+    expect((await call("/api/ingest/atria/pending", service)).status).toBe(200);
+    const edit = await call(
+      "/api/posts/p1/assignment",
+      { ...service, "Content-Type": "application/json" },
+      { method: "PATCH", body: JSON.stringify({ podId: "ali" }) },
+    );
+    expect(edit.status).toBe(403);
+    expect((await call("/api/ingest/atria/pending", service)).status).toBe(200);
+    expect(
+      (await app.fetch(new Request("https://hub.test/api/ingest/atria/pending", { headers: service }), { ...env, ATRIA_CLIENT_ID: "" }, {} as ExecutionContext))
+        .status,
+    ).toBe(403);
+  });
+
+  it("stores tags, stops asking for them, and shows them on posts, concepts and insights", async () => {
+    const res = await call(
+      "/api/ingest/atria",
+      service,
+      post({
+        assets: [
+          { assetId: "v:1053927990294150", status: "tagged", tags: VIDEO_TAGS, previewUrl: "https://cdn.tryatria.com/analytics/a/d6d965b14aeaf294630f39b35807a6c8.jpg" },
+          { assetId: "i:b1679ce60dbda9e125c26e84d9f82e94", status: "tagged", tags: IMAGE_TAGS },
+          { assetId: "v:999", status: "not_tagged_yet", previewUrl: "https://cdn.tryatria.com/analytics/a/2be4b75aa0346cc5da84b35bbd4d06bc.jpg" },
+        ],
+      }),
+    );
+    expect(await res.json()).toEqual({ ok: true, received: 3, tagged: 2, twins: 0 });
+
+    // Tagged and recently-checked assets aren't requested again, unless their preview is missing.
+    const pending = (await (await call("/api/ingest/atria/pending", service)).json()) as { assets: { assetId: string }[] };
+    expect(pending.assets.map((a) => a.assetId)).toEqual(["i:b1679ce60dbda9e125c26e84d9f82e94"]);
+
+    const rankings = (await (await call("/api/rankings?range=all", person)).json()) as { items: { postId: string; atria: Record<string, string[]> | null }[] };
+    expect(rankings.items.find((p) => p.postId === "p1")!.atria).toMatchObject({ theme: VIDEO_TAGS.theme, media_format: ["UGC Video"] });
+    expect(rankings.items.find((p) => p.postId === "p3")!.atria).toBeNull();
+
+    const insights = (await (await call("/api/insights?range=all&dimension=atria_theme", person)).json()) as {
+      rows: { value: string | null; concepts: number }[];
+    };
+    const byTheme = Object.fromEntries(insights.rows.map((r) => [r.value ?? "none", r.concepts]));
+    expect(byTheme).toMatchObject({ Comparison: 1, Scarcity: 1, "Product Demo": 1, none: 1 });
+
+    const drill = (await (await call("/api/concepts?range=all&atria_desire=Security", person)).json()) as { rows: unknown[] };
+    expect(drill.rows).toHaveLength(2);
+  });
+
+  it("rejects malformed tags", async () => {
+    for (const assets of [
+      [{ assetId: "x:1", status: "tagged", tags: {} }],
+      [{ assetId: "v:1", status: "tagged", tags: { theme: "Scarcity" } }],
+      [{ assetId: "v:1", status: "maybe" }],
+      [],
+    ])
+      expect((await call("/api/ingest/atria", service, post({ assets }))).status).toBe(400);
+  });
+
+  describe("awareness and belief labels", () => {
+    const VIDEO = "v:1053927990294150";
+    const IMAGE = "i:b1679ce60dbda9e125c26e84d9f82e94";
+    const tagBoth = () =>
+      call(
+        "/api/ingest/atria",
+        service,
+        post({
+          assets: [
+            { assetId: VIDEO, status: "tagged", tags: VIDEO_TAGS },
+            { assetId: IMAGE, status: "tagged", tags: IMAGE_TAGS },
+          ],
+        }),
+      );
+    const LABELS = {
+      labels: [
+        {
+          assetId: VIDEO,
+          awareness: "problem",
+          belief: "Puffiness isn't fat, it's fluid that can drain",
+          beliefGroup: "Puffiness is fluid, not fat",
+          offer: false,
+          motivations: ["under_eye", "convenience"],
+          format: "AIUGC",
+        },
+        { assetId: IMAGE, awareness: "most", belief: "This deal won't come back", beliefGroup: "Now is the time to buy", offer: true, motivations: ["price"], format: null },
+      ],
+    };
+
+    it("lists tagged assets that need labels, with their tags and the groups already in use", async () => {
+      await tagBoth();
+      const res = (await (await call("/api/ingest/atria/unlabeled", service)).json()) as {
+        awarenessLevels: string[];
+        beliefGroups: unknown[];
+        assets: { assetId: string; tags: Record<string, string[]> }[];
+      };
+      expect(res.awarenessLevels).toEqual(["unaware", "problem", "solution", "product", "most"]);
+      expect(res.beliefGroups).toEqual([]);
+      // v:999 isn't tagged by Atria: listed too, for Claude to label from the ad itself.
+      expect(res.assets.map((a) => [a.assetId, (a as { atriaTagged?: boolean }).atriaTagged])).toEqual([
+        [VIDEO, true],
+        [IMAGE, true],
+        ["v:999", false],
+      ]);
+      expect(res.assets.find((a) => a.assetId === VIDEO)!.tags.visual_hook).toEqual(VIDEO_TAGS.visual_hook);
+      expect((await call("/api/ingest/atria/unlabeled", person)).status).toBe(403);
+    });
+
+    it("stores labels, writes nothing on an unchanged re-send, and groups Insights by them", async () => {
+      await tagBoth();
+      expect(await (await call("/api/ingest/atria/labels", service, post(LABELS))).json()).toEqual({ ok: true, received: 2, written: 2, unknown: 0 });
+      expect(await (await call("/api/ingest/atria/labels", service, post(LABELS))).json()).toMatchObject({ written: 0 });
+      const left = (await (await call("/api/ingest/atria/unlabeled", service)).json()) as { assets: { assetId: string }[]; beliefGroups: { name: string }[] };
+      expect(left.assets.map((a) => a.assetId)).toEqual(["v:999"]);
+      expect(left.beliefGroups.map((g) => g.name).sort()).toEqual(["Now is the time to buy", "Puffiness is fluid, not fat"]);
+
+      const rows = async (dimension: string) =>
+        Object.fromEntries(
+          (
+            (await (await call(`/api/insights?range=all&dimension=${dimension}`, person)).json()) as { rows: { value: string | null; concepts: number }[] }
+          ).rows.map((r) => [r.value ?? "none", r.concepts]),
+        );
+      expect(await rows("awareness")).toMatchObject({ problem: 1, most: 1, none: 1 });
+      expect(await rows("belief")).toMatchObject({ "Puffiness is fluid, not fat": 1, "Now is the time to buy": 1, none: 1 });
+      expect(await rows("atria_hook")).toMatchObject({ "Transformation Start": 1, none: 2 });
+      const drill = (await (await call("/api/concepts?range=all&awareness=problem", person)).json()) as { rows: { beliefs: string[] }[] };
+      expect(drill.rows).toHaveLength(1);
+      expect(drill.rows[0]!.beliefs).toEqual(["Puffiness isn't fat, it's fluid that can drain"]);
+    });
+
+    it("lets a hand-set awareness and belief group win over Claude's", async () => {
+      await tagBoth();
+      await call("/api/ingest/atria/labels", service, post(LABELS));
+      const res = await call("/api/posts/p1/assignment", person, {
+        method: "PATCH",
+        body: JSON.stringify({ awareness: "solution", beliefGroup: "Real gua sha beats fakes" }),
+      });
+      expect(res.status).toBe(200);
+      const concepts = (await (await call("/api/concepts?range=all&awareness=solution", person)).json()) as {
+        rows: { awareness: string; awarenessSource: string; beliefGroups: string[] }[];
+      };
+      expect(concepts.rows).toEqual([
+        expect.objectContaining({ awareness: "solution", awarenessSource: "manual", beliefGroups: ["Real gua sha beats fakes"] }),
+      ]);
+      expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ awareness: "very" }) })).status).toBe(400);
+    });
+
+    it("labels motivation tags, rolls them up per concept and lets a hand-set list win", async () => {
+      await tagBoth();
+      await call("/api/ingest/atria/labels", service, post(LABELS));
+      const values = async () =>
+        Object.fromEntries(
+          ((await (await call("/api/insights?range=all&dimension=motivation", person)).json()) as { rows: { value: string | null; concepts: number }[] }).rows.map(
+            (r) => [r.value ?? "none", r.concepts],
+          ),
+        );
+      expect(await values()).toEqual({ under_eye: 1, convenience: 1, price: 1, none: 1 });
+      const post1 = async () =>
+        ((await (await call("/api/rankings?range=all", person)).json()) as { items: { postId: string; labels: { motivations: string[] | null }; assignment: { motivations: string[] | null } }[] }).items.find(
+          (p) => p.postId === "p1",
+        )!;
+      expect((await post1()).labels.motivations).toEqual(["convenience", "under_eye"]);
+
+      // A hand-set list replaces Claude's for that ad; null hands it back.
+      expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ motivations: ["proof", "proof"] }) })).status).toBe(200);
+      expect((await post1()).assignment.motivations).toEqual(["proof"]);
+      expect(await values()).toEqual({ proof: 1, price: 1, none: 1 });
+      expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ motivations: null }) })).status).toBe(200);
+      expect(await values()).toEqual({ under_eye: 1, convenience: 1, price: 1, none: 1 });
+
+      expect((await call("/api/posts/p1/assignment", person, { method: "PATCH", body: JSON.stringify({ motivations: ["vibes"] }) })).status).toBe(400);
+      const bad = await call("/api/ingest/atria/labels", service, post({ labels: [{ ...LABELS.labels[0], motivations: ["vibes"] }] }));
+      expect(bad.status).toBe(400);
+    });
+
+    it("stores Claude's format suggestion without applying it, and writes nothing on a re-send", async () => {
+      await tagBoth();
+      const unlabeled = (await (await call("/api/ingest/atria/unlabeled", service)).json()) as {
+        formats: { key: string; definition: string | null }[];
+        assets: { assetId: string; adIds: string[] }[];
+      };
+      expect(unlabeled.formats.find((f) => f.key === "AIVoiceover")?.definition).toMatch(/AI voice/);
+      expect(unlabeled.assets.find((a) => a.assetId === VIDEO)?.adIds).toEqual(["a1"]);
+
+      expect(((await (await call("/api/ingest/atria/labels", service, post(LABELS))).json()) as { written: number }).written).toBe(2);
+      expect(((await (await call("/api/ingest/atria/labels", service, post(LABELS))).json()) as { written: number }).written).toBe(0);
+      const post1 = async () =>
+        ((await (await call("/api/rankings?range=all", person)).json()) as { items: { postId: string; labels: { format: string | null } }[] }).items.find(
+          (p) => p.postId === "p1",
+        )!;
+      expect((await post1()).labels.format).toBe("AIUGC");
+      // The concept's format still comes from its name ("KOJEVA 15 | FAKE BRUSH" has none): a suggestion only.
+      const concepts = (await (await call("/api/concepts?range=all", person)).json()) as { rows: { label: string; format: string | null }[] };
+      expect(concepts.rows.find((k) => k.label.includes("FAKE BRUSH"))?.format).toBeNull();
+
+      const bad = await call("/api/ingest/atria/labels", service, post({ labels: [{ ...LABELS.labels[0], format: "Hologram" }] }));
+      expect(bad.status).toBe(400);
+    });
+
+    it("gives a copy Atria hasn't tagged the tags and labels of the creative with the same preview", async () => {
+      const PREVIEW = "https://cdn.tryatria.com/analytics/acct/d6d965b14aeaf294630f39b35807a6c8.jpg";
+      const send = (assets: unknown[]) => call("/api/ingest/atria", service, post({ assets }));
+      // The copy (v:999, post p3) comes in first: nothing to copy from yet.
+      expect(await (await send([{ assetId: "v:999", status: "not_tagged_yet", previewUrl: PREVIEW }])).json()).toMatchObject({ twins: 0 });
+      expect(await (await send([{ assetId: VIDEO, status: "tagged", tags: VIDEO_TAGS, previewUrl: PREVIEW }])).json()).toMatchObject({ twins: 1 });
+      const p3 = async () =>
+        ((await (await call("/api/rankings?range=all", person)).json()) as { items: { postId: string; atria: unknown; labels: { awareness: string | null } }[] }).items.find(
+          (p) => p.postId === "p3",
+        )!;
+      expect((await p3()).atria).toMatchObject({ theme: VIDEO_TAGS.theme });
+
+      // Claude labels the original only; the copy takes its labels.
+      const queued = (await (await call("/api/ingest/atria/unlabeled", service)).json()) as { assets: { assetId: string; spendCents: number }[] };
+      expect(queued.assets.map((a) => a.assetId)).not.toContain("v:999");
+      expect(queued.assets.find((a) => a.assetId === VIDEO)!.spendCents).toBe(30000 + 10100); // its copy's spend counts too
+      await call("/api/ingest/atria/labels", service, post({ labels: [LABELS.labels[0]] }));
+      expect((await p3()).labels.awareness).toBe("problem");
+
+      // Atria still hasn't tagged the copy: re-sending changes nothing.
+      expect(await (await send([{ assetId: "v:999", status: "not_tagged_yet", previewUrl: PREVIEW }])).json()).toMatchObject({ twins: 0 });
+      expect((await p3()).atria).toMatchObject({ theme: VIDEO_TAGS.theme });
+      // Once Atria tags the copy itself, its own tags win.
+      await send([{ assetId: "v:999", status: "tagged", tags: IMAGE_TAGS, previewUrl: PREVIEW }]);
+      expect((await p3()).atria).toMatchObject({ theme: IMAGE_TAGS.theme });
+    });
+
+    it("labels a creative Atria hasn't tagged, and only one the hub runs", async () => {
+      const label = { assetId: "v:999", awareness: "solution", belief: "Rollers didn't work → A brush drains gently", beliefGroup: "Gentler than gua sha", offer: false };
+      const res = (await (await call("/api/ingest/atria/labels", service, post({ labels: [label, { ...label, assetId: "v:404" }] }))).json()) as {
+        written: number;
+        unknown: number;
+      };
+      expect(res).toMatchObject({ unknown: 1 });
+      const p3 = ((await (await call("/api/rankings?range=all", person)).json()) as { items: { postId: string; atria: unknown; labels: { awareness: string | null } }[] }).items.find(
+        (p) => p.postId === "p3",
+      )!;
+      expect(p3).toMatchObject({ atria: null, labels: { awareness: "solution" } });
+      // Still asked for Atria's tags, and a re-send writes nothing.
+      expect(((await (await call("/api/ingest/atria/pending", service)).json()) as { assets: { assetId: string }[] }).assets.map((a) => a.assetId)).toContain("v:999");
+      expect(await (await call("/api/ingest/atria/labels", service, post({ labels: [label] }))).json()).toMatchObject({ written: 0 });
+    });
+
+    it("rejects malformed labels", async () => {
+      await tagBoth();
+      for (const labels of [
+        [{ assetId: VIDEO, awareness: "kinda", belief: "x", beliefGroup: "y" }],
+        [{ assetId: VIDEO, awareness: "most", belief: "", beliefGroup: "y" }],
+        [{ assetId: "x:1", awareness: "most", belief: "x", beliefGroup: "y" }],
+        [],
+      ])
+        expect((await call("/api/ingest/atria/labels", service, post({ labels }))).status).toBe(400);
+    });
+  });
+});
+
+describe("report numbers", () => {
+  type Report = {
+    concepts: { podId: string; status: string; period: { spendCents: number; cpa: number | null }; allTime: { spendCents: number }; daily: unknown[]; ads: unknown[] }[];
+    pods: { podId: string; testingSpendCents: number }[];
+  };
+
+  it("lists the period's pod concepts with their result, period and lifetime spend", async () => {
+    const res = await call("/api/ingest/report?from=2026-10-01&to=2026-10-05", service);
+    expect(res.status).toBe(200);
+    const r = (await res.json()) as Report;
+    const harris = r.concepts.filter((k) => k.podId === "harris");
+    expect(harris).toHaveLength(2);
+    expect(harris.find((k) => k.period.spendCents === 30000)).toMatchObject({ status: "hit", period: { cpa: 12 } });
+    const dhia = r.concepts.find((k) => k.podId === "dhia")!;
+    // The Oct 9 day is outside the period but counts since launch.
+    expect([dhia.period.spendCents, dhia.allTime.spendCents]).toEqual([10000, 10100]);
+    expect(r.pods.find((p) => p.podId === "harris")!.testingSpendCents).toBe(50000);
+  });
+
+  it("is for the service token only, and checks its dates", async () => {
+    expect((await call("/api/ingest/report?from=2026-10-01&to=2026-10-05", person)).status).toBe(403);
+    expect((await call("/api/ingest/report?from=2026-10-05&to=2026-10-01", service)).status).toBe(400);
+  });
+});
+
+describe("report periods and text", () => {
+  it("drafts the latest closed period once, and never replaces the team's edit", async () => {
+    // Data through Oct 20 closes report 2 (Oct 5–18).
+    await env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES ('a1', '2026-10-20', 100, 0, 0)").run();
+    const due = (await (await call("/api/ingest/report/due", service)).json()) as { due: { n: number; from: string; to: string } | null };
+    expect(due.due).toMatchObject({ n: 2, from: "2026-10-05", to: "2026-10-18" });
+
+    const draft = (body: unknown) => call("/api/ingest/report/draft", service, post(body));
+    expect((await draft({ from: "2026-10-06", learnings: "x", read: "y" })).status).toBe(400);
+    expect(((await (await draft({ from: "2026-10-05", learnings: "* One", read: "Read" })).json()) as { saved: boolean }).saved).toBe(true);
+    expect(((await (await draft({ from: "2026-10-05", learnings: "* One", read: "Read" })).json()) as { saved: boolean }).saved).toBe(false);
+    expect(((await (await call("/api/ingest/report/due", service)).json()) as { due: unknown }).due).toBeNull();
+
+    // A person edits it; Claude can't replace it after that, and can't use the person's route.
+    const edit = { method: "PUT", body: JSON.stringify({ learnings: "* Edited", read: "Mine" }) };
+    expect((await call("/api/reports/2026-10-05", service, edit)).status).toBe(403);
+    expect((await call("/api/reports/2026-10-05", person, edit)).status).toBe(200);
+    expect((await draft({ from: "2026-10-05", learnings: "* Two", read: "Read" })).status).toBe(409);
+    const r = (await (await call("/api/reports/2026-10-05", person)).json()) as { text: { learnings: string; source: string; updatedBy: string } };
+    expect(r.text).toMatchObject({ learnings: "* Edited", source: "edited", updatedBy: "nosa@kojeva.com" });
+  });
+
+  it("lists earlier concepts whose result came in during the period as late verdicts", async () => {
+    const r = (await (await call("/api/ingest/report?from=2026-10-02&to=2026-10-15", service)).json()) as {
+      concepts: unknown[];
+      lateVerdicts: { label: string; status: string; verdictOn: string }[];
+    };
+    // Launched Oct 1 (before the range), judged on day 3 (Oct 3), inside it.
+    expect(r.concepts).toHaveLength(0);
+    expect(r.lateVerdicts.map((v) => [v.status, v.verdictOn])).toContainEqual(["hit", "2026-10-03"]);
+  });
+});

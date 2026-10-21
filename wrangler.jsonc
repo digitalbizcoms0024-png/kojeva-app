@@ -1,0 +1,50 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kojeva-hub",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-10-01",
+  // Serve at kojeva-hub.<account>.workers.dev; lock it with Cloudflare Access (docs/ARCHITECTURE.md).
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "not_found_handling": "single-page-application",
+    // Browser navigations to /api (the Facebook login redirect and its callback) must
+    // reach the Worker instead of getting the app's index.html.
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kojeva-hub",
+      "database_id": "3d5567bd-8374-4f81-880c-6ad59d1f0878",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // The deployed version's ID: saved API responses are keyed by it, so a deploy never serves
+  // a response shaped by the previous code (worker/index.ts, snapshot middleware).
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  "vars": {
+    "META_APP_ID": "2206600029921100",
+    "META_AD_ACCOUNT_ID": "act_2930078677198801",
+    "META_GRAPH_VERSION": "v26.0",
+    // Zero Trust team domain. While empty, the app refuses to connect Meta. ACCESS_AUD
+    // (the app's audience tag) narrows sign-ins to this one Access app; optional.
+    // Secrets (META_APP_SECRET, TOKEN_KEY) are set in the dashboard.
+    "ACCESS_TEAM_DOMAIN": "tiny-band-a384.cloudflareaccess.com",
+    "ACCESS_AUD": "",
+    // Client ID of the Access service token the nightly Atria task uses (docs/ATRIA.md).
+    "ATRIA_CLIENT_ID": "52d224fd6c7660e512605f4d71331b55.access",
+    // The media buyer's sign-ins: only they can call a below-target concept a winner (worker/calls.ts).
+    "MEDIA_BUYER_EMAILS": "digitalbizcoms0024@gmail.com,adrian@kojeva.com"
+  },
+  // Keep Worker logs and errors (Workers & Pages → kojeva-hub → Observability). Free plan allows
+  // 200k events/day; this app makes a few hundred requests a day.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    // Nightly Meta sync, 09:17 UTC (~5am New York).
+    "crons": ["17 9 * * *"]
+  }
+}
