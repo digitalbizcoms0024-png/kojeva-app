@@ -152,21 +152,22 @@ export async function memoize<T>(
   const store = stats ? statsMemos : memos;
   const stored = stats ? `stats:${name}` : `memo:${deployed ? `${deployed}|` : ""}${name}`;
   const key = `${version}|${name}`;
-  let p = store.get(key) as Promise<T> | undefined;
-  if (!p) {
-    p = opts.durable
-      ? (async () => {
-          const body = await readSnapshot(db, stored, version);
-          if (body !== undefined) return JSON.parse(body) as T;
-          const value = await fn();
-          await writeSnapshot(db, stored, version, JSON.stringify(value));
-          return value;
-        })()
-      : fn();
-    store.set(key, p);
-    p.catch(() => store.delete(key));
-  }
-  return p;
+  const done = store.get(key) as Promise<T> | undefined;
+  if (done) return done;
+  // Only a finished result is shared with other requests. An unfinished one belongs to the request
+  // that started it: if that request is cancelled (a closed tab), its I/O never completes, and every
+  // request waiting on it hung until the browser gave up (Oct 21: /api/pods, 116 s wall, 6 ms CPU).
+  const value = opts.durable
+    ? await (async () => {
+        const body = await readSnapshot(db, stored, version);
+        if (body !== undefined) return JSON.parse(body) as T;
+        const fresh = await fn();
+        await writeSnapshot(db, stored, version, JSON.stringify(fresh));
+        return fresh;
+      })()
+    : await fn();
+  store.set(key, Promise.resolve(value));
+  return value;
 }
 
 /** A Map through a durable memo (stored as entries). */
