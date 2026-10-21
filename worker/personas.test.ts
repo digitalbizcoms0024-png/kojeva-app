@@ -206,7 +206,7 @@ describe("coverage map", () => {
     expect(map.defined).toBe(10);
     expect(map.filled).toBe(2);
     expect(map.unplaced).toBe(1); // p3 has no persona
-    expect(map.unplacedWhy).toEqual({ untagged: 0, waiting: 0, none: 1 }); // labelled, fits no persona
+    expect(map.unplacedWhy).toEqual({ waiting: 0, none: 1 }); // labelled, fits no persona
     expect(map.posts.find((p) => p.postId === "p3")?.why).toBe("none");
     expect(map.top).toEqual({ personaId: lisa, awareness: "product", share: 0.7, offerShare: 1 });
     const cell = map.cells.find((c) => c.personaId === sam && c.awareness === "unaware")!;

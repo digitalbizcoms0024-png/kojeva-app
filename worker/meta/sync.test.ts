@@ -168,7 +168,9 @@ describe("runSync", () => {
       { id: "as3", pod_id: "dhia", label: "ABO - Dhia - Batch 22" },
       { id: "as6", pod_id: "agency", label: "R2-S12 | Statics" },
     ]);
-    const assets = await q<{ id: string; asset_id: string | null }>("SELECT id, asset_id FROM ads WHERE asset_id IS NOT NULL ORDER BY id");
+    // Ads whose media Meta hides stand in with their post, so Claude can still label them.
+    expect((await q<{ asset_id: string }>("SELECT asset_id FROM ads WHERE id = '120241757339710001'"))[0]!.asset_id).toBe("p:776862388850901_111");
+    const assets = await q<{ id: string; asset_id: string | null }>("SELECT id, asset_id FROM ads WHERE asset_id NOT LIKE 'p:%' ORDER BY id");
     expect(assets).toEqual([
       { id: "120241980715400001", asset_id: "i:b1679ce60dbda9e125c26e84d9f82e94" },
       { id: "120250321798060075", asset_id: "v:1053927990294150" },

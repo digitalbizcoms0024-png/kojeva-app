@@ -20,8 +20,8 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
     .map((p) => {
       const personaId = persona(p.assignment.personaId ?? p.labels.personaId);
       const awareness = level(p.assignment.awareness ?? p.labels.awareness);
-      // Claude labels only Atria-tagged creatives; one with awareness but no persona was judged to fit none.
-      const why: UnplacedReason | null = personaId && awareness ? null : !p.atria && !personaId && !awareness ? "untagged" : awareness && !personaId ? "none" : "waiting";
+      // One with awareness but no persona was judged to fit none; Claude labels the rest nightly.
+      const why: UnplacedReason | null = personaId && awareness ? null : awareness && !personaId ? "none" : "waiting";
       return {
       postId: p.postId,
       name: p.name,
@@ -101,7 +101,6 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
         : null,
     unplaced: running.filter((p) => p.why).length,
     unplacedWhy: {
-      untagged: running.filter((p) => p.why === "untagged").length,
       waiting: running.filter((p) => p.why === "waiting").length,
       none: running.filter((p) => p.why === "none").length,
     },

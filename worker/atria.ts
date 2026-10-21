@@ -43,7 +43,7 @@ atria.get("/pending", async (c) => {
       `SELECT a.asset_id, SUM(d.spend_cents) AS spend
        FROM ads a JOIN ad_daily d ON d.ad_id = a.id
        LEFT JOIN atria_assets t ON t.asset_id = a.asset_id
-       WHERE a.asset_id IS NOT NULL AND d.date >= ?1
+       WHERE a.asset_id IS NOT NULL AND a.asset_id NOT LIKE 'p:%' AND d.date >= ?1
          AND (t.asset_id IS NULL
               OR (t.status <> 'tagged' AND t.fetched_at < ?2)
               OR t.fetched_at < ?3
@@ -188,11 +188,6 @@ atria.post("/", async (c) => {
 export const AWARENESS_LEVELS = ["unaware", "problem", "solution", "product", "most"] as const;
 
 /**
- * Tagged assets with no awareness/belief label yet (or whose tags changed since), highest recent
- * spend first, with what Claude needs to label them, plus the belief groups already in use so it
- * reuses them instead of inventing near-duplicates.
- */
-/**
  * Why posts that spent in the last 7 days have no Atria tags: their ads carry no video/image id
  * (Meta hides the media, or a format with none), or Atria's status for the asset. Read-only.
  */
@@ -214,7 +209,7 @@ atria.get("/gaps", async (c) => {
   for (const [postId, ads] of byPost) {
     if (ads.some((a) => a.status === "tagged")) continue;
     const ad = ads.find((a) => a.asset_id) ?? ads[0]!;
-    const why = !ad.asset_id ? "no_asset_id" : (ad.status ?? "never_fetched");
+    const why = !ad.asset_id || ad.asset_id.startsWith("p:") ? "no_asset_id" : (ad.status ?? "never_fetched");
     counts[why] = (counts[why] ?? 0) + 1;
     (examples[why] ??= []).push({ postId, name: ad.name, assetId: ad.asset_id, creativeId: ad.creative_id, fetchedAt: ad.fetched_at, spendCents: ads.reduce((n, a) => n + Number(a.spend), 0) });
   }
@@ -223,6 +218,13 @@ atria.get("/gaps", async (c) => {
   return c.json({ since: shiftDay(latest, -6), posts: byPost.size, untagged: counts, examples });
 });
 
+/**
+ * Creatives with recent spend and no awareness/belief label yet (or whose tags changed since),
+ * highest spend first, with what Claude needs to label them, plus the belief groups already in use
+ * so it reuses them instead of inventing near-duplicates. Creatives Atria hasn't tagged are listed
+ * too (atriaTagged false): Claude labels those by looking at the ad. A copy's spend counts toward
+ * its original, which is labelled for both (see copyTwins).
+ */
 atria.get("/unlabeled", async (c) => {
   const db = c.env.DB;
   const limit = Math.min(Number(c.req.query("limit") ?? 40) || 40, 100);
@@ -232,17 +234,20 @@ atria.get("/unlabeled", async (c) => {
   const [assets, groups] = await Promise.all([
     db
       .prepare(
-        `SELECT t.asset_id, t.tags, SUM(d.spend_cents) AS spend,
-           (SELECT GROUP_CONCAT(n.name, char(10)) FROM (SELECT DISTINCT x.name FROM ads x WHERE x.asset_id = t.asset_id) n) AS ad_names,
-           (SELECT GROUP_CONCAT(i.id, char(10)) FROM (SELECT x.id FROM ads x WHERE x.asset_id = t.asset_id ORDER BY x.created_time LIMIT 3) i) AS ad_ids
-         FROM atria_assets t JOIN atria_assets m ON m.asset_id = t.asset_id OR m.twin_of = t.asset_id
-           JOIN ads a ON a.asset_id = m.asset_id JOIN ad_daily d ON d.ad_id = a.id
-         WHERE t.status = 'tagged' AND t.twin_of IS NULL AND d.date >= ?1
-           AND (t.labeled_at IS NULL OR t.offer IS NULL OR t.motivations_at IS NULL OR t.format_at IS NULL OR (?3 = 1 AND t.persona_at IS NULL))
-         GROUP BY t.asset_id ORDER BY spend DESC LIMIT ?2`,
+        `SELECT s.owner AS asset_id, s.spend, t.status, t.tags,
+           (SELECT GROUP_CONCAT(n.name, char(10)) FROM (SELECT DISTINCT x.name FROM ads x WHERE x.asset_id = s.owner) n) AS ad_names,
+           (SELECT GROUP_CONCAT(i.id, char(10)) FROM (SELECT x.id FROM ads x WHERE x.asset_id = s.owner ORDER BY x.created_time LIMIT 3) i) AS ad_ids
+         FROM (
+           SELECT COALESCE(m.twin_of, a.asset_id) AS owner, SUM(d.spend_cents) AS spend
+           FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id LEFT JOIN atria_assets m ON m.asset_id = a.asset_id
+           WHERE a.asset_id IS NOT NULL AND d.date >= ?1 GROUP BY owner
+         ) s LEFT JOIN atria_assets t ON t.asset_id = s.owner
+         WHERE t.asset_id IS NULL OR t.labeled_at IS NULL OR t.offer IS NULL OR t.motivations_at IS NULL OR t.format_at IS NULL
+           OR (?3 = 1 AND t.persona_at IS NULL)
+         ORDER BY s.spend DESC LIMIT ?2`,
       )
       .bind(shiftDay(latest, -89), limit, ready ? 1 : 0)
-      .all<{ asset_id: string; tags: string; spend: number; ad_names: string | null; ad_ids: string | null }>(),
+      .all<{ asset_id: string; status: string | null; tags: string | null; spend: number; ad_names: string | null; ad_ids: string | null }>(),
     db
       .prepare("SELECT belief_group, COUNT(*) AS n FROM atria_assets WHERE belief_group IS NOT NULL GROUP BY belief_group ORDER BY n DESC")
       .all<{ belief_group: string; n: number }>(),
@@ -263,7 +268,9 @@ atria.get("/unlabeled", async (c) => {
       adNames: (r.ad_names ?? "").split("\n").filter(Boolean).slice(0, 5),
       // Meta ad ids running it: for the Atria tool get_ad_account_ad (video file, copy).
       adIds: (r.ad_ids ?? "").split("\n").filter(Boolean),
-      tags: JSON.parse(r.tags) as AtriaTags,
+      // false: Atria hasn't tagged it (or Meta hides its media, "p:" ids); judge from the ad itself.
+      atriaTagged: r.status === "tagged",
+      tags: (r.status === "tagged" && r.tags ? JSON.parse(r.tags) : {}) as AtriaTags,
       spendCents: Number(r.spend),
     })),
   });
@@ -310,8 +317,8 @@ atria.post("/labels", async (c) => {
   const active = new Set(personas.filter((p) => p.status === "active").map((p) => p.id));
   const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() && v.trim().length <= max ? v.trim() : null);
   for (const l of items) {
-    if (typeof l.assetId !== "string" || !/^[vi]:[A-Za-z0-9_-]{1,64}$/.test(l.assetId))
-      return c.json({ error: "assetId must be v:<video id> or i:<image hash>." }, 400);
+    if (typeof l.assetId !== "string" || !/^[vip]:[A-Za-z0-9_-]{1,64}$/.test(l.assetId))
+      return c.json({ error: "assetId must be v:<video id>, i:<image hash> or p:<post id>." }, 400);
     if (!(AWARENESS_LEVELS as readonly unknown[]).includes(l.awareness))
       return c.json({ error: `awareness for ${l.assetId} must be one of ${AWARENESS_LEVELS.join(", ")}.` }, 400);
     const belief = text(l.belief, 200);
@@ -380,15 +387,29 @@ atria.post("/labels", async (c) => {
   const now = new Date().toISOString();
   let unknown = 0;
   const stmts: D1PreparedStatement[] = [];
+  const missing = rows.map((r) => r.assetId).filter((id) => !stored.has(id));
+  const running = new Set<string>();
+  for (let i = 0; i < missing.length; i += 90) {
+    const chunk = missing.slice(i, i + 90);
+    const { results } = await db
+      .prepare(`SELECT DISTINCT asset_id FROM ads WHERE asset_id IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")})`)
+      .bind(...chunk)
+      .all<{ asset_id: string }>();
+    for (const x of results) running.add(x.asset_id);
+  }
   for (const r of rows) {
     const old = stored.get(r.assetId);
     if (!old) {
-      unknown++; // labels only attach to assets Atria has tagged
-      continue;
+      // A creative Atria has never returned (or one Meta hides, "p:"): labelled from the ad itself.
+      if (!running.has(r.assetId)) {
+        unknown++;
+        continue;
+      }
+      stmts.push(db.prepare("INSERT INTO atria_assets (asset_id, status, fetched_at) VALUES (?1, 'not_tagged_yet', ?2)").bind(r.assetId, now));
     }
-    const samePersona = !r.persona || (old.persona_at != null && old.persona_id === r.persona.id);
+    const samePersona = !r.persona || (old?.persona_at != null && old.persona_id === r.persona.id);
     if (
-      old.labeled_at &&
+      old?.labeled_at &&
       old.awareness === r.awareness &&
       old.belief === r.belief &&
       old.belief_group === r.beliefGroup &&

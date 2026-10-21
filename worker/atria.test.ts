@@ -166,7 +166,12 @@ describe("Atria ingest", () => {
       };
       expect(res.awarenessLevels).toEqual(["unaware", "problem", "solution", "product", "most"]);
       expect(res.beliefGroups).toEqual([]);
-      expect(res.assets.map((a) => a.assetId).sort()).toEqual([IMAGE, VIDEO].sort());
+      // v:999 isn't tagged by Atria: listed too, for Claude to label from the ad itself.
+      expect(res.assets.map((a) => [a.assetId, (a as { atriaTagged?: boolean }).atriaTagged])).toEqual([
+        [VIDEO, true],
+        [IMAGE, true],
+        ["v:999", false],
+      ]);
       expect(res.assets.find((a) => a.assetId === VIDEO)!.tags.visual_hook).toEqual(VIDEO_TAGS.visual_hook);
       expect((await call("/api/ingest/atria/unlabeled", person)).status).toBe(403);
     });
@@ -175,8 +180,8 @@ describe("Atria ingest", () => {
       await tagBoth();
       expect(await (await call("/api/ingest/atria/labels", service, post(LABELS))).json()).toEqual({ ok: true, received: 2, written: 2, unknown: 0 });
       expect(await (await call("/api/ingest/atria/labels", service, post(LABELS))).json()).toMatchObject({ written: 0 });
-      const left = (await (await call("/api/ingest/atria/unlabeled", service)).json()) as { assets: unknown[]; beliefGroups: { name: string }[] };
-      expect(left.assets).toEqual([]);
+      const left = (await (await call("/api/ingest/atria/unlabeled", service)).json()) as { assets: { assetId: string }[]; beliefGroups: { name: string }[] };
+      expect(left.assets.map((a) => a.assetId)).toEqual(["v:999"]);
       expect(left.beliefGroups.map((g) => g.name).sort()).toEqual(["Now is the time to buy", "Puffiness is fluid, not fat"]);
 
       const rows = async (dimension: string) =>
@@ -287,6 +292,22 @@ describe("Atria ingest", () => {
       // Once Atria tags the copy itself, its own tags win.
       await send([{ assetId: "v:999", status: "tagged", tags: IMAGE_TAGS, previewUrl: PREVIEW }]);
       expect((await p3()).atria).toMatchObject({ theme: IMAGE_TAGS.theme });
+    });
+
+    it("labels a creative Atria hasn't tagged, and only one the hub runs", async () => {
+      const label = { assetId: "v:999", awareness: "solution", belief: "Rollers didn't work → A brush drains gently", beliefGroup: "Gentler than gua sha", offer: false };
+      const res = (await (await call("/api/ingest/atria/labels", service, post({ labels: [label, { ...label, assetId: "v:404" }] }))).json()) as {
+        written: number;
+        unknown: number;
+      };
+      expect(res).toMatchObject({ unknown: 1 });
+      const p3 = ((await (await call("/api/rankings?range=all", person)).json()) as { items: { postId: string; atria: unknown; labels: { awareness: string | null } }[] }).items.find(
+        (p) => p.postId === "p3",
+      )!;
+      expect(p3).toMatchObject({ atria: null, labels: { awareness: "solution" } });
+      // Still asked for Atria's tags, and a re-send writes nothing.
+      expect(((await (await call("/api/ingest/atria/pending", service)).json()) as { assets: { assetId: string }[] }).assets.map((a) => a.assetId)).toContain("v:999");
+      expect(await (await call("/api/ingest/atria/labels", service, post({ labels: [label] }))).json()).toMatchObject({ written: 0 });
     });
 
     it("rejects malformed labels", async () => {

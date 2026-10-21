@@ -424,11 +424,11 @@ export interface CoveragePost {
   awareness: string | null;
   offer: boolean | null;
   hit: HitStatus | null;
-  /** Why it's off the map (null when placed): Atria hasn't tagged it, Claude hasn't labelled it yet, or it fits no persona. */
+  /** Why it's off the map (null when placed): Claude hasn't labelled it yet, or it fits no persona. */
   why: UnplacedReason | null;
 }
 
-export type UnplacedReason = "untagged" | "waiting" | "none";
+export type UnplacedReason = "waiting" | "none";
 
 /** One persona × awareness cell. personaId / awareness null = not placed yet. */
 export interface CoverageCell {

@@ -179,7 +179,8 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
         status: ad.effective_status ?? ad.status ?? "UNKNOWN",
         created_time: created,
         creative_id: ad.creative?.id ?? null,
-        asset_id: assetIdFor(ad),
+        // Meta hides some creatives' media ("Post ID" ads): the post stands in, for Claude's labels.
+        asset_id: assetIdFor(ad) ?? `p:${postId}`,
       });
     }
   }

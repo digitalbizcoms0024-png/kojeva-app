@@ -123,3 +123,10 @@ that asset's tags and Claude's labels (`twin_of`, migration 0024). Claude labels
 its copies' spend counts toward its place in the label queue and new labels pass on to the copies.
 A copy's own Atria tags win once it has them. `GET /api/ingest/atria/gaps` (read-only) says why
 posts that spent in the last 7 days still have no tags.
+
+## Creatives Atria hasn't tagged
+Atria tags following spend, so new and small creatives can wait a long time, and some ads (Meta
+hides the media of "Post ID" ads from `ads_read`) can't be sent to Atria at all; those stand in
+with `p:<post id>` as their asset id. `/api/ingest/atria/unlabeled` lists them too with
+`atriaTagged: false`, and the nightly task labels them by looking at the ad itself (frames, copy,
+names). When Atria tags one later its tags change, so it's labelled again with them.
