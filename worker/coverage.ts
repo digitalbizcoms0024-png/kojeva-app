@@ -1,7 +1,7 @@
 // The coverage map: every running ad placed by persona × awareness level, with each cell's
 // spend, results and all-time concept track record. Read-only.
 import type { ConceptResult, CoverageCell, CoveragePost, CoverageResponse, Persona, PostSummary, UnplacedReason } from "../shared/api.ts";
-import { addTotals, hitRate, isHit, ZERO_TOTALS } from "../shared/metrics.ts";
+import { addTotals, hitRate, isHit, MIN_MAP_SPEND_CENTS, ZERO_TOTALS } from "../shared/metrics.ts";
 import { AWARENESS } from "../shared/taxonomy.ts";
 import { loadPersonas } from "./personas.ts";
 import { loadConcepts, loadPosts } from "./queries.ts";
@@ -15,8 +15,10 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
   const persona = (id: string | null) => (id && known.has(id) ? id : null);
   const level = (v: string | null) => (v && v in AWARENESS ? v : null);
 
-  const running: CoveragePost[] = posts
-    .filter((p) => p.totals.spendCents > 0)
+  const spent = posts.filter((p) => p.totals.spendCents > 0);
+  const small = spent.filter((p) => p.totals.spendCents < MIN_MAP_SPEND_CENTS);
+  const running: CoveragePost[] = spent
+    .filter((p) => p.totals.spendCents >= MIN_MAP_SPEND_CENTS)
     .map((p) => {
       const personaId = persona(p.assignment.personaId ?? p.labels.personaId);
       const awareness = level(p.assignment.awareness ?? p.labels.awareness);
@@ -100,6 +102,13 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
           }
         : null,
     unplaced: running.filter((p) => p.why).length,
+    unplacedSpendCents: running.filter((p) => p.why).reduce((n, p) => n + p.totals.spendCents, 0),
+    unplacedTop: running
+      .filter((p) => p.why)
+      .slice(0, 3)
+      .map((p) => ({ postId: p.postId, name: p.name, spendCents: p.totals.spendCents })),
+    minSpendCents: MIN_MAP_SPEND_CENTS,
+    small: { ads: small.length, spendCents: small.reduce((n, p) => n + p.totals.spendCents, 0) },
     unplacedWhy: {
       waiting: running.filter((p) => p.why === "waiting").length,
       none: running.filter((p) => p.why === "none").length,

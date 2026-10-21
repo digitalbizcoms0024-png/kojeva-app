@@ -466,6 +466,12 @@ export interface CoverageResponse {
   unplaced: number;
   /** The unplaced ones by reason (see CoveragePost.why). */
   unplacedWhy: Record<UnplacedReason, number>;
+  /** Their spend in the period, and the biggest of them. */
+  unplacedSpendCents: number;
+  unplacedTop: { postId: string; name: string; spendCents: number }[];
+  /** Ads under minSpendCents in the period aren't mapped (MIN_MAP_SPEND_CENTS); how many and their spend. */
+  minSpendCents: number;
+  small: { ads: number; spendCents: number };
 }
 
 /** Totals for one stretch of days in a winner call's evidence. */

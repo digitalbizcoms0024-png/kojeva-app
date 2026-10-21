@@ -120,6 +120,7 @@ export function PlayableThumb({
   label,
   url,
   className = "",
+  compact = false,
 }: {
   postId: string;
   name: string;
@@ -127,6 +128,8 @@ export function PlayableThumb({
   label: string;
   url: string | null;
   className?: string;
+  /** A small play mark for list rows. */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -149,7 +152,9 @@ export function PlayableThumb({
               : "Play the ad"
           }
         >
-          <span className="flex size-12 items-center justify-center rounded-full bg-black/60 text-xl text-white transition group-hover:scale-110 group-hover:bg-black/75">
+          <span
+            className={`flex items-center justify-center rounded-full bg-black/60 text-white transition group-hover:scale-110 group-hover:bg-black/75 ${compact ? "size-6 text-[10px]" : "size-12 text-xl"}`}
+          >
             ▶
           </span>
         </button>

@@ -3,9 +3,11 @@ import type { AssignmentPatch, MetaResponse, PodsResponse, PostSummary, Rankings
 import { podById, ANGLES, AWARENESS, FORMAT_DEFINITIONS, FORMATS, HOOKS, LANDING_PAGES, MOTIVATIONS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
-import { Empty, PageHeader, PodChip, Segmented, Thumb } from "../components/ui.tsx";
+import { Empty, PageHeader, PodChip, Segmented } from "../components/ui.tsx";
 import { money, pct, shortDate } from "../format.ts";
 import { conceptHref } from "../drill.ts";
+import { PlayableThumb } from "../components/AdPreview.tsx";
+import { MIN_MAP_SPEND_CENTS } from "../../shared/metrics.ts";
 
 async function send(path: string, method: string, body: unknown) {
   const res = await fetch(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -87,7 +89,8 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
   const personaName = (id: string | null) => activePersonas.find((p) => p.id === id)?.name ?? null;
   const placed = (r: PostSummary) => !!personaName(r.assignment.personaId ?? r.labels.personaId) && !!(r.assignment.awareness ?? r.labels.awareness);
   useEffect(() => {
-    if (data) setRows(view === "unplaced" ? data.items.filter((r) => !placed(r)) : data.items);
+    // The map leaves out ads under MIN_MAP_SPEND_CENTS in the period, so this list does too.
+    if (data) setRows(view === "unplaced" ? data.items.filter((r) => !placed(r) && r.totals.spendCents >= MIN_MAP_SPEND_CENTS) : data.items);
     setSelected(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
@@ -233,11 +236,11 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
         </div>
         {view === "unplaced" && (
           <p className="text-sm text-ink-3">
-            Ads that spent in the last 7 days but have no persona or awareness level yet, so they can't be placed on the{" "}
+            Ads that spent $50 or more in the last 7 days but have no persona or awareness level yet, so they can't be placed on the{" "}
             <a href="#/coverage" className="link">
               coverage map
             </a>
-            . Claude labels new creatives nightly once Atria has tagged them; set one here to place it now.
+            . Claude labels new creatives nightly from their tags, copy and names. To place several at once, tick them and set a persona and awareness above; press ▶ to watch an ad first.
           </p>
         )}
 
@@ -417,7 +420,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                       </td>
                       <td className="min-w-64 py-2.5 pr-2">
                         <div className="flex items-center gap-2.5">
-                          <Thumb mediaType={r.mediaType} label="" url={r.thumbnailUrl} className="h-11 w-8 shrink-0" />
+                          <PlayableThumb postId={r.postId} name={r.name} mediaType={r.mediaType} label="" url={r.thumbnailUrl} className="h-11 w-8 shrink-0" compact />
                           <div className="min-w-0">
                             {r.conceptId ? (
                               <a href={conceptHref(r.conceptId)} className="block truncate font-bold text-ink hover:underline" title={`${r.name} — open its concept`}>
