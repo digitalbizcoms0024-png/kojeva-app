@@ -46,5 +46,31 @@
   "triggers": {
     // Nightly Meta sync, 09:17 UTC (~5am New York).
     "crons": ["17 9 * * *"]
+  },
+  "env": {
+    // A copy of the hub to check changes on before they go live (docs/DEPLOY.md): its own Worker
+    // and database (sample data), no Meta secrets, no nightly sync, no Atria ingest. Branches
+    // other than main deploy here (npm run deploy:preview); main deploys the live hub.
+    "preview": {
+      "name": "kojeva-hub-preview",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "kojeva-hub-preview",
+          "database_id": "PREVIEW_DATABASE_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "vars": {
+        "META_APP_ID": "2206600029921100",
+        "META_AD_ACCOUNT_ID": "act_2930078677198801",
+        "META_GRAPH_VERSION": "v26.0",
+        "ACCESS_TEAM_DOMAIN": "tiny-band-a384.cloudflareaccess.com",
+        "ACCESS_AUD": "",
+        "ATRIA_CLIENT_ID": "",
+        "MEDIA_BUYER_EMAILS": "digitalbizcoms0024@gmail.com,adrian@kojeva.com"
+      },
+      "triggers": { "crons": [] }
+    }
   }
 }
