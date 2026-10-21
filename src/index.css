@@ -210,6 +210,11 @@ input[type="checkbox"] {
     color: var(--accent-ink);
     padding-inline: 0;
   }
+  /* A text button stays a text button when off: greyed, no box. */
+  .btn-ghost:disabled {
+    background: transparent;
+    border-color: transparent;
+  }
   .btn-ghost:not(:disabled):hover {
     color: var(--accent);
   }

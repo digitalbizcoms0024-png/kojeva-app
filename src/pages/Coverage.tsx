@@ -54,7 +54,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
             {drafts > 0 ? (
               <p>
                 Claude drafted {drafts} {drafts === 1 ? "persona" : "personas"} from Atria's tags.{" "}
-                <a href="#/settings" className="link">
+                <a href="#/settings?tab=personas" className="link">
                   Review and confirm them in Settings →
                 </a>{" "}
                 Claude places every ad on the next nightly run after that.
@@ -62,7 +62,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
             ) : (
               <p>
                 Claude drafts a list of personas from Atria's persona tags on its next nightly run. You'll then edit and confirm them in Settings, or{" "}
-                <a href="#/settings" className="link">
+                <a href="#/settings?tab=personas" className="link">
                   add your own now
                 </a>
                 .

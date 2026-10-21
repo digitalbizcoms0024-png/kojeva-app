@@ -497,7 +497,7 @@ export function EditorsTab({ data, error, targets }: Props) {
     return (
       <Empty>
         No editors have assigned ads in this period. Add editors in{" "}
-        <a href="#/settings" className="link">
+        <a href="#/settings?tab=pods" className="link">
           Settings
         </a>{" "}
         and assign them in To review.

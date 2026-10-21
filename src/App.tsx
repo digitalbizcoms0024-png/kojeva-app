@@ -213,7 +213,7 @@ export default function App() {
         {m?.dataMode === "sample" && (
           <Banner tone="warn">
             <b>Sample data</b> · these aren't real Kojeva numbers. Connect Meta in{" "}
-            <a href="#/settings" className="link">
+            <a href="#/settings?tab=data" className="link">
               Settings
             </a>
             .
@@ -228,7 +228,7 @@ export default function App() {
           <Banner tone="bad">
             <b>The last sync failed</b>
             {m.lastSync.message ? ` · ${m.lastSync.message}` : ""}.{" "}
-            <a href="#/settings" className="link">
+            <a href="#/settings?tab=data" className="link">
               Details
             </a>
           </Banner>
@@ -240,7 +240,7 @@ export default function App() {
                 <b>{expires < 0 ? "The Meta connection has expired" : `Meta connection expires in ${expires} days`}</b>
                 {expires < 0 ? ", so syncing has stopped" : ""} · data through {shortDate(m?.latestDate)}
               </span>
-              <a href="#/settings" className="btn btn-secondary bg-page py-1">
+              <a href="#/settings?tab=data" className="btn btn-secondary bg-page py-1">
                 Reconnect
               </a>
             </span>

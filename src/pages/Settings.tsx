@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ConnectionStatus, MetaResponse, Persona } from "../../shared/api.ts";
 import { useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
-import { PageHeader, PodChip, SectionTitle, ViewOnlyNote } from "../components/ui.tsx";
+import { PageHeader, PodChip, SectionTitle, ViewOnlyNote, Tabs } from "../components/ui.tsx";
 import { POD_SLOTS } from "../../shared/taxonomy.ts";
 import { dateTime, shortDate } from "../format.ts";
 
@@ -920,60 +920,91 @@ function PersonasCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => vo
   );
 }
 
+type SettingsTab = "targets" | "pods" | "personas" | "people" | "data";
+
+/** "#/settings?tab=personas" opens that tab (links from other pages). */
+function readSettingsTab(): SettingsTab {
+  const t = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("tab");
+  return t === "pods" || t === "personas" || t === "people" || t === "data" ? t : "targets";
+}
+
+/** Settings in tabs, one short page each, instead of one long page. */
 export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced: () => void }) {
+  const [tab, setTab] = useState<SettingsTab>(readSettingsTab);
+  // A link to another tab while Settings is open ("#/settings?tab=data") switches to it.
+  useEffect(() => {
+    const onHash = () => setTab(readSettingsTab());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const tabs: { value: SettingsTab; label: string }[] = [
+    { value: "targets", label: "Targets" },
+    { value: "pods", label: "Pods & editors" },
+    { value: "personas", label: "Personas" },
+    // The edit list is only for the people on it.
+    ...(meta.canEdit ? [{ value: "people" as const, label: "People & access" }] : []),
+    { value: "data", label: "Data sources" },
+  ];
   return (
     <div>
-      <PageHeader title="Settings" subtitle="Targets, pod roster and data sources">
+      <PageHeader title="Settings" subtitle="Targets, pods, personas, who can edit and data sources">
         <HeaderControls meta={meta} />
       </PageHeader>
-      <div className="flex flex-col gap-10 px-4 py-6 md:px-8">
+      <div className="flex flex-col gap-8 px-4 py-6 md:px-8">
         <ViewOnlyNote canEdit={meta.canEdit} accessProtected={meta.accessProtected} />
-        <TargetsCard meta={meta} onSaved={onSynced} />
+        <Tabs value={tab} onChange={setTab} options={tabs} />
 
-        <section>
-          <SectionTitle title="Pod roster" right="Editors aren't in Meta: add them here, then assign them to ads in To review." />
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {meta.pods
-              .filter((p) => p.kind === "pod")
-              .map((p) => (
-                <PodRosterCard key={p.id} meta={meta} podId={p.id} onSaved={onSynced} />
-              ))}
-          </div>
-        </section>
+        {tab === "targets" && <TargetsCard meta={meta} onSaved={onSynced} />}
 
-        <PersonasCard meta={meta} onSaved={onSynced} />
+        {tab === "pods" && (
+          <>
+            <section>
+              <SectionTitle title="Pod roster" right="Editors aren't in Meta: add them here, then assign them to ads in To review." />
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {meta.pods
+                  .filter((p) => p.kind === "pod")
+                  .map((p) => (
+                    <PodRosterCard key={p.id} meta={meta} podId={p.id} onSaved={onSynced} />
+                  ))}
+              </div>
+            </section>
+            <AttributionCard meta={meta} onSaved={onSynced} />
+          </>
+        )}
 
-        <AttributionCard meta={meta} onSaved={onSynced} />
+        {tab === "personas" && <PersonasCard meta={meta} onSaved={onSynced} />}
 
-        {meta.canEdit && <EditAccessCard meta={meta} onSaved={onSynced} />}
+        {tab === "people" && meta.canEdit && <EditAccessCard meta={meta} onSaved={onSynced} />}
 
-        <section>
-          <SectionTitle title="Data sources" />
-          <div className="border-b border-divider pb-5">
-            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-lg font-extrabold text-ink">Meta Ads</h3>
-              {meta.lastSync && (
-                <span className="inline-flex items-center gap-2 text-sm text-ink-2">
-                  <span className={`size-2 ${meta.lastSync.status === "error" ? "bg-bad" : "bg-good"}`} aria-hidden />
-                  {meta.lastSync.status === "error" ? "✕ Last sync failed" : "✓ Last sync ok"} · {dateTime(meta.lastSync.finishedAt)}
-                </span>
-              )}
+        {tab === "data" && (
+          <section>
+            <SectionTitle title="Data sources" />
+            <div className="border-b border-divider pb-5">
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-extrabold text-ink">Meta Ads</h3>
+                {meta.lastSync && (
+                  <span className="inline-flex items-center gap-2 text-sm text-ink-2">
+                    <span className={`size-2 ${meta.lastSync.status === "error" ? "bg-bad" : "bg-good"}`} aria-hidden />
+                    {meta.lastSync.status === "error" ? "✕ Last sync failed" : "✓ Last sync ok"} · {dateTime(meta.lastSync.finishedAt)}
+                  </span>
+                )}
+              </div>
+              <p className="mb-4 text-sm text-ink-3">
+                Spend, purchases, ROAS (Meta) and creatives. Read-only (<code>ads_read</code>). Syncs every night and re-pulls the last 7 days, since Meta keeps
+                revising recent results.
+                {meta.lastSync?.message && ` Last message: ${meta.lastSync.message}.`}
+              </p>
+              <MetaPanel onSynced={onSynced} canEdit={meta.canEdit} />
             </div>
-            <p className="mb-4 text-sm text-ink-3">
-              Spend, purchases, ROAS (Meta) and creatives. Read-only (<code>ads_read</code>). Syncs every night and re-pulls the last 7 days, since Meta keeps
-              revising recent results.
-              {meta.lastSync?.message && ` Last message: ${meta.lastSync.message}.`}
-            </p>
-            <MetaPanel onSynced={onSynced} canEdit={meta.canEdit} />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-divider py-4">
-            <div>
-              <h3 className="text-lg font-extrabold text-ink">Atria tags</h3>
-              <p className="text-sm text-ink-3">Theme, core desire and other creative tags, pushed nightly by a scheduled Claude task.</p>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-divider py-4">
+              <div>
+                <h3 className="text-lg font-extrabold text-ink">Atria tags</h3>
+                <p className="text-sm text-ink-3">Theme, core desire and other creative tags, pushed nightly by a scheduled Claude task.</p>
+              </div>
+              <span className="text-sm text-ink-2">Synced nightly</span>
             </div>
-            <span className="text-sm text-ink-2">Synced nightly</span>
-          </div>
-        </section>
+          </section>
+        )}
       </div>
     </div>
   );
