@@ -6,14 +6,15 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "wrangler d1 migrations apply kojeva-hub --remote && npm run build && wrangler deploy",
+    "deploy": "node --experimental-strip-types scripts/deploy-guard.ts live && wrangler d1 migrations apply kojeva-hub --remote && npm run build && wrangler deploy",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "test": "vitest run",
     "db:migrate:local": "wrangler d1 migrations apply kojeva-hub --local",
     "db:seed:local": "node --experimental-strip-types scripts/gen-sample.ts > seed/sample.sql && wrangler d1 execute kojeva-hub --local --file seed/sample.sql",
     "db:reset:local": "rm -rf .wrangler/state/v3/d1 && npm run db:migrate:local && npm run db:seed:local",
     "build:preview": "node --experimental-strip-types scripts/gen-sample.ts > seed/sample.sql && vite build -c vite.demo.config.ts && node --experimental-strip-types scripts/inline-demo.ts",
-    "deploy:sample": "npm run deploy"
+    "deploy:sample": "npm run deploy",
+    "deploy:preview": "node --experimental-strip-types scripts/deploy-guard.ts preview && wrangler d1 migrations apply kojeva-hub-preview --env preview --remote && node --experimental-strip-types scripts/seed-preview.ts && CLOUDFLARE_ENV=preview npm run build && wrangler deploy"
   },
   "dependencies": {
     "hono": "^4.13.13",

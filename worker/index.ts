@@ -665,8 +665,20 @@ app.onError((err, c) => {
   );
 });
 
+/** The live hub's address: kojeva-hub.<account>.workers.dev. */
+const LIVE_HOST = /^kojeva-hub\./;
+
 export default {
-  fetch: app.fetch,
+  // A preview build must never serve the live address (it reads the preview database). If one is
+  // ever deployed there by mistake, every API call says so instead of showing sample data.
+  fetch(req: Request, env: Env, ctx: ExecutionContext) {
+    if (env.HUB_ENV === "preview" && LIVE_HOST.test(new URL(req.url).hostname))
+      return Response.json(
+        { error: "The preview build is running on the live address. Roll back in Cloudflare → Workers & Pages → kojeva-hub → Deployments." },
+        { status: 503 },
+      );
+    return app.fetch(req, env, ctx);
+  },
   /** Nightly: refresh ads and re-pull the last 7 days (Meta keeps revising recent days). */
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(runSync(env, { since: utcDay(-6), until: utcDay(0), ads: true }));

@@ -180,6 +180,11 @@ export default function App() {
       </aside>
 
       <main className="min-w-0">
+        {window.location.hostname.startsWith("kojeva-hub-preview.") && (
+          <Banner tone="warn">
+            <b>Preview copy</b> · for checking changes before they go live. Sample data; nothing here reaches the live hub.
+          </Banner>
+        )}
         {signedOut && (
           <Banner tone="bad">
             <b>Your sign-in has expired</b> · the page can't load new numbers until you sign in again.{" "}
