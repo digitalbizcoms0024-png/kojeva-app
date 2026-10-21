@@ -308,7 +308,8 @@ function useSave(onSaved: () => void) {
 function Labeled({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1 text-sm text-ink-2">
-      {label}
+      {/* Two lines tall on wide screens, so the boxes in a row line up when one label wraps. */}
+      <span className="flex items-end lg:min-h-10">{label}</span>
       {children}
       {hint && <span className="text-xs text-ink-3">{hint}</span>}
     </label>
@@ -443,15 +444,15 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
         </span>
         <span className="text-ink-3">
           A concept qualifies once one ad has spent ${min}, and is judged from first spend to day {days} or the day it qualified, whichever is later.
-          {Number(late) > 0 && ` A miss that keeps spending becomes a late hit if, from day ${late} on, its totals since launch or any ${late} days in a row reach target (with at least $${min} spent).`} Each
-          ad is also judged on its own the same way; one ad hitting makes the concept a hit.
+          {Number(late) > 0 && ` A miss that keeps spending becomes a late hit if, from day ${late} on, its totals since launch or any ${late} days in a row reach target (with at least $${min} spent).`} The
+          concept is judged on all its ads together.
         </span>
       </div>
       <h3 className="mt-6 mb-1 font-extrabold text-ink">Ad Rankings</h3>
       <p className="mb-3 max-w-[90ch] text-sm text-ink-3">
         Ranking by purchases, ROAS, CTR or CPA only includes ads that spent at least this much per day of the selected range, so a lucky ad on
-        a few dollars doesn't top the list. At ${Number(rankMin) || 0}/day: last 7 days ${(Number(rankMin) || 0) * 7}, last 30 days $
-        {(Number(rankMin) || 0) * 30}. Ranking by spend shows every ad.
+        a few dollars doesn't top the list. At ${Number(rankMin) || 0}/day: last 7 days ${((Number(rankMin) || 0) * 7).toLocaleString("en-US")}, last 30 days $
+        {((Number(rankMin) || 0) * 30).toLocaleString("en-US")}. Ranking by spend shows every ad.
       </p>
       <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-7">
         <Labeled label="Minimum spend ($ per day)">

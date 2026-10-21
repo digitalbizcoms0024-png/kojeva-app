@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { TrendPoint } from "../../shared/api.ts";
 import { cpa, roas } from "../../shared/metrics.ts";
 import { dollars, money, ratio, shortDate } from "../format.ts";
+import { Empty } from "./ui.tsx";
 
 const W = 380;
 const H = 150;
@@ -138,7 +139,7 @@ function Chart({
  */
 export function TrendCharts({ points, targetCpa, targetRoas }: { points: TrendPoint[]; targetCpa: number; targetRoas: number }) {
   const [hover, setHover] = useState<number | null>(null);
-  if (points.length === 0) return <p className="py-6 text-sm text-ink-3">No spend in this period.</p>;
+  if (points.length === 0) return <Empty small>No spend in this period.</Empty>;
   const meta = (key: string, values: (number | null)[]): Series => ({ key: `meta-${key}`, label: "Meta", values, color: "var(--chart-line)" });
   const cpaLines = [meta("cpa", points.map((p) => cpa(p.totals)))];
   const roasLines = [meta("roas", points.map((p) => roas(p.totals)))];

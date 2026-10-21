@@ -303,8 +303,9 @@ export function Thumb({ mediaType, label, url, className = "" }: { mediaType: st
   );
 }
 
-export function Empty({ children }: { children: ReactNode }) {
-  return <div className="px-6 py-12 text-sm text-ink-3">{children}</div>;
+/** "Nothing here" message, the same look everywhere: a dashed box with the reason. `small` inside a section. */
+export function Empty({ children, small = false }: { children: ReactNode; small?: boolean }) {
+  return <div className={`border border-dashed border-divider px-4 text-center text-sm text-ink-3 ${small ? "py-5" : "py-12"}`}>{children}</div>;
 }
 
 /** Thin horizontal bar against a scale, with an optional dashed target mark. */

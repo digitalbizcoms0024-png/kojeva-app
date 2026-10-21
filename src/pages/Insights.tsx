@@ -262,7 +262,7 @@ function Panel({
         }
       />
       <LoadError error={error} retry={retry} loading={!data} rows={8} />
-      {data && data.rows.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts started testing in this period.</p>}
+      {data && data.rows.length === 0 && <Empty small>No concepts started testing in this period.</Empty>}
       {tagged.length > 0 && (
         <table className="w-full table-fixed text-sm">
           <thead className="kicker text-left">
@@ -409,7 +409,7 @@ function Matrix({
       />
       {rows === cols && <p className="text-sm text-ink-3">Pick two different dimensions.</p>}
       <LoadError error={error} retry={retry} loading={!data && rows !== cols} rows={6} />
-      {data && rowValues.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts carry both tags in this period.</p>}
+      {data && rowValues.length === 0 && <Empty small>No concepts carry both tags in this period.</Empty>}
       {rowValues.length > 0 && (
         <div className="overflow-x-auto">
           <table className="pin-first w-full min-w-[640px] table-fixed border-separate border-spacing-0.5 text-sm">

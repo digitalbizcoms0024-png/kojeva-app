@@ -9,7 +9,7 @@ import { AWARENESS } from "../../shared/taxonomy.ts";
 import { openDrill } from "../drill.ts";
 import { Sparkline } from "../components/Sparkline.tsx";
 import { TrendCharts } from "../components/TrendCharts.tsx";
-import { CpaValue, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError } from "../components/ui.tsx";
+import { CpaValue, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError, Empty } from "../components/ui.tsx";
 import { int, money, pct, shortDate } from "../format.ts";
 
 function Delta({ now, before, better, fmt }: { now: number | null; before: number | null; better: "up" | "down"; fmt: (d: number) => string }) {
@@ -299,7 +299,7 @@ function NewThisWeek({ meta }: { meta: MetaResponse }) {
         }
       />
       <LoadError error={error} retry={retry} what="new ads" loading={!data} rows={5} />
-      {data && rows.length === 0 && <p className="py-3 text-sm text-ink-3">No ads launched in the last 7 days.</p>}
+      {data && rows.length === 0 && <Empty small>No ads launched in the last 7 days.</Empty>}
       {rows.length > 0 && (
         <table className="w-full table-fixed text-sm">
           <thead className="kicker text-left">

@@ -6,7 +6,7 @@ import { AWARENESS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { openDrill } from "../drill.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { CpaValue, CsvButton, HitBadge, PageHeader, PodChip, RoasValue, SectionTitle, Select, Thumb, LoadError } from "../components/ui.tsx";
+import { CpaValue, CsvButton, HitBadge, PageHeader, PodChip, RoasValue, SectionTitle, Select, Thumb, LoadError, Empty } from "../components/ui.tsx";
 import { downloadCsv, money, pct, plain, plainDollars } from "../format.ts";
 
 const LEVELS = Object.keys(AWARENESS);
@@ -262,7 +262,7 @@ function Cell({ c, share, meta, active, onClick }: { c: CoverageCell | undefined
 export function CellAds({ data, open, meta }: { data: CoverageResponse; open: { personaId: string | null; awareness: string | null }; meta: MetaResponse }) {
   const t = meta.targets;
   const ads = data.posts.filter((p) => p.personaId === open.personaId && p.awareness === open.awareness);
-  if (!ads.length) return <p className="text-sm text-ink-3">No ads in this cell spent in the selected period.</p>;
+  if (!ads.length) return <Empty small>No ads in this cell spent in the selected period.</Empty>;
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[760px] text-sm">
