@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { MetaResponse } from "../shared/api.ts";
-import { useApi } from "./api.ts";
+import { SIGNED_OUT_EVENT, useApi } from "./api.ts";
 import { ConceptDrawer } from "./components/ConceptDrawer.tsx";
 import type { Range } from "./components/HeaderControls.tsx";
 import { Empty, Icon, type IconName } from "./components/ui.tsx";
@@ -116,6 +116,12 @@ export default function App() {
   const drill = readDrill(route.params);
   const refresh = () => setMetaVersion((v) => v + 1);
   const expires = m?.connectionExpiresInDays;
+  const [signedOut, setSignedOut] = useState(false);
+  useEffect(() => {
+    const on = () => setSignedOut(true);
+    window.addEventListener(SIGNED_OUT_EVENT, on);
+    return () => window.removeEventListener(SIGNED_OUT_EVENT, on);
+  }, []);
 
   return (
     <div className="min-h-screen md:grid md:grid-cols-[232px_minmax(0,1fr)]">
@@ -174,6 +180,14 @@ export default function App() {
       </aside>
 
       <main className="min-w-0">
+        {signedOut && (
+          <Banner tone="bad">
+            <b>Your sign-in has expired</b> · the page can't load new numbers until you sign in again.{" "}
+            <button type="button" className="link" onClick={() => window.location.reload()}>
+              Reload and sign in
+            </button>
+          </Banner>
+        )}
         {m?.dataMode === "sample" && (
           <Banner tone="warn">
             <b>Sample data</b> · these aren't real Kojeva numbers. Connect Meta in{" "}

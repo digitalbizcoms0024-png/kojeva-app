@@ -1,6 +1,27 @@
 import { useEffect, useState } from "react";
 import type { RangeKey } from "../shared/api.ts";
 
+/** Fired when the Cloudflare Access sign-in has expired (requests are redirected to its login page). */
+export const SIGNED_OUT_EVENT = "kojeva:signed-out";
+
+/**
+ * fetch for the app's API. An expired Access session redirects to another origin, which the browser
+ * reports only as "Failed to fetch"; this says what happened instead.
+ */
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  let r: Response;
+  try {
+    r = await fetch(path, { ...init, redirect: "manual" });
+  } catch {
+    throw new Error("Couldn't reach the hub. Check your connection, or reload the page.");
+  }
+  if (r.type === "opaqueredirect" || (r.status >= 300 && r.status < 400)) {
+    window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
+    throw new Error("Your sign-in has expired. Reload the page to sign in again.");
+  }
+  return r;
+}
+
 export function useApi<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -11,7 +32,7 @@ export function useApi<T>(path: string | null) {
     let alive = true;
     setLoading(true);
     setError(null);
-    fetch(path)
+    apiFetch(path)
       .then(async (r) => {
         const body = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error((body as { error?: string }).error || r.statusText || `HTTP ${r.status}`);
