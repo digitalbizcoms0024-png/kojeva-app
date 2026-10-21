@@ -33,6 +33,8 @@ Deployments.
 3. A separate Worker for the preview: Workers & Pages → Create → Import a repository →
    `digitalbizcoms0024-png/kojeva-app`, name `kojeva-hub-preview`, production branch
    `claude/affectionate-cannon-rltll0` (the branch changes are made on), build command empty,
-   deploy command `npm run deploy:preview`. Leave its preview-branch builds off.
+   deploy command `npm run deploy:preview`. Leave its preview-branch builds and its own Access
+   toggle off (it joins the Kojeva Hub Access app instead). Creating it from the dashboard builds
+   `main` first, which the deploy guard refuses; set the production branch, then build again.
 4. Zero Trust → Access → Applications → Kojeva Hub → Destinations → Add Workers:
    `kojeva-hub-preview`, "A Worker's production and preview URLs".
