@@ -32,6 +32,8 @@ const FORMAT_RULES: [Format, RegExp][] = [
   ["AIUGC", /\bai ugc\b/],
   ["UGCMontage", /\bmontage\b|compilation/],
   ["UGCStatic", /\bugc static\b/],
+  // Before Song and Animation: an animated song ad is its own format.
+  ["PixarSong", /animsong|(pixar|\banim\w*).*\bsong\b|\bsong\b.*(pixar|\banim)/],
   ["Song", /\bsong\b|jingle/],
   ["ProductDemo", /product demo/],
   ["MixedMedia", /mixed media/],
