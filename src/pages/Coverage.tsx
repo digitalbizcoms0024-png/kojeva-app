@@ -163,7 +163,11 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                 <table className="w-full min-w-[920px] table-fixed border-collapse text-sm">
                   <thead className="kicker">
                     <tr>
-                      <th className="w-44 py-2 pr-2 text-left font-normal">Persona ↓ · Awareness →</th>
+                      {/* The grid's corner: columns are awareness levels, rows are personas. */}
+                      <th className="w-44 py-2 pr-2 text-left font-normal">
+                        <span className="block whitespace-nowrap text-right">Awareness →</span>
+                        <span className="block whitespace-nowrap">Persona ↓</span>
+                      </th>
                       {cols.map((a) => (
                         <th key={a ?? "none"} className="px-1 py-2 text-left font-normal">
                           {levelOf(a)}
