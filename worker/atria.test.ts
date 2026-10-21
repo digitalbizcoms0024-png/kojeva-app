@@ -98,7 +98,7 @@ describe("Atria ingest", () => {
         ],
       }),
     );
-    expect(await res.json()).toEqual({ ok: true, received: 3, tagged: 2 });
+    expect(await res.json()).toEqual({ ok: true, received: 3, tagged: 2, twins: 0 });
 
     // Tagged and recently-checked assets aren't requested again.
     const pending = (await (await call("/api/ingest/atria/pending", service)).json()) as { assets: unknown[] };
@@ -260,6 +260,33 @@ describe("Atria ingest", () => {
 
       const bad = await call("/api/ingest/atria/labels", service, post({ labels: [{ ...LABELS.labels[0], format: "Hologram" }] }));
       expect(bad.status).toBe(400);
+    });
+
+    it("gives a copy Atria hasn't tagged the tags and labels of the creative with the same preview", async () => {
+      const PREVIEW = "https://cdn.tryatria.com/analytics/acct/d6d965b14aeaf294630f39b35807a6c8.jpg";
+      const send = (assets: unknown[]) => call("/api/ingest/atria", service, post({ assets }));
+      // The copy (v:999, post p3) comes in first: nothing to copy from yet.
+      expect(await (await send([{ assetId: "v:999", status: "not_tagged_yet", previewUrl: PREVIEW }])).json()).toMatchObject({ twins: 0 });
+      expect(await (await send([{ assetId: VIDEO, status: "tagged", tags: VIDEO_TAGS, previewUrl: PREVIEW }])).json()).toMatchObject({ twins: 1 });
+      const p3 = async () =>
+        ((await (await call("/api/rankings?range=all", person)).json()) as { items: { postId: string; atria: unknown; labels: { awareness: string | null } }[] }).items.find(
+          (p) => p.postId === "p3",
+        )!;
+      expect((await p3()).atria).toMatchObject({ theme: VIDEO_TAGS.theme });
+
+      // Claude labels the original only; the copy takes its labels.
+      const queued = (await (await call("/api/ingest/atria/unlabeled", service)).json()) as { assets: { assetId: string; spendCents: number }[] };
+      expect(queued.assets.map((a) => a.assetId)).not.toContain("v:999");
+      expect(queued.assets.find((a) => a.assetId === VIDEO)!.spendCents).toBe(30000 + 10100); // its copy's spend counts too
+      await call("/api/ingest/atria/labels", service, post({ labels: [LABELS.labels[0]] }));
+      expect((await p3()).labels.awareness).toBe("problem");
+
+      // Atria still hasn't tagged the copy: re-sending changes nothing.
+      expect(await (await send([{ assetId: "v:999", status: "not_tagged_yet", previewUrl: PREVIEW }])).json()).toMatchObject({ twins: 0 });
+      expect((await p3()).atria).toMatchObject({ theme: VIDEO_TAGS.theme });
+      // Once Atria tags the copy itself, its own tags win.
+      await send([{ assetId: "v:999", status: "tagged", tags: IMAGE_TAGS, previewUrl: PREVIEW }]);
+      expect((await p3()).atria).toMatchObject({ theme: IMAGE_TAGS.theme });
     });
 
     it("rejects malformed labels", async () => {

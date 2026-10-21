@@ -62,13 +62,66 @@ atria.get("/pending", async (c) => {
   });
 });
 
-type Incoming = { assetId?: unknown; status?: unknown; tags?: unknown };
+type Incoming = { assetId?: unknown; status?: unknown; tags?: unknown; previewUrl?: unknown };
 
-function clean(item: Incoming): { assetId: string; status: string; tags: string | null } | string {
+/** Atria's preview image file name (a hash), the same for copies of one creative. */
+export function previewKey(url: unknown): string | null {
+  if (typeof url !== "string") return null;
+  const m = /\/([0-9a-f]{16,64})\.(?:jpe?g|png|webp)(?:\?|$)/i.exec(url);
+  return m ? m[1]!.toLowerCase() : null;
+}
+
+/** Claude's labels, copied from a tagged asset to its untagged copies. */
+const LABEL_COLS = ["awareness", "belief", "belief_group", "labeled_at", "offer", "persona_id", "persona_at", "motivations", "motivations_at", "format_label", "format_at"] as const;
+type AssetRow = { asset_id: string; status: string; tags: string | null; preview_key: string | null; twin_of: string | null } & Record<(typeof LABEL_COLS)[number], unknown>;
+
+/**
+ * Gives untagged assets the tags and labels of a tagged asset with the same Atria preview (see
+ * migration 0024), for the given preview keys. Writes only the copies that differ.
+ */
+async function copyTwins(db: D1Database, keys: string[]): Promise<number> {
+  const rows: AssetRow[] = [];
+  for (let i = 0; i < keys.length; i += 90) {
+    const chunk = keys.slice(i, i + 90);
+    const { results } = await db
+      .prepare(
+        `SELECT asset_id, status, tags, preview_key, twin_of, ${LABEL_COLS.join(", ")} FROM atria_assets
+         WHERE preview_key IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")})`,
+      )
+      .bind(...chunk)
+      .all<AssetRow>();
+    rows.push(...results);
+  }
+  const byKey = new Map<string, AssetRow[]>();
+  for (const r of rows) byKey.set(r.preview_key!, [...(byKey.get(r.preview_key!) ?? []), r]);
+  const stmts: D1PreparedStatement[] = [];
+  for (const group of byKey.values()) {
+    // The source: tagged by Atria itself, labelled first, then by id so the choice is stable.
+    const own = group.filter((r) => r.status === "tagged" && !r.twin_of).sort((a, b) => Number(!a.labeled_at) - Number(!b.labeled_at) || a.asset_id.localeCompare(b.asset_id));
+    const src = own[0];
+    if (!src) continue;
+    for (const r of group) {
+      if (r.status === "tagged" && !r.twin_of) continue;
+      if (r.twin_of === src.asset_id && r.tags === src.tags && LABEL_COLS.every((k) => r[k] === src[k])) continue;
+      stmts.push(
+        db
+          .prepare(
+            `UPDATE atria_assets SET status = 'tagged', tags = ?2, twin_of = ?3, ${LABEL_COLS.map((k, i) => `${k} = ?${i + 4}`).join(", ")} WHERE asset_id = ?1`,
+          )
+          .bind(r.asset_id, src.tags, src.asset_id, ...LABEL_COLS.map((k) => src[k] ?? null)),
+      );
+    }
+  }
+  for (let i = 0; i < stmts.length; i += 50) await db.batch(stmts.slice(i, i + 50));
+  return stmts.length;
+}
+
+function clean(item: Incoming): { assetId: string; status: string; tags: string | null; previewKey: string | null } | string {
   if (typeof item.assetId !== "string" || !/^[vi]:[A-Za-z0-9_-]{1,64}$/.test(item.assetId)) return "assetId must be v:<video id> or i:<image hash>.";
   const status = item.status ?? "tagged";
   if (typeof status !== "string" || !(STATUSES as readonly string[]).includes(status)) return `Unknown status for ${item.assetId}.`;
-  if (status !== "tagged") return { assetId: item.assetId, status, tags: null };
+  const key = previewKey(item.previewUrl);
+  if (status !== "tagged") return { assetId: item.assetId, status, tags: null, previewKey: key };
   if (!item.tags || typeof item.tags !== "object") return `Tags missing for ${item.assetId}.`;
   const tags: AtriaTags = {};
   for (const cat of ATRIA_CATEGORIES) {
@@ -77,7 +130,7 @@ function clean(item: Incoming): { assetId: string; status: string; tags: string 
     if (!Array.isArray(v) || v.some((x) => typeof x !== "string" || x.length > 120)) return `${cat} must be a list of short strings.`;
     tags[cat] = (v as string[]).slice(0, 12);
   }
-  return { assetId: item.assetId, status, tags: JSON.stringify(tags) };
+  return { assetId: item.assetId, status, tags: JSON.stringify(tags), previewKey: key };
 }
 
 /** Body: { assets: [{ assetId, status, tags }] }, up to 100. Writes only rows that changed. */
@@ -86,47 +139,48 @@ atria.post("/", async (c) => {
   const body = await c.req.json<{ assets?: Incoming[] }>().catch(() => null);
   const items = body?.assets;
   if (!Array.isArray(items) || items.length === 0 || items.length > 100) return c.json({ error: "Send 1–100 assets." }, 400);
-  const rows = [];
+  const rows: Exclude<ReturnType<typeof clean>, string>[] = [];
   for (const item of items) {
     const r = clean(item);
     if (typeof r === "string") return c.json({ error: r }, 400);
     rows.push(r);
   }
 
-  const stored = new Map<string, { status: string; tags: string | null }>();
+  const stored = new Map<string, { status: string; tags: string | null; preview_key: string | null; twin_of: string | null }>();
   for (let i = 0; i < rows.length; i += 90) {
     const chunk = rows.slice(i, i + 90);
     const { results } = await db
-      .prepare(`SELECT asset_id, status, tags FROM atria_assets WHERE asset_id IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")})`)
+      .prepare(`SELECT asset_id, status, tags, preview_key, twin_of FROM atria_assets WHERE asset_id IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")})`)
       .bind(...chunk.map((r) => r.assetId))
-      .all<{ asset_id: string; status: string; tags: string | null }>();
+      .all<{ asset_id: string; status: string; tags: string | null; preview_key: string | null; twin_of: string | null }>();
     for (const s of results) stored.set(s.asset_id, s);
   }
 
   const now = new Date().toISOString();
-  const stmts = rows.map((r) => {
-    const old = stored.get(r.assetId);
+  // A copy still untagged by Atria keeps the tags it took from its twin (same preview).
+  const same = (r: (typeof rows)[number]) => {
+    const o = stored.get(r.assetId);
+    if (!o || (r.previewKey && o.preview_key !== r.previewKey)) return false;
+    return (o.status === r.status && o.tags === r.tags) || (r.status !== "tagged" && o.twin_of != null);
+  };
+  const stmts = rows.map((r) =>
     // Unchanged tags still record the check, so they aren't asked for again until due.
-    return old && old.status === r.status && old.tags === r.tags
+    same(r)
       ? db.prepare("UPDATE atria_assets SET fetched_at = ?2 WHERE asset_id = ?1").bind(r.assetId, now)
       : db
           .prepare(
-            `INSERT INTO atria_assets (asset_id, status, tags, fetched_at) VALUES (?1, ?2, ?3, ?4)
+            `INSERT INTO atria_assets (asset_id, status, tags, fetched_at, preview_key) VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT(asset_id) DO UPDATE SET status = excluded.status, tags = excluded.tags, fetched_at = excluded.fetched_at,
+               preview_key = COALESCE(excluded.preview_key, atria_assets.preview_key), twin_of = NULL,
                labeled_at = CASE WHEN atria_assets.tags IS excluded.tags THEN atria_assets.labeled_at END`,
           )
-          .bind(r.assetId, r.status, r.tags, now);
-  });
+          .bind(r.assetId, r.status, r.tags, now, r.previewKey),
+  );
   await db.batch(stmts);
+  const twins = await copyTwins(db, [...new Set(rows.map((r) => r.previewKey).filter((k): k is string => k != null))]);
   // Only new or changed tags change what the hub shows (fetched_at alone doesn't).
-  if (
-    rows.some((r) => {
-      const o = stored.get(r.assetId);
-      return !o || o.status !== r.status || o.tags !== r.tags;
-    })
-  )
-    await bumpVersion(db);
-  return c.json({ ok: true, received: rows.length, tagged: rows.filter((r) => r.status === "tagged").length });
+  if (twins > 0 || rows.some((r) => !same(r))) await bumpVersion(db);
+  return c.json({ ok: true, received: rows.length, tagged: rows.filter((r) => r.status === "tagged").length, twins });
 });
 
 export const AWARENESS_LEVELS = ["unaware", "problem", "solution", "product", "most"] as const;
@@ -162,7 +216,8 @@ atria.get("/gaps", async (c) => {
     counts[why] = (counts[why] ?? 0) + 1;
     (examples[why] ??= []).push({ postId, name: ad.name, assetId: ad.asset_id, creativeId: ad.creative_id, fetchedAt: ad.fetched_at, spendCents: ads.reduce((n, a) => n + Number(a.spend), 0) });
   }
-  for (const k of Object.keys(examples)) examples[k] = examples[k]!.sort((a, b) => b.spendCents - a.spendCents).slice(0, 15);
+  const limit = Math.min(Number(c.req.query("limit") ?? 15) || 15, 500);
+  for (const k of Object.keys(examples)) examples[k] = examples[k]!.sort((a, b) => b.spendCents - a.spendCents).slice(0, limit);
   return c.json({ since: shiftDay(latest, -6), posts: byPost.size, untagged: counts, examples });
 });
 
@@ -178,8 +233,9 @@ atria.get("/unlabeled", async (c) => {
         `SELECT t.asset_id, t.tags, SUM(d.spend_cents) AS spend,
            (SELECT GROUP_CONCAT(n.name, char(10)) FROM (SELECT DISTINCT x.name FROM ads x WHERE x.asset_id = t.asset_id) n) AS ad_names,
            (SELECT GROUP_CONCAT(i.id, char(10)) FROM (SELECT x.id FROM ads x WHERE x.asset_id = t.asset_id ORDER BY x.created_time LIMIT 3) i) AS ad_ids
-         FROM atria_assets t JOIN ads a ON a.asset_id = t.asset_id JOIN ad_daily d ON d.ad_id = a.id
-         WHERE t.status = 'tagged' AND d.date >= ?1
+         FROM atria_assets t JOIN atria_assets m ON m.asset_id = t.asset_id OR m.twin_of = t.asset_id
+           JOIN ads a ON a.asset_id = m.asset_id JOIN ad_daily d ON d.ad_id = a.id
+         WHERE t.status = 'tagged' AND t.twin_of IS NULL AND d.date >= ?1
            AND (t.labeled_at IS NULL OR t.offer IS NULL OR t.motivations_at IS NULL OR t.format_at IS NULL OR (?3 = 1 AND t.persona_at IS NULL))
          GROUP BY t.asset_id ORDER BY spend DESC LIMIT ?2`,
       )
@@ -354,6 +410,18 @@ atria.post("/labels", async (c) => {
   }
   if (stmts.length) {
     await db.batch(stmts);
+    // Copies of a creative share its labels (see copyTwins).
+    const changed = rows.map((r) => r.assetId);
+    for (let i = 0; i < changed.length; i += 90) {
+      const chunk = changed.slice(i, i + 90);
+      await db
+        .prepare(
+          `UPDATE atria_assets SET (${LABEL_COLS.join(", ")}) = (SELECT ${LABEL_COLS.map((k) => `s.${k}`).join(", ")} FROM atria_assets s WHERE s.asset_id = atria_assets.twin_of)
+           WHERE twin_of IN (${chunk.map((_, j) => `?${j + 1}`).join(", ")})`,
+        )
+        .bind(...chunk)
+        .run();
+    }
     await bumpVersion(db);
   }
   return c.json({ ok: true, received: rows.length, written: stmts.length, unknown });
