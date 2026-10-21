@@ -136,6 +136,36 @@ export const AWARENESS_LEVELS = ["unaware", "problem", "solution", "product", "m
  * spend first, with what Claude needs to label them, plus the belief groups already in use so it
  * reuses them instead of inventing near-duplicates.
  */
+/**
+ * Why posts that spent in the last 7 days have no Atria tags: their ads carry no video/image id
+ * (Meta hides the media, or a format with none), or Atria's status for the asset. Read-only.
+ */
+atria.get("/gaps", async (c) => {
+  const db = c.env.DB;
+  const latest = (await getLatestDate(db)) ?? new Date().toISOString().slice(0, 10);
+  const { results } = await db
+    .prepare(
+      `SELECT a.post_id, a.name, a.asset_id, a.creative_id, t.status, t.fetched_at, SUM(d.spend_cents) AS spend
+       FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id LEFT JOIN atria_assets t ON t.asset_id = a.asset_id
+       WHERE d.date >= ?1 GROUP BY a.id`,
+    )
+    .bind(shiftDay(latest, -6))
+    .all<{ post_id: string; name: string; asset_id: string | null; creative_id: string | null; status: string | null; fetched_at: string | null; spend: number }>();
+  const byPost = new Map<string, typeof results>();
+  for (const r of results) byPost.set(r.post_id, [...(byPost.get(r.post_id) ?? []), r]);
+  const counts: Record<string, number> = {};
+  const examples: Record<string, { postId: string; name: string; assetId: string | null; creativeId: string | null; fetchedAt: string | null; spendCents: number }[]> = {};
+  for (const [postId, ads] of byPost) {
+    if (ads.some((a) => a.status === "tagged")) continue;
+    const ad = ads.find((a) => a.asset_id) ?? ads[0]!;
+    const why = !ad.asset_id ? "no_asset_id" : (ad.status ?? "never_fetched");
+    counts[why] = (counts[why] ?? 0) + 1;
+    (examples[why] ??= []).push({ postId, name: ad.name, assetId: ad.asset_id, creativeId: ad.creative_id, fetchedAt: ad.fetched_at, spendCents: ads.reduce((n, a) => n + Number(a.spend), 0) });
+  }
+  for (const k of Object.keys(examples)) examples[k] = examples[k]!.sort((a, b) => b.spendCents - a.spendCents).slice(0, 15);
+  return c.json({ since: shiftDay(latest, -6), posts: byPost.size, untagged: counts, examples });
+});
+
 atria.get("/unlabeled", async (c) => {
   const db = c.env.DB;
   const limit = Math.min(Number(c.req.query("limit") ?? 40) || 40, 100);
