@@ -6,7 +6,7 @@ import { HeaderControls, previousPeriod, rangeLabel, shiftDay, type Range } from
 import { PodSpend } from "../components/PodSpend.tsx";
 import { Sparkline } from "../components/Sparkline.tsx";
 import { TrendCharts } from "../components/TrendCharts.tsx";
-import { CpaValue, Empty, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb } from "../components/ui.tsx";
+import { CpaValue, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError } from "../components/ui.tsx";
 import { int, money, pct, shortDate } from "../format.ts";
 
 function Delta({ now, before, better, fmt }: { now: number | null; before: number | null; better: "up" | "down"; fmt: (d: number) => string }) {
@@ -47,6 +47,8 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
   const ranked = (pods.data?.rows ?? []).filter((r) => r.kind === "pod").sort((a, b) => (b.hitRate ?? -1) - (a.hitRate ?? -1) || b.totals.spendCents - a.totals.spendCents);
   const agency = pods.data?.rows.find((r) => r.kind === "agency");
   const pctFmt = (d: number) => pct(Math.abs(d), 1);
+  // While the totals load the cards say so ("…"); "—" is kept for numbers that really are missing.
+  const kpi = (v: ReactNode) => (t ? v : top.loading ? "…" : "—");
 
   return (
     <div>
@@ -55,29 +57,30 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
       </PageHeader>
 
       <div className="flex flex-col gap-8 px-4 py-6 md:px-8">
+        <LoadError error={top.error} retry={top.retry} what="the totals" />
         <div className="grid grid-cols-2 gap-0.5 border-2 border-divider bg-divider lg:grid-cols-4 [&>*]:bg-page">
           <Kpi
             label="Spend"
             source="Meta"
-            value={money(t?.spendCents, { compact: true })}
+            value={kpi(money(t?.spendCents, { compact: true }))}
             sub={b && t && <><Delta now={t.spendCents} before={b.spendCents} better="up" fmt={pctFmt} /> {prev?.label}</>}
           />
           <Kpi
             label="Purchases"
             source="Meta"
-            value={int(t?.purchases)}
+            value={kpi(int(t?.purchases))}
             sub={b && t && <><Delta now={t.purchases} before={b.purchases} better="up" fmt={pctFmt} /> {prev?.label}</>}
           />
           <Kpi
             label="CPA"
             source="Meta"
-            value={t ? <CpaValue value={cpa(t)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} /> : "—"}
+            value={kpi(t && <CpaValue value={cpa(t)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />)}
             sub={<>{b && t && <Delta now={cpa(t)} before={cpa(b)} better="down" fmt={pctFmt} />} Target ${tg.targetCpa.toFixed(2)}</>}
           />
           <Kpi
             label="ROAS"
             source="Meta"
-            value={t ? <RoasValue value={roas(t)} target={tg.targetRoas} /> : "—"}
+            value={kpi(t && <RoasValue value={roas(t)} target={tg.targetRoas} />)}
             sub={<>{b && t && <Delta now={roas(t)} before={roas(b)} better="up" fmt={pctFmt} />} Target {tg.targetRoas.toFixed(2)}</>}
           />
         </div>
@@ -86,7 +89,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
 
         <section>
           <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by hit rate · ${shortDate(pods.data.from === "2000-01-01" ? null : pods.data.from)} – ${shortDate(pods.data.to)} · Meta`} />
-          {pods.error && <Empty>{pods.error.message}</Empty>}
+          <LoadError error={pods.error} retry={pods.retry} what="the pods" />
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {ranked.map((r, i) => (
               <PodCard
@@ -124,7 +127,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
                 </a>
               }
             />
-            {top.error && <Empty>{top.error.message}</Empty>}
+            <LoadError error={top.error} retry={top.retry} what="the top ads" />
             <table className="w-full table-fixed text-sm">
               <thead className="kicker text-left">
                 <tr className="border-b border-divider">
@@ -172,7 +175,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
 
           <section className="min-w-0">
             <SectionTitle title="Alerts" right={alerts.data && `${alerts.data.alerts.length} open${alerts.data.asOf ? ` · data through ${shortDate(alerts.data.asOf)}` : ""}`} />
-            {alerts.error && <Empty>{alerts.error.message}</Empty>}
+            <LoadError error={alerts.error} retry={alerts.retry} what="alerts" />
             {alerts.data && alerts.data.alerts.length === 0 && <p className="py-3 text-sm text-ink-3">Nothing needs a look right now.</p>}
             <ul>
               {alerts.data?.alerts.map((a) => (
@@ -203,7 +206,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
 function TrendsSection({ meta, range }: { meta: MetaResponse; range: Range }) {
   const [pod, setPod] = useState("");
   const [grain, setGrain] = useState<TrendGrain | "auto">("auto");
-  const { data, error } = useApi<TrendsResponse>(`/api/trends?${qs({ range, pod, grain: grain === "auto" ? undefined : grain })}`);
+  const { data, error, retry } = useApi<TrendsResponse>(`/api/trends?${qs({ range, pod, grain: grain === "auto" ? undefined : grain })}`);
   return (
     <section>
       <SectionTitle
@@ -228,7 +231,7 @@ function TrendsSection({ meta, range }: { meta: MetaResponse; range: Range }) {
           </span>
         }
       />
-      {error && <Empty>{error.message}</Empty>}
+      <LoadError error={error} retry={retry} what="trends" />
       {data && <TrendCharts points={data.points} targetCpa={meta.targets.targetCpa} targetRoas={meta.targets.targetRoas} />}
       <p className="mt-2 text-xs text-ink-3">Meta numbers. Weeks start on Monday.</p>
     </section>

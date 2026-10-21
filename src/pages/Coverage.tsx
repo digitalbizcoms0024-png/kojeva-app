@@ -5,7 +5,7 @@ import { AWARENESS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { openDrill } from "../drill.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, SectionTitle, Select, Thumb } from "../components/ui.tsx";
+import { CpaValue, CsvButton, HitBadge, PageHeader, PodChip, RoasValue, SectionTitle, Select, Thumb, LoadError } from "../components/ui.tsx";
 import { downloadCsv, money, pct, plain, plainDollars } from "../format.ts";
 
 const LEVELS = Object.keys(AWARENESS);
@@ -18,7 +18,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
   // "Running" means spent in the period; the map opens on the last 7 days.
   const [range, setRange] = useState<Range>("week");
   const [pod, setPod] = useState("");
-  const { data, error } = useApi<CoverageResponse>(`/api/coverage?${qs({ range, pod })}`);
+  const { data, error, retry } = useApi<CoverageResponse>(`/api/coverage?${qs({ range, pod })}`);
   const personas = data?.personas ?? [];
   const drafts = meta.personas.filter((p) => p.status === "draft").length;
   const cells = new Map((data?.cells ?? []).map((c) => [key(c.personaId, c.awareness), c]));
@@ -47,7 +47,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
       <div className="flex flex-col gap-8 px-4 py-6 md:px-8">
-        {error && <Empty>Couldn't load: {error.message}</Empty>}
+        <LoadError error={error} retry={retry} what="the coverage map" />
         {data && personas.length === 0 && (
           <div className="border-2 border-divider px-5 py-5 text-sm text-ink-2">
             <h2 className="mb-1 text-lg font-extrabold text-ink">The persona list isn't confirmed yet</h2>

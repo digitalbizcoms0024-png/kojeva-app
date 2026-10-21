@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useState } from "react";
 import type { ConceptResult, ConceptsResponse, MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { qs, useApi } from "../api.ts";
@@ -9,7 +10,7 @@ import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { addTotals, cpa, isHit, roas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
-import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select } from "../components/ui.tsx";
+import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select, LoadError } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
 
 type Props = {
@@ -142,10 +143,18 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
       <div className="flex flex-col gap-6 px-4 py-6 md:px-8">
         <PodSpend range={range} latest={meta.latestDate} targets={t} />
         <SectionTitle title="Hit rate by pod" className="mb-0" />
-        <p className="max-w-[110ch] text-sm text-ink-3">{hitRuleText(t)} Concepts count toward the period in which they first spent.</p>
-        {pods.error && <Empty>Couldn't load pods: {pods.error.message}</Empty>}
+        <details className="text-sm text-ink-3">
+          <summary className="cursor-pointer text-ink-2">How it's measured</summary>
+          <p className="mt-2 max-w-[110ch]">{hitRuleText(t)} Concepts count toward the period in which they first spent.</p>
+        </details>
+        <LoadError error={pods.error} retry={pods.retry} what="the pods" />
         {pods.data && (
-          <div className={`grid gap-0.5 border-2 border-divider bg-divider sm:grid-cols-2 ${columns.length > 4 ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
+          <div
+            // One row of cards on wide screens, however many pods there are (the agency included), so
+            // no card sits alone on a grey row.
+            className="grid gap-0.5 border-2 border-divider bg-divider sm:grid-cols-2 xl:[grid-template-columns:repeat(var(--cols),minmax(0,1fr))]"
+            style={{ "--cols": columns.length } as CSSProperties}
+          >
             {columns.map((r) => (
               <PodColumn
                 key={r.podId}
@@ -216,7 +225,7 @@ export function ConceptsTable({
 }) {
   const [pod, setPod] = useState(filter.pod ?? "");
   const [result, setResult] = useState("");
-  const { data: all, error } = useApi<ConceptsResponse>(`/api/concepts?${qs({ ...filter, range, pod })}`);
+  const { data: all, error, retry } = useApi<ConceptsResponse>(`/api/concepts?${qs({ ...filter, range, pod })}`);
   const keep = (s: ConceptsResponse["rows"][number]["status"]) =>
     !result || (result === "hits" ? isHit(s) : result === "ineligible" ? s === "ineligible" : s === result);
   const data = all && { ...all, rows: all.rows.filter((k) => keep(k.status)) };
@@ -295,7 +304,7 @@ export function ConceptsTable({
           </span>
         }
       />
-      {error && <Empty>Couldn't load concepts: {error.message}</Empty>}
+      <LoadError error={error} retry={retry} what="concepts" />
       {data && data.rows.length === 0 && <Empty>No concepts started testing in this period.</Empty>}
       {data && data.rows.length > 0 && (
         <div className={inPanel ? "overflow-x-auto" : "max-h-[36rem] overflow-auto"}>

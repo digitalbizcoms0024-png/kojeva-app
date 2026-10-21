@@ -345,3 +345,32 @@ export function Pager({ page, size, total, onPage }: { page: number; size: numbe
     </nav>
   );
 }
+
+/** A panel that couldn't load: what happened and a way to try again, instead of empty values. */
+export function LoadError({ error, retry, what }: { error: Error | null; retry?: () => void; what?: string }) {
+  if (!error) return null;
+  return (
+    <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-divider px-4 py-3 text-sm text-ink-2">
+      <span>
+        <b className="text-ink">Couldn't load{what ? ` ${what}` : ""}.</b> {error.message}
+      </span>
+      {retry && (
+        <button type="button" className="link" onClick={retry}>
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Why the page's buttons are off for this person: view-only, or Access not set up yet. */
+export function ViewOnlyNote({ canEdit, accessProtected }: { canEdit: boolean; accessProtected: boolean }) {
+  if (canEdit) return null;
+  return (
+    <p className="bg-warn-soft px-3 py-2 text-sm text-ink">
+      {accessProtected
+        ? "You have view-only access, so changes here are off. Ask someone on the edit list (Settings → Who can edit) to add you."
+        : "Editing is off until Cloudflare Access is set up for this app."}
+    </p>
+  );
+}

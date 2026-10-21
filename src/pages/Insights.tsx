@@ -4,7 +4,7 @@ import { cpa, hitRateFloor, MIN_DECIDED, type Targets } from "../../shared/metri
 import { ANGLES, AWARENESS, FORMATS, MOTIVATIONS, podById } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { CpaValue, Empty, PageHeader, Pager, PodSwatch, SectionTitle, Segmented, Select, Tabs } from "../components/ui.tsx";
+import { CpaValue, Empty, PageHeader, Pager, PodSwatch, SectionTitle, Segmented, Select, Tabs, LoadError } from "../components/ui.tsx";
 import { money, pct } from "../format.ts";
 import { hitRuleText } from "./PodsView.tsx";
 import { openDrill } from "../drill.ts";
@@ -234,7 +234,7 @@ function Panel({
   active: string | null | undefined;
   onOpen: (value: string | null) => void;
 }) {
-  const { data, error } = useApi<InsightsResponse>(`/api/insights?${qs({ range, dimension, pod })}`);
+  const { data, error, retry } = useApi<InsightsResponse>(`/api/insights?${qs({ range, dimension, pod })}`);
   const tagged = sortRows((data?.rows ?? []).filter((r) => r.value !== null), sort);
   const untagged = data?.rows.find((r) => r.value === null);
   const avg = data?.baseline.hitRate ?? null;
@@ -260,7 +260,7 @@ function Panel({
           </span>
         }
       />
-      {error && <Empty>Couldn't load: {error.message}</Empty>}
+      <LoadError error={error} retry={retry} />
       {data && data.rows.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts started testing in this period.</p>}
       {tagged.length > 0 && (
         <table className="w-full table-fixed text-sm">
@@ -373,7 +373,7 @@ function Matrix({
   // "#/insights?tab=combos&rows=persona&cols=awareness" (the Coverage map's link) opens on that pair.
   const [rows, setRows] = useState<MatrixDimension>(() => hashDim("rows") ?? "angle");
   const [cols, setCols] = useState<MatrixDimension>(() => hashDim("cols") ?? "format");
-  const { data, error } = useApi<InsightsMatrix>(rows === cols ? null : `/api/insights/matrix?${qs({ range, pod, rows, cols })}`);
+  const { data, error, retry } = useApi<InsightsMatrix>(rows === cols ? null : `/api/insights/matrix?${qs({ range, pod, rows, cols })}`);
   const cell = new Map((data?.cells ?? []).map((c) => [`${c.row}\u0000${c.col}`, c]));
   const avg = data?.baseline.hitRate ?? null;
   // Awareness runs along the buying journey and personas follow their list (as on the Coverage map),
@@ -405,7 +405,7 @@ function Matrix({
         }
       />
       {rows === cols && <p className="text-sm text-ink-3">Pick two different dimensions.</p>}
-      {error && <Empty>Couldn't load: {error.message}</Empty>}
+      <LoadError error={error} retry={retry} />
       {data && rowValues.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts carry both tags in this period.</p>}
       {rowValues.length > 0 && (
         <div className="overflow-x-auto">

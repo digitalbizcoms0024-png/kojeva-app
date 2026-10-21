@@ -183,8 +183,11 @@ input[type="checkbox"] {
     cursor: pointer;
     transition: background-color 0.12s, color 0.12s, border-color 0.12s;
   }
+  /* Off reads as off: grey, not a faded accent that looks broken. */
   .btn:disabled {
-    opacity: 0.45;
+    background: var(--surface);
+    color: var(--ink-3);
+    border-color: var(--divider);
     cursor: not-allowed;
   }
   .btn-primary {

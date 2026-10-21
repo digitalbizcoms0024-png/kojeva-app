@@ -3,7 +3,7 @@ import type { AssignmentPatch, MetaResponse, PodsResponse, PostSummary, Rankings
 import { podById, ANGLES, AWARENESS, FORMAT_DEFINITIONS, FORMATS, HOOKS, LANDING_PAGES, MOTIVATIONS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
-import { Empty, PageHeader, PodChip, Segmented } from "../components/ui.tsx";
+import { Empty, PageHeader, PodChip, Segmented, LoadError, ViewOnlyNote } from "../components/ui.tsx";
 import { money, pct, shortDate } from "../format.ts";
 import { conceptHref } from "../drill.ts";
 import { PlayableThumb } from "../components/AdPreview.tsx";
@@ -79,7 +79,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
   }, [search]);
 
   // "Not placed": running in the last 7 days (the coverage map's default) without a persona or awareness level.
-  const { data, error } = useApi<RankingsResponse>(
+  const { data, error, retry } = useApi<RankingsResponse>(
     `/api/rankings?${qs({ range: view === "unplaced" ? "week" : period, pod: view === "unassigned" ? "unassigned" : "all", q, limit: view === "unplaced" ? 2000 : 300, r: reload })}`,
   );
   const coverage = useApi<PodsResponse>(`/api/pods?${qs({ range: "month", r: reload })}`);
@@ -184,13 +184,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
       </PageHeader>
 
       <div className="flex flex-col gap-5 px-4 py-6 md:px-8">
-        {disabled && (
-          <p className="bg-warn-soft px-3 py-2 text-sm text-ink">
-            {meta.accessProtected
-              ? "You have view-only access. Ask someone on the edit list (Settings → Who can edit) to add you."
-              : "Editing is off until Cloudflare Access is set up for this app."}
-          </p>
-        )}
+        <ViewOnlyNote canEdit={!disabled} accessProtected={meta.accessProtected} />
 
         <div className="flex flex-wrap items-end gap-6">
           <div>
@@ -222,7 +216,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
               { value: "all", label: "All ads" },
             ]}
           />
-          {view !== "unplaced" && (
+          {view !== "unplaced" ? (
             <Segmented
               label="Period"
               value={period}
@@ -232,6 +226,11 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                 { value: "all", label: "All time" },
               ]}
             />
+          ) : (
+            // The map's own period: shown in the same place so the controls don't jump.
+            <span className="num border border-divider px-3 py-1.5 text-sm text-ink-2" title="The coverage map's period: ads with $50+ in the last 7 days">
+              Last 7 days · $50+
+            </span>
           )}
         </div>
         {view === "unplaced" && (
@@ -344,7 +343,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
           </div>
         )}
 
-        {error && <Empty>Couldn't load ads: {error.message}</Empty>}
+        <LoadError error={error} retry={retry} what="ads" />
         {data && rows.length === 0 && (
           <Empty>
             {view === "unassigned"

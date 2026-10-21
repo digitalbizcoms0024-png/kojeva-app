@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import type { MetaResponse, ReportResponse, ReportsListResponse } from "../../shared/api.ts";
 import { useApi } from "../api.ts";
-import { Empty, Icon, PageHeader, Select } from "../components/ui.tsx";
+import { Empty, Icon, PageHeader, Select, LoadError } from "../components/ui.tsx";
 import { dateTime, shortDate } from "../format.ts";
 import { parseText, reportBlocks, toHtml, toMrkdwn, type Block, type Inline } from "../report.ts";
 import { conceptHref } from "../drill.ts";
@@ -104,7 +104,7 @@ export function ReportsPage({ meta }: { meta: MetaResponse }) {
     if (!from && periods.length) setFrom((periods.find((p) => p.closed) ?? periods[0])!.from);
   }, [from, periods]);
   const [reload, setReload] = useState(0);
-  const { data, error } = useApi<ReportResponse>(from ? `/api/reports/${from}${reload ? `?r=${reload}` : ""}` : null);
+  const { data, error, retry } = useApi<ReportResponse>(from ? `/api/reports/${from}${reload ? `?r=${reload}` : ""}` : null);
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -168,7 +168,7 @@ export function ReportsPage({ meta }: { meta: MetaResponse }) {
             {dateTime(data.text.updatedAt)}
           </p>
         )}
-        {error && <Empty>Couldn't load this report: {error.message}</Empty>}
+        <LoadError error={error} retry={retry} what="this report" />
         {data && editing && (
           <TextEditor
             key={`${from}:${data.text?.updatedAt ?? ""}`}
@@ -181,11 +181,38 @@ export function ReportsPage({ meta }: { meta: MetaResponse }) {
           />
         )}
         {data && (
-          <article className="flex max-w-[90ch] flex-col gap-2 border-2 border-divider bg-page px-5 py-5 text-[15px] leading-relaxed">
-            {blocks.map((b, i) => (
-              <BlockView key={i} b={b} />
-            ))}
-          </article>
+          // The report keeps a readable width; on wide screens the reports list sits beside it.
+          <div className="flex items-start gap-8">
+            <article className="flex max-w-[90ch] min-w-0 flex-1 flex-col gap-2 border-2 border-divider bg-page px-5 py-5 text-[15px] leading-relaxed">
+              {blocks.map((b, i) => (
+                <BlockView key={i} b={b} />
+              ))}
+            </article>
+            <aside className="sticky top-6 hidden w-64 shrink-0 flex-col gap-3 xl:flex">
+              <div className="kicker">All reports</div>
+              <ul className="flex flex-col border-t border-divider text-sm">
+                {periods.map((p) => (
+                  <li key={p.from} className="border-b border-divider">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFrom(p.from);
+                        setEditing(false);
+                      }}
+                      aria-current={p.from === from ? "true" : undefined}
+                      className={`num flex w-full items-baseline justify-between gap-2 px-2 py-2 text-left hover:bg-surface ${p.from === from ? "bg-surface font-bold text-ink" : "text-ink-2"}`}
+                    >
+                      <span>Report {p.n}</span>
+                      <span className="text-xs text-ink-3">
+                        {shortDate(p.from)} – {shortDate(p.to)}
+                        {p.closed ? "" : " · in progress"}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </aside>
+          </div>
         )}
       </div>
     </div>

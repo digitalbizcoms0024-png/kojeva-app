@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ConnectionStatus, MetaResponse, Persona } from "../../shared/api.ts";
 import { useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
-import { PageHeader, PodChip, SectionTitle } from "../components/ui.tsx";
+import { PageHeader, PodChip, SectionTitle, ViewOnlyNote } from "../components/ui.tsx";
 import { POD_SLOTS } from "../../shared/taxonomy.ts";
 import { dateTime, shortDate } from "../format.ts";
 
@@ -927,6 +927,7 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
         <HeaderControls meta={meta} />
       </PageHeader>
       <div className="flex flex-col gap-10 px-4 py-6 md:px-8">
+        <ViewOnlyNote canEdit={meta.canEdit} accessProtected={meta.accessProtected} />
         <TargetsCard meta={meta} onSaved={onSynced} />
 
         <section>

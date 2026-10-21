@@ -12,7 +12,8 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   let r: Response;
   try {
     r = await fetch(path, { ...init, redirect: "manual" });
-  } catch {
+  } catch (e) {
+    if (init?.signal?.aborted) throw e;
     throw new Error("Couldn't reach the hub. Check your connection, or reload the page.");
   }
   if (r.type === "opaqueredirect" || (r.status >= 300 && r.status < 400)) {
@@ -22,31 +23,46 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   return r;
 }
 
+/** How long a request may take before the panel says so and offers a retry. */
+const SLOW_MS = 45_000;
+
 export function useApi<T>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!path) return;
     let alive = true;
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), SLOW_MS);
     setLoading(true);
     setError(null);
-    apiFetch(path)
+    // The previous data stays on screen until the new one arrives (no blank panels on a range change).
+    apiFetch(path, { signal: abort.signal })
       .then(async (r) => {
         const body = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error((body as { error?: string }).error || r.statusText || `HTTP ${r.status}`);
         return body as T;
       })
       .then((d) => alive && setData(d))
-      .catch((e: Error) => alive && setError(e))
-      .finally(() => alive && setLoading(false));
+      .catch((e: Error) => {
+        if (!alive) return;
+        setError(abort.signal.aborted ? new Error("This is taking much longer than usual.") : e);
+      })
+      .finally(() => {
+        clearTimeout(timer);
+        if (alive) setLoading(false);
+      });
     return () => {
       alive = false;
+      clearTimeout(timer);
+      abort.abort();
     };
-  }, [path]);
+  }, [path, attempt]);
 
-  return { data, error, loading };
+  return { data, error, loading, retry: () => setAttempt((n) => n + 1) };
 }
 
 export function qs(params: Record<string, string | number | undefined>): string {
