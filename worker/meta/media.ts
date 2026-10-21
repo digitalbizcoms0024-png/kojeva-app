@@ -13,6 +13,8 @@ export interface AdMedia {
   /** A downloadable video file (expires within hours), or null when Meta hides it from the token. */
   videoUrl: string | null;
   videoSeconds: number | null;
+  /** Why there's no video link, when Meta refused it. */
+  videoError: string | null;
   /** The full image for image ads, else Meta's thumbnail (a frame of the video, or the post's picture). */
   imageUrl: string | null;
 }
@@ -43,11 +45,31 @@ export async function adMedia(env: Env, db: D1Database, adId: string, fetcher?: 
     const videoId = c.video_id ?? spec?.video_data?.video_id ?? feed?.videos?.[0]?.video_id ?? null;
     let videoUrl: string | null = null;
     let videoSeconds: number | null = null;
+    let videoError: string | null = null;
     if (videoId) {
-      // Page-owned videos can be hidden from an ads_read token; that's not an error here.
-      const v = await gc.get<{ source?: string; length?: number }>(videoId, { fields: "source,length" }).catch(() => null);
+      // Page-owned videos can be hidden from an ads_read token; the ad account's video library
+      // often still has them. Neither is an error for this route.
+      const direct = await gc.get<{ source?: string; length?: number }>(videoId, { fields: "source,length" }).catch((e: Error) => {
+        videoError = e.message;
+        return null;
+      });
+      let v = direct?.source ? direct : null;
+      if (!v) {
+        const lib = await gc
+          .get<{ data?: { id: string; source?: string; length?: number }[] }>(`${env.META_AD_ACCOUNT_ID}/advideos`, {
+            fields: "source,length",
+            filtering: JSON.stringify([{ field: "id", operator: "IN", value: [videoId] }]),
+          })
+          .catch((e: Error) => {
+            videoError = `${videoError ?? ""} | library: ${e.message}`;
+            return null;
+          });
+        v = lib?.data?.find((x) => x.id === videoId && x.source) ?? null;
+      }
       videoUrl = v?.source ?? null;
       videoSeconds = v?.length ?? null;
+      if (videoUrl) videoError = null;
+      else videoError ??= "Meta returned no video file.";
     }
     return {
       adId,
@@ -55,7 +77,9 @@ export async function adMedia(env: Env, db: D1Database, adId: string, fetcher?: 
       title: c.title ?? spec?.video_data?.title ?? spec?.link_data?.name ?? feed?.titles?.[0]?.text ?? null,
       videoUrl,
       videoSeconds,
-      imageUrl: c.image_url ?? spec?.link_data?.picture ?? feed?.images?.[0]?.url ?? spec?.video_data?.image_url ?? c.thumbnail_url ?? null,
+      videoError,
+      // fbcdn links download directly; facebook.com/ads/image ones need a session, so they come last.
+      imageUrl: [c.image_url, spec?.link_data?.picture, feed?.images?.[0]?.url, spec?.video_data?.image_url, c.thumbnail_url].filter((u): u is string => !!u).sort((a, b) => Number(!/fbcdn\.net/.test(a)) - Number(!/fbcdn\.net/.test(b)))[0] ?? null,
     };
   } catch (e) {
     return { error: e instanceof GraphError || e instanceof Error ? e.message : String(e), status: 502 };

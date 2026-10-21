@@ -38,6 +38,7 @@ describe("ad media", () => {
       title: "Depuff in 90 seconds",
       videoUrl: "https://video.fbcdn.net/v.mp4",
       videoSeconds: 31.5,
+      videoError: null,
       imageUrl: "https://x.fbcdn.net/t.jpg",
     });
     expect(calls).toEqual(["120238254147030075", "1053927990294150"]);
@@ -48,6 +49,12 @@ describe("ad media", () => {
       "120238254147030075": { creative: { object_story_spec: { video_data: { message: "Real brush vs fake", video_id: "999", image_url: "https://x.fbcdn.net/p.jpg" } } } },
     });
     expect(await adMedia(env, env.DB, "120238254147030075", fetcher)).toMatchObject({ body: "Real brush vs fake", videoUrl: null, imageUrl: "https://x.fbcdn.net/p.jpg" });
+    // The ad account's video library has it even when the video itself is hidden.
+    const lib = fake({
+      "120238254147030075": { creative: { video_id: "999", image_url: "https://www.facebook.com/ads/image/?d=x", thumbnail_url: "https://x.fbcdn.net/t.jpg" } },
+      "act_1/advideos": { data: [{ id: "999", source: "https://video.fbcdn.net/999.mp4", length: 12 }] },
+    });
+    expect(await adMedia(env, env.DB, "120238254147030075", lib.fetcher)).toMatchObject({ videoUrl: "https://video.fbcdn.net/999.mp4", videoError: null, imageUrl: "https://x.fbcdn.net/t.jpg" });
     expect(await adMedia(env, env.DB, "nope", fetcher)).toMatchObject({ status: 404 });
   });
 });
