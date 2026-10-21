@@ -92,17 +92,17 @@ describe("Atria ingest", () => {
       service,
       post({
         assets: [
-          { assetId: "v:1053927990294150", status: "tagged", tags: VIDEO_TAGS },
+          { assetId: "v:1053927990294150", status: "tagged", tags: VIDEO_TAGS, previewUrl: "https://cdn.tryatria.com/analytics/a/d6d965b14aeaf294630f39b35807a6c8.jpg" },
           { assetId: "i:b1679ce60dbda9e125c26e84d9f82e94", status: "tagged", tags: IMAGE_TAGS },
-          { assetId: "v:999", status: "not_tagged_yet" },
+          { assetId: "v:999", status: "not_tagged_yet", previewUrl: "https://cdn.tryatria.com/analytics/a/2be4b75aa0346cc5da84b35bbd4d06bc.jpg" },
         ],
       }),
     );
     expect(await res.json()).toEqual({ ok: true, received: 3, tagged: 2, twins: 0 });
 
-    // Tagged and recently-checked assets aren't requested again.
-    const pending = (await (await call("/api/ingest/atria/pending", service)).json()) as { assets: unknown[] };
-    expect(pending.assets).toEqual([]);
+    // Tagged and recently-checked assets aren't requested again, unless their preview is missing.
+    const pending = (await (await call("/api/ingest/atria/pending", service)).json()) as { assets: { assetId: string }[] };
+    expect(pending.assets.map((a) => a.assetId)).toEqual(["i:b1679ce60dbda9e125c26e84d9f82e94"]);
 
     const rankings = (await (await call("/api/rankings?range=all", person)).json()) as { items: { postId: string; atria: Record<string, string[]> | null }[] };
     expect(rankings.items.find((p) => p.postId === "p1")!.atria).toMatchObject({ theme: VIDEO_TAGS.theme, media_format: ["UGC Video"] });

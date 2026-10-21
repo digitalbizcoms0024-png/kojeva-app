@@ -30,7 +30,8 @@ atria.use("*", requireService("ATRIA_CLIENT_ID"));
 
 /**
  * Assets that need tags, highest recent spend first: never fetched, untagged and last
- * tried over 3 days ago (Atria tags down the spend ranking over time), or tagged over 30 days ago.
+ * tried over 3 days ago (Atria tags down the spend ranking over time), tagged over 30 days ago, or
+ * with no preview stored yet (needed to match copies, see copyTwins).
  */
 atria.get("/pending", async (c) => {
   const db = c.env.DB;
@@ -45,7 +46,8 @@ atria.get("/pending", async (c) => {
        WHERE a.asset_id IS NOT NULL AND d.date >= ?1
          AND (t.asset_id IS NULL
               OR (t.status <> 'tagged' AND t.fetched_at < ?2)
-              OR t.fetched_at < ?3)
+              OR t.fetched_at < ?3
+              OR t.preview_key IS NULL)
        GROUP BY a.asset_id
        ORDER BY spend DESC
        LIMIT ?4`,

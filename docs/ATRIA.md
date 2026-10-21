@@ -113,3 +113,13 @@ Repeat up to 5 rounds:
 Never request transcriptions (they cost Atria credits). Finish with one line: rounds run,
 assets sent, how many were tagged. If a hub call fails, report the status and body and stop.
 ```
+
+## Copies of a creative
+A duplicated or re-uploaded ad gets a new Meta video id or image hash, and Atria tags each id on
+its own (following spend), so copies often stay `not_tagged_yet`. The nightly task sends Atria's
+`preview_image_url` with every asset; its file name is the same for copies of one creative and is
+stored as `atria_assets.preview_key`. An untagged asset whose preview matches a tagged one takes
+that asset's tags and Claude's labels (`twin_of`, migration 0024). Claude labels only the original;
+its copies' spend counts toward its place in the label queue and new labels pass on to the copies.
+A copy's own Atria tags win once it has them. `GET /api/ingest/atria/gaps` (read-only) says why
+posts that spent in the last 7 days still have no tags.
