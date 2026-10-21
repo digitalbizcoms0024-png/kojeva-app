@@ -17,9 +17,10 @@ import { ReportsPage } from "./pages/Reports.tsx";
 import { GroupDrawer } from "./components/GroupDrawer.tsx";
 import { closeHref, readDrill } from "./drill.ts";
 import { TaggingPage } from "./pages/Tagging.tsx";
+import { AlertsBell } from "./components/AlertsBell.tsx";
 
 
-/** The menu in two groups: pages to read, and work to do (only for people on the edit list). */
+/** The menu in two groups: pages to read, and tools (To review only for people on the edit list). */
 type NavGroup = "analyse" | "do" | "settings";
 const NAV: { path: string; label: string; icon: IconName; group: NavGroup }[] = [
   { path: "dashboard", label: "Dashboard", icon: "dashboard", group: "analyse" },
@@ -27,8 +28,8 @@ const NAV: { path: string; label: string; icon: IconName; group: NavGroup }[] = 
   { path: "pods", label: "Pods", icon: "pods", group: "analyse" },
   { path: "insights", label: "Creative Insights", icon: "insights", group: "analyse" },
   { path: "coverage", label: "Coverage Map", icon: "grid", group: "analyse" },
-  { path: "reports", label: "CS Reports", icon: "report", group: "analyse" },
   { path: "tagging", label: "To review", icon: "tagging", group: "do" },
+  { path: "reports", label: "CS Reports", icon: "report", group: "do" },
   { path: "naming", label: "Naming Tool", icon: "naming", group: "do" },
   { path: "settings", label: "Settings", icon: "settings", group: "settings" },
 ];
@@ -138,15 +139,19 @@ export default function App() {
             <div className="text-[22px] font-extrabold tracking-[-0.02em] text-ink">Kojeva Hub</div>
             <div className="hidden text-xs text-ink-3 md:block">Performance &amp; creative intelligence</div>
           </a>
+          <span className="flex items-center gap-2 md:hidden">
+          {m && <AlertsBell version={metaVersion} compact />}
           <button className="btn btn-secondary md:hidden" aria-expanded={menuOpen} aria-controls="main-nav" onClick={() => setMenuOpen((o) => !o)}>
             <Icon name={menuOpen ? "x" : "menu"} size={16} />
             Menu
           </button>
+          </span>
         </div>
         <nav id="main-nav" className={`${menuOpen ? "flex" : "hidden"} flex-col gap-0.5 px-2 pb-3 md:flex md:px-0 md:pb-0`}>
           {NAV_GROUPS.map(({ group, label }) => {
             // View-only people don't get the work pages; they can still open them by link.
-            const items = NAV.filter((x) => x.group === group && (group !== "do" || !m || m.canEdit));
+            // View-only people don't get To review (they can't act on it); everyone gets the Naming Tool.
+            const items = NAV.filter((x) => x.group === group && (x.path !== "tagging" || !m || m.canEdit));
             if (!items.length) return null;
             return (
               <div key={group} className={`flex flex-col gap-0.5 ${group === "analyse" ? "" : "mt-3"} ${group === "settings" ? "border-t border-divider pt-3" : ""}`}>
@@ -178,6 +183,7 @@ export default function App() {
           })}
         </nav>
         <div className={`${menuOpen ? "flex" : "hidden"} flex-col gap-3 border-t-2 border-divider px-4 py-3 md:mt-auto md:flex md:px-0 md:pt-4 md:pb-0`}>
+          <div className="hidden md:block">{m && <AlertsBell version={metaVersion} />}</div>
           <button onClick={toggle} className="btn btn-secondary w-full">
             <Icon name={theme === "dark" ? "sun" : "moon"} size={16} />
             {theme === "dark" ? "Light mode" : "Dark mode"}

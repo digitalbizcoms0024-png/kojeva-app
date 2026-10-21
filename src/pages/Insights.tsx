@@ -22,7 +22,7 @@ const LABELS: Record<InsightDimension, Record<string, string>> = {
   atria_theme: {},
 };
 /** What one value of a dimension is called ("Angle: Scarcity"). */
-const DIM_LABEL: Record<InsightDimension, string> = {
+export const DIM_LABEL: Record<InsightDimension, string> = {
   angle: "Angle",
   format: "Format",
   awareness: "Awareness level",
@@ -104,7 +104,7 @@ function sortRows(rows: InsightRow[], sort: Sort): InsightRow[] {
   return [...rows].sort(by[sort]);
 }
 
-function name(dimension: InsightDimension, v: string | null, personas: Record<string, string> = {}) {
+export function insightValueName(dimension: InsightDimension, v: string | null, personas: Record<string, string> = {}) {
   if (v == null) return isLabel(dimension) ? "Not labelled yet" : isMulti(dimension) ? "Not tagged by Atria" : `No ${DIM_LABEL[dimension].toLowerCase()}`;
   return (dimension === "persona" ? personas[v] : LABELS[dimension][v]) ?? v;
 }
@@ -133,7 +133,7 @@ function Overview({ range, pod, targets, personas, onOpen }: { range: Range; pod
   if (error) return <Empty>Couldn't load: {error.message}</Empty>;
   if (!data) return <div className="h-40" />;
   const avg = data.baseline.hitRate;
-  const open = (d: InsightDimension, v: string) => onOpen({ filter: { [d]: v }, title: `${DIM_LABEL[d]}: ${name(d, v, personas)}`, tab: TAB_OF[d] });
+  const open = (d: InsightDimension, v: string) => onOpen({ filter: { [d]: v }, title: `${DIM_LABEL[d]}: ${insightValueName(d, v, personas)}`, tab: TAB_OF[d] });
   const untagged = data.untagged.filter((u) => u.concepts > 0);
 
   return (
@@ -156,8 +156,8 @@ function Overview({ range, pod, targets, personas, onOpen }: { range: Range; pod
               <li key={w.dimension} className="bg-page">
                 <button type="button" onClick={() => open(w.dimension, w.row.value)} className="flex h-full w-full flex-col gap-2 px-4 py-3.5 text-left transition hover:bg-surface">
                   <span className="kicker">{DIM_LABEL[w.dimension]}</span>
-                  <span className="truncate text-lg font-extrabold text-ink" title={name(w.dimension, w.row.value, personas)}>
-                    {name(w.dimension, w.row.value, personas)}
+                  <span className="truncate text-lg font-extrabold text-ink" title={insightValueName(w.dimension, w.row.value, personas)}>
+                    {insightValueName(w.dimension, w.row.value, personas)}
                   </span>
                   <span className="flex items-baseline gap-2">
                     <span className="num text-3xl font-extrabold text-ink">{pct(w.row.hitRate, 0)}</span>
@@ -188,7 +188,7 @@ function Overview({ range, pod, targets, personas, onOpen }: { range: Range; pod
                 <span key={`${s.dimension}:${s.row.value}`}>
                   {i > 0 && " · "}
                   <button type="button" className="link" onClick={() => open(s.dimension, s.row.value)}>
-                    {name(s.dimension, s.row.value, personas)}
+                    {insightValueName(s.dimension, s.row.value, personas)}
                   </button>{" "}
                   <span className="num text-ink-3">
                     ({DIM_LABEL[s.dimension].toLowerCase()}, 0/{decidedOf(s.row)}, {money(s.row.window.spendCents, { compact: true })})
@@ -321,8 +321,8 @@ function Row({
   return (
     <tr onClick={onClick} className={`cursor-pointer border-t border-divider align-middle transition hover:bg-surface ${active ? "bg-surface" : ""}`}>
       <td className="py-2.5 pr-3">
-        <div className="truncate font-semibold text-ink" title={name(dimension, r.value, personas)}>
-          {name(dimension, r.value, personas)}
+        <div className="truncate font-semibold text-ink" title={insightValueName(dimension, r.value, personas)}>
+          {insightValueName(dimension, r.value, personas)}
         </div>
         <div className="flex flex-wrap items-center gap-x-2 text-[11px] whitespace-nowrap text-ink-3">
           <span>
@@ -414,8 +414,8 @@ function Matrix({
               <tr>
                 <th className="w-44 py-1.5 text-left font-normal"></th>
                 {colValues.map((c) => (
-                  <th key={c} className="truncate px-1 py-1.5 text-left font-normal" title={name(cols, c, personas)}>
-                    {name(cols, c, personas)}
+                  <th key={c} className="truncate px-1 py-1.5 text-left font-normal" title={insightValueName(cols, c, personas)}>
+                    {insightValueName(cols, c, personas)}
                   </th>
                 ))}
               </tr>
@@ -423,8 +423,8 @@ function Matrix({
             <tbody>
               {rowValues.map((r) => (
                 <tr key={r}>
-                  <th className="truncate py-1 pr-2 text-left font-semibold text-ink" title={name(rows, r, personas)}>
-                    {name(rows, r, personas)}
+                  <th className="truncate py-1 pr-2 text-left font-semibold text-ink" title={insightValueName(rows, r, personas)}>
+                    {insightValueName(rows, r, personas)}
                   </th>
                   {colValues.map((c) => {
                     const x = cell.get(`${r}\u0000${c}`);
@@ -438,7 +438,7 @@ function Matrix({
                         <button
                           type="button"
                           onClick={() =>
-                            onOpen({ filter: { [rows]: r, [cols]: c }, title: `${name(rows, r, personas)} × ${name(cols, c, personas)}`, tab: "combos" })
+                            onOpen({ filter: { [rows]: r, [cols]: c }, title: `${insightValueName(rows, r, personas)} × ${insightValueName(cols, c, personas)}`, tab: "combos" })
                           }
                           title={`${x.concepts} concepts · ${x.hits} hits of ${decided} decided${judged ? "" : " (too few to judge)"} · test spend ${money(x.window.spendCents)}`}
                           className={`num flex h-12 w-full flex-col items-start justify-center px-2 text-left transition hover:outline-2 hover:outline-ink ${isActive(r, c) ? "outline-2 outline-accent" : ""}`}
@@ -520,7 +520,7 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
   const openFrom = (o: NonNullable<Open>) =>
     openDrill({ title: o.title, range, filter: { ...Object.fromEntries(Object.entries(o.filter).map(([k, v]) => [k, v ?? ""])), pod } });
   const toggle = (dimension: InsightDimension) => (value: string | null) =>
-    openDrill({ title: `${DIM_LABEL[dimension]}: ${name(dimension, value, personas)}`, range, filter: { [dimension]: value ?? "none", pod } });
+    openDrill({ title: `${DIM_LABEL[dimension]}: ${insightValueName(dimension, value, personas)}`, range, filter: { [dimension]: value ?? "none", pod } });
 
   return (
     <div>

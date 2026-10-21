@@ -6,7 +6,7 @@ import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { PlayableThumb } from "../components/AdPreview.tsx";
 import { DailyCharts } from "../components/DailyCharts.tsx";
-import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb, LoadError } from "../components/ui.tsx";
+import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb, LoadError, Pager } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, ratio, shortDate } from "../format.ts";
 import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
@@ -24,8 +24,8 @@ const SORTS: { value: SortKey; label: string }[] = [
 const vocab = (v: Record<string, string>, all: string) => [{ value: "", label: all }, ...Object.entries(v).map(([value, label]) => ({ value, label }))];
 
 /** Cost per 1,000 impressions, in dollars; null without impressions. */
-/** Ads shown at a time. */
-const PAGE = 25;
+/** Ads shown per page. */
+const PAGE = 10;
 
 function cpm(t: Totals): number | null {
   return t.impressions > 0 ? t.spendCents / 100 / (t.impressions / 1000) : null;
@@ -70,10 +70,11 @@ export function RankingsPage({
 
   const items = rankings.data?.items ?? [];
   const activeId = selected ?? items[0]?.postId ?? null;
-  // 25 at a time (the full list ran to hundreds of cards); a new filter starts over.
+  // 10 a page (the full list ran to hundreds of cards); a new filter goes back to page 1.
   const query = `${range}|${sort}|${pod}|${status}|${q}|${format}|${angle}`;
-  const [shown, setShown] = useState({ query, n: PAGE });
-  const limit = shown.query === query ? shown.n : PAGE;
+  const [page, setPage] = useState({ query, n: 0 });
+  const pageNo = page.query === query ? Math.min(page.n, Math.max(0, Math.ceil(items.length / PAGE) - 1)) : 0;
+  const start = pageNo * PAGE;
   // On a phone the ad's details open over the list instead of below all of it.
   const [sheet, setSheet] = useState(false);
   const rank = items.findIndex((p) => p.postId === activeId) + 1;
@@ -168,11 +169,11 @@ export function RankingsPage({
                   <Empty>{status === "hits_off" ? "No hits are turned off: every winner still has a copy running." : "No ads with spend match these filters."}</Empty>
                 )}
                 <ol className="flex flex-col gap-2">
-                  {items.slice(0, limit).map((p, i) => (
+                  {items.slice(start, start + PAGE).map((p, i) => (
                     <RankCard
                       key={p.postId}
                       post={p}
-                      rank={i + 1}
+                      rank={start + i + 1}
                       targets={meta.targets}
                       active={p.postId === activeId}
                       onSelect={() => {
@@ -182,11 +183,15 @@ export function RankingsPage({
                     />
                   ))}
                 </ol>
-                {items.length > limit && (
-                  <button type="button" className="btn btn-secondary mt-3 w-full" onClick={() => setShown({ query, n: limit + PAGE })}>
-                    Show {Math.min(PAGE, items.length - limit)} more · {int(limit)} of {int(items.length)} shown
-                  </button>
-                )}
+                <Pager
+                  page={pageNo}
+                  size={PAGE}
+                  total={items.length}
+                  onPage={(n) => {
+                    setPage({ query, n });
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                />
               </div>
               {sheet && activeId && (
                 <div className="fixed inset-0 z-50 flex flex-col bg-page lg:hidden" role="dialog" aria-modal="true" aria-label="Ad details">

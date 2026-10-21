@@ -1,9 +1,11 @@
 import { useState, type ReactNode } from "react";
-import type { AlertsResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
+import type { InsightDimension, InsightsOverview, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
 import { cpa, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, previousPeriod, rangeLabel, shiftDay, type Range } from "../components/HeaderControls.tsx";
 import { PodSpend } from "../components/PodSpend.tsx";
+import { openDrill } from "../drill.ts";
+import { DIM_LABEL, insightValueName } from "./Insights.tsx";
 import { Sparkline } from "../components/Sparkline.tsx";
 import { TrendCharts } from "../components/TrendCharts.tsx";
 import { CpaValue, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError } from "../components/ui.tsx";
@@ -36,7 +38,6 @@ function Kpi({ label, source, value, sub }: { label: string; source: string; val
 export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; range: Range; setRange: (r: Range) => void }) {
   const top = useApi<RankingsResponse>(`/api/rankings?${qs({ range, sort: "spend", limit: 5 })}`);
   const pods = useApi<PodsResponse>(`/api/pods?${qs({ range })}`);
-  const alerts = useApi<AlertsResponse>("/api/alerts");
   const launches = useApi<LaunchesResponse>("/api/launches?weeks=1");
   const prev = previousPeriod(range, meta.latestDate);
   const before = useApi<RankingsResponse>(prev ? `/api/rankings?${qs({ range: "custom", from: prev.from, to: prev.to, limit: 1 })}` : null);
@@ -85,8 +86,6 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
           />
         </div>
 
-        <AlertsSection alerts={alerts} />
-
         <PodSpend range={range} latest={meta.latestDate} targets={tg} compact />
 
         <section>
@@ -94,6 +93,8 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
           <LoadError error={pods.error} retry={pods.retry} what="the pods" />
           <Leaderboard rows={ranked} agency={agency} targets={tg} sparkDays={sparkDays} launches={launches.data} />
         </section>
+
+        <WhatsWorking meta={meta} range={range} />
 
         <TrendsSection meta={meta} range={range} />
 
@@ -267,94 +268,56 @@ function Leaderboard({
   );
 }
 
-const DISMISS_KEY = "dismissed-alerts";
-const WEEK_MS = 7 * 86_400_000;
-
-/** Alerts hidden for a week, in this browser only (a per-viewer convenience). */
-function readDismissed(): Record<string, number> {
-  try {
-    const all = JSON.parse(localStorage.getItem(DISMISS_KEY) ?? "{}") as Record<string, number>;
-    return Object.fromEntries(Object.entries(all).filter(([, until]) => until > Date.now()));
-  } catch {
-    return {};
-  }
-}
-
-/** Alerts first on the page: problems before warnings before good news, five at a time. */
-function AlertsSection({ alerts }: { alerts: { data: AlertsResponse | null; error: Error | null; retry: () => void } }) {
-  const [dismissed, setDismissed] = useState(readDismissed);
-  const [all, setAll] = useState(false);
-  const rank = { bad: 0, warn: 1, good: 2 } as const;
-  const open = (alerts.data?.alerts ?? []).filter((a) => !dismissed[a.id]).sort((a, b) => rank[a.tone] - rank[b.tone]);
-  const shown = all ? open : open.slice(0, 5);
-  const hidden = Object.keys(dismissed).length;
-  const dismiss = (id: string) => {
-    const next = { ...dismissed, [id]: Date.now() + WEEK_MS };
-    setDismissed(next);
-    try {
-      localStorage.setItem(DISMISS_KEY, JSON.stringify(next));
-    } catch {
-      /* per-browser convenience only */
-    }
-  };
-  const restore = () => {
-    setDismissed({});
-    try {
-      localStorage.removeItem(DISMISS_KEY);
-    } catch {
-      /* per-browser convenience only */
-    }
-  };
+/**
+ * What's working, from the concept tests in the range (the same numbers as Creative Insights): the
+ * best angle, format, hook, persona… by hit rate, and what keeps missing. A row opens its concepts.
+ */
+function WhatsWorking({ meta, range }: { meta: MetaResponse; range: Range }) {
+  const { data, error, retry } = useApi<InsightsOverview>(`/api/insights/overview?${qs({ range })}`);
+  const tg = meta.targets;
+  const personas = Object.fromEntries(meta.personas.filter((p) => p.status === "active").map((p) => [p.id, p.name]));
+  const avg = data?.baseline.hitRate ?? null;
+  const drill = (d: InsightDimension, v: string) =>
+    openDrill({ title: `${DIM_LABEL[d]}: ${insightValueName(d, v, personas)}`, range, filter: { [d]: v } });
+  const row = (pick: InsightsOverview["winners"][number], tone: "good" | "bad") => (
+    <li key={`${pick.dimension}:${pick.row.value}`} className="border-b border-divider">
+      <button type="button" onClick={() => drill(pick.dimension, pick.row.value!)} className="flex w-full items-baseline gap-3 py-2.5 text-left hover:bg-surface">
+        <span className="kicker w-24 shrink-0">{DIM_LABEL[pick.dimension]}</span>
+        <span className="min-w-0 flex-1 truncate font-semibold text-ink">{insightValueName(pick.dimension, pick.row.value, personas)}</span>
+        <span className={`num shrink-0 font-bold ${tone === "good" ? "text-ink" : "text-ink-3"}`}>{pct(pick.row.hitRate, 0)}</span>
+        <span className="num w-12 shrink-0 text-right text-xs text-ink-3">
+          {pick.row.hits}/{pick.row.hits + pick.row.misses}
+        </span>
+        <span className="hidden w-20 shrink-0 text-right sm:block">
+          <CpaValue value={cpa(pick.row.window)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />
+        </span>
+      </button>
+    </li>
+  );
   return (
     <section>
       <SectionTitle
-        title="Alerts"
+        title="What's working"
         right={
-          alerts.data && (
-            <span>
-              {open.length} open{alerts.data.asOf ? ` · data through ${shortDate(alerts.data.asOf)}` : ""}
-              {hidden > 0 && (
-                <>
-                  {" · "}
-                  <button type="button" className="link" onClick={restore}>
-                    show {hidden} hidden
-                  </button>
-                </>
-              )}
-            </span>
-          )
+          <a href="#/insights" className="link inline-flex items-center gap-1 text-sm">
+            Creative Insights <Icon name="arrow" size={14} />
+          </a>
         }
       />
-      <LoadError error={alerts.error} retry={alerts.retry} what="alerts" />
-      {alerts.data && open.length === 0 && <p className="py-3 text-sm text-ink-3">Nothing needs a look right now.</p>}
-      <ul>
-        {shown.map((a) => (
-          <li key={a.id} className="flex items-start gap-3 border-b border-divider py-3">
-            <span
-              className={`mt-0.5 grid size-4 shrink-0 place-items-center text-[10px] font-bold text-page ${a.tone === "bad" ? "bg-bad" : a.tone === "warn" ? "bg-warn" : "bg-good"}`}
-              aria-label={a.tone === "bad" ? "Problem" : a.tone === "warn" ? "Needs attention" : "Good news"}
-            >
-              {a.tone === "bad" ? "✕" : a.tone === "warn" ? "!" : "✓"}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold text-ink">{a.title}</div>
-              <div className="text-sm text-ink-3">{a.detail}</div>
-            </div>
-            <span className="flex shrink-0 flex-col items-end gap-1 text-sm">
-              <a href={a.href} className="link">
-                {a.action}
-              </a>
-              <button type="button" className="text-xs text-ink-3 hover:text-ink" onClick={() => dismiss(a.id)} title="Hide this alert for a week, in this browser">
-                Hide for a week
-              </button>
-            </span>
-          </li>
-        ))}
-      </ul>
-      {open.length > 5 && (
-        <button type="button" className="link mt-2 text-sm" onClick={() => setAll((x) => !x)}>
-          {all ? "Show fewer" : `Show all ${open.length}`}
-        </button>
+      <LoadError error={error} retry={retry} what="what's working" />
+      {data && (
+        <div className="grid gap-8 lg:grid-cols-2">
+          <div>
+            <p className="mb-1 text-sm text-ink-2">
+              Beats the account hit rate ({avg == null ? "—" : pct(avg, 0)}) · hit rate, hits/decided, test CPA
+            </p>
+            {data.winners.length ? <ul>{data.winners.slice(0, 5).map((w) => row(w, "good"))}</ul> : <p className="py-3 text-sm text-ink-3">Nothing beats the account hit rate with enough tests yet. Try a longer period.</p>}
+          </div>
+          <div>
+            <p className="mb-1 text-sm text-ink-2">No hits yet, most test spend first</p>
+            {data.sinks.length ? <ul>{data.sinks.slice(0, 5).map((w) => row(w, "bad"))}</ul> : <p className="py-3 text-sm text-ink-3">Nothing has missed every test.</p>}
+          </div>
+        </div>
       )}
     </section>
   );
