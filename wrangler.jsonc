@@ -57,7 +57,7 @@
         {
           "binding": "DB",
           "database_name": "kojeva-hub-preview",
-          "database_id": "PREVIEW_DATABASE_ID",
+          "database_id": "53626ea9-b255-4cbf-a15d-a0a55f5e111c",
           "migrations_dir": "migrations"
         }
       ],
