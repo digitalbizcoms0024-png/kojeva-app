@@ -8,6 +8,7 @@ import { bumpVersion } from "./cache.ts";
 import { cleanPersona, confirmed, loadPersonas, MAX_PERSONAS, newPersonaId, nextSort } from "./personas.ts";
 import { FORMAT_DEFINITIONS, FORMATS, MOTIVATIONS } from "../shared/taxonomy.ts";
 import { getLatestDate, shiftDay } from "./queries.ts";
+import { adMedia } from "./meta/media.ts";
 
 export const ATRIA_CATEGORIES = [
   "theme",
@@ -186,6 +187,12 @@ atria.post("/", async (c) => {
 });
 
 export const AWARENESS_LEVELS = ["unaware", "problem", "solution", "product", "most"] as const;
+
+/** An ad's copy and video/image link through the hub's Meta connection, so labelling costs no Atria credits. */
+atria.get("/media/:adId", async (c) => {
+  const r = await adMedia(c.env, c.env.DB, c.req.param("adId"));
+  return "error" in r ? c.json({ error: r.error }, r.status) : c.json(r);
+});
 
 /**
  * Why posts that spent in the last 7 days have no Atria tags: their ads carry no video/image id

@@ -130,3 +130,10 @@ hides the media of "Post ID" ads from `ads_read`) can't be sent to Atria at all;
 with `p:<post id>` as their asset id. `/api/ingest/atria/unlabeled` lists them too with
 `atriaTagged: false`, and the nightly task labels them by looking at the ad itself (frames, copy,
 names). When Atria tags one later its tags change, so it's labelled again with them.
+
+## Looking at an ad without Atria credits
+Every Atria connector call uses Atria credits, so the nightly task fetches only tags from Atria.
+To look at an ad (format, and labels for creatives Atria hasn't tagged) it calls
+`GET /api/ingest/atria/media/<ad id>`, which reads the ad's copy and a video or image link through
+the hub's own Meta connection (`worker/meta/media.ts`, read-only). When Meta hides a video from
+`ads_read` ("Post ID" ads) the route still returns the copy and a thumbnail.
