@@ -28,14 +28,15 @@ function saveDismissed(next: Record<string, number>) {
 const RANK = { bad: 0, warn: 1, good: 2 } as const;
 
 /**
- * The alerts as a bell with the open count (sidebar footer, or the top bar on a phone). It opens a
+ * The alerts as a tile with the open count in a badge (sidebar footer), or a small bell button (top bar on a phone). It opens a
  * panel: problems first, each with its link and "hide for a week". Reloads with the data version.
  */
-export function AlertsBell({ version, compact = false }: { version: number; compact?: boolean }) {
+export function AlertsBell({ version, compact = false, panelLeft = "md:left-4" }: { version: number; compact?: boolean; panelLeft?: string }) {
   const alerts = useApi<AlertsResponse>(`/api/alerts?v=${version}`);
   const [dismissed, setDismissed] = useState(readDismissed);
   const [open, setOpen] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
   const list = (alerts.data?.alerts ?? []).filter((a) => !dismissed[a.id]).sort((a, b) => RANK[a.tone] - RANK[b.tone]);
   const hidden = Object.keys(dismissed).length;
   const problems = list.filter((a) => a.tone !== "good").length;
@@ -43,7 +44,10 @@ export function AlertsBell({ version, compact = false }: { version: number; comp
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    const onClick = (e: MouseEvent) => panel.current && !panel.current.contains(e.target as Node) && setOpen(false);
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!panel.current?.contains(t) && !button.current?.contains(t)) setOpen(false);
+    };
     window.addEventListener("keydown", onKey);
     window.addEventListener("mousedown", onClick);
     panel.current?.focus();
@@ -66,16 +70,20 @@ export function AlertsBell({ version, compact = false }: { version: number; comp
   return (
     <div className="relative">
       <button
+        ref={button}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`btn btn-secondary relative ${compact ? "" : "w-full justify-start"}`}
+        className={compact ? "btn btn-secondary relative" : "tile"}
         aria-expanded={open}
         aria-label={`Alerts: ${list.length} open`}
+        title="Alerts"
       >
-        <Icon name="bell" size={16} />
-        {!compact && <span className="flex-1 text-left">Alerts</span>}
+        <Icon name="bell" size={compact ? 16 : 18} />
+        {!compact && <span>Alerts</span>}
         {list.length > 0 && (
-          <span className={`num px-1.5 py-px text-[11px] font-semibold ${problems ? "bg-accent text-on-accent" : "bg-surface-2 text-ink"}`}>{list.length}</span>
+          <span className={`num absolute -top-2 -right-2 grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold ${problems ? "bg-accent text-on-accent" : "bg-ink text-page"}`}>
+            {list.length}
+          </span>
         )}
       </button>
       {open && (
@@ -84,7 +92,7 @@ export function AlertsBell({ version, compact = false }: { version: number; comp
           tabIndex={-1}
           role="dialog"
           aria-label="Alerts"
-          className="fixed inset-x-2 top-16 z-50 flex max-h-[75vh] flex-col border-2 border-divider bg-page shadow-xl outline-none md:inset-x-auto md:top-auto md:bottom-4 md:left-4 md:w-[440px]"
+          className={`fixed inset-x-2 top-16 z-50 flex max-h-[75vh] flex-col border-2 border-divider bg-page shadow-xl outline-none md:inset-x-auto md:top-auto md:bottom-4 ${panelLeft} md:w-[440px]`}
         >
           <div className="flex items-center justify-between gap-2 border-b-2 border-divider px-4 py-3">
             <div>

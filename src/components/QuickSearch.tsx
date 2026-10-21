@@ -59,7 +59,7 @@ const matches = (it: Item, q: string) => {
 };
 
 /** The search box at the top of the sidebar, and the search panel it opens (also ⌘K / Ctrl+K). */
-export function QuickSearch({ meta }: { meta: MetaResponse }) {
+export function QuickSearch({ meta, iconOnly = false }: { meta: MetaResponse; iconOnly?: boolean }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -74,6 +74,11 @@ export function QuickSearch({ meta }: { meta: MetaResponse }) {
   const mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   return (
     <>
+      {iconOnly ? (
+        <button type="button" onClick={() => setOpen(true)} className="tile" aria-label="Search" title={`Quick search (${mac ? "⌘K" : "Ctrl K"})`}>
+          <Icon name="search" size={18} />
+        </button>
+      ) : (
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -84,6 +89,7 @@ export function QuickSearch({ meta }: { meta: MetaResponse }) {
         <span className="flex-1">Quick search…</span>
         <kbd className="hidden border border-divider px-1 text-[11px] md:inline">{mac ? "⌘K" : "Ctrl K"}</kbd>
       </button>
+      )}
       {open && createPortal(<SearchPanel meta={meta} onClose={() => setOpen(false)} />, document.body)}
     </>
   );

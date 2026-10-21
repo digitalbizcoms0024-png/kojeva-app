@@ -1,14 +1,14 @@
 import { useState, type ReactNode } from "react";
-import type { InsightDimension, InsightsOverview, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
+import type { ConceptsResponse, CoverageResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
 import { cpa, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, previousPeriod, rangeLabel, shiftDay, type Range } from "../components/HeaderControls.tsx";
 import { PodSpend } from "../components/PodSpend.tsx";
-import { openDrill } from "../drill.ts";
-import { DIM_LABEL, insightValueName } from "./Insights.tsx";
+import { AWARENESS } from "../../shared/taxonomy.ts";
+import { conceptHref, openDrill } from "../drill.ts";
 import { Sparkline } from "../components/Sparkline.tsx";
 import { TrendCharts } from "../components/TrendCharts.tsx";
-import { CpaValue, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError } from "../components/ui.tsx";
+import { CpaValue, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError } from "../components/ui.tsx";
 import { int, money, pct, shortDate } from "../format.ts";
 
 function Delta({ now, before, better, fmt }: { now: number | null; before: number | null; better: "up" | "down"; fmt: (d: number) => string }) {
@@ -94,7 +94,10 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
           <Leaderboard rows={ranked} agency={agency} targets={tg} sparkDays={sparkDays} launches={launches.data} />
         </section>
 
-        <WhatsWorking meta={meta} range={range} />
+        <div className="grid gap-10 lg:grid-cols-2">
+          <NewThisWeek meta={meta} />
+          <CoverageGaps />
+        </div>
 
         <TrendsSection meta={meta} range={range} />
 
@@ -269,56 +272,134 @@ function Leaderboard({
 }
 
 /**
- * What's working, from the concept tests in the range (the same numbers as Creative Insights): the
- * best angle, format, hook, persona… by hit rate, and what keeps missing. A row opens its concepts.
+ * Concepts launched in the last 7 days (first spend), newest first, with how each is tracking.
+ * A row opens the concept card.
  */
-function WhatsWorking({ meta, range }: { meta: MetaResponse; range: Range }) {
-  const { data, error, retry } = useApi<InsightsOverview>(`/api/insights/overview?${qs({ range })}`);
+function NewThisWeek({ meta }: { meta: MetaResponse }) {
+  const { data, error, retry } = useApi<ConceptsResponse>(`/api/concepts?${qs({ range: "week" })}`);
   const tg = meta.targets;
-  const personas = Object.fromEntries(meta.personas.filter((p) => p.status === "active").map((p) => [p.id, p.name]));
-  const avg = data?.baseline.hitRate ?? null;
-  const drill = (d: InsightDimension, v: string) =>
-    openDrill({ title: `${DIM_LABEL[d]}: ${insightValueName(d, v, personas)}`, range, filter: { [d]: v } });
-  const row = (pick: InsightsOverview["winners"][number], tone: "good" | "bad") => (
-    <li key={`${pick.dimension}:${pick.row.value}`} className="border-b border-divider">
-      <button type="button" onClick={() => drill(pick.dimension, pick.row.value!)} className="flex w-full items-baseline gap-3 py-2.5 text-left hover:bg-surface">
-        <span className="kicker w-24 shrink-0">{DIM_LABEL[pick.dimension]}</span>
-        <span className="min-w-0 flex-1 truncate font-semibold text-ink">{insightValueName(pick.dimension, pick.row.value, personas)}</span>
-        <span className={`num shrink-0 font-bold ${tone === "good" ? "text-ink" : "text-ink-3"}`}>{pct(pick.row.hitRate, 0)}</span>
-        <span className="num w-12 shrink-0 text-right text-xs text-ink-3">
-          {pick.row.hits}/{pick.row.hits + pick.row.misses}
-        </span>
-        <span className="hidden w-20 shrink-0 text-right sm:block">
-          <CpaValue value={cpa(pick.row.window)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />
-        </span>
-      </button>
-    </li>
-  );
+  const rows = data?.rows ?? [];
   return (
     <section>
       <SectionTitle
-        title="What's working"
+        title="New this week"
         right={
-          <a href="#/insights" className="link inline-flex items-center gap-1 text-sm">
-            Creative Insights <Icon name="arrow" size={14} />
-          </a>
+          data && (
+            <span className="text-sm text-ink-3">
+              {rows.length} concept{rows.length === 1 ? "" : "s"} · launched {shortDate(data.from)} – {shortDate(data.to)}
+            </span>
+          )
         }
       />
-      <LoadError error={error} retry={retry} what="what's working" />
-      {data && (
-        <div className="grid gap-8 lg:grid-cols-2">
-          <div>
-            <p className="mb-1 text-sm text-ink-2">
-              Beats the account hit rate ({avg == null ? "—" : pct(avg, 0)}) · hit rate, hits/decided, test CPA
-            </p>
-            {data.winners.length ? <ul>{data.winners.slice(0, 5).map((w) => row(w, "good"))}</ul> : <p className="py-3 text-sm text-ink-3">Nothing beats the account hit rate with enough tests yet. Try a longer period.</p>}
-          </div>
-          <div>
-            <p className="mb-1 text-sm text-ink-2">No hits yet, most test spend first</p>
-            {data.sinks.length ? <ul>{data.sinks.slice(0, 5).map((w) => row(w, "bad"))}</ul> : <p className="py-3 text-sm text-ink-3">Nothing has missed every test.</p>}
-          </div>
-        </div>
+      <LoadError error={error} retry={retry} what="new concepts" />
+      {data && rows.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts launched in the last 7 days.</p>}
+      <ul>
+        {rows.slice(0, 8).map((k) => (
+          <li key={k.conceptId} className="border-b border-divider">
+            <a href={conceptHref(k.conceptId)} className="flex items-center gap-3 py-2.5 hover:bg-surface">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold text-ink" title={k.adsetName}>
+                  {k.label}
+                </span>
+                <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+                  <PodChip podId={k.podId} />
+                  <span>
+                    Launched {shortDate(k.firstSpend)} · {k.ads} ad{k.ads === 1 ? "" : "s"}
+                  </span>
+                </span>
+              </span>
+              <span className="num w-16 shrink-0 text-right text-sm text-ink">{money(k.allTime.spendCents, { compact: true })}</span>
+              <span className="hidden w-20 shrink-0 text-right sm:block">
+                <CpaValue value={cpa(k.allTime)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />
+              </span>
+              <span className="w-24 shrink-0 text-right">
+                <HitBadge status={k.status} stillRunning={k.stillRunning} />
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      {rows.length > 8 && (
+        <a href="#/pods" className="link mt-2 inline-flex items-center gap-1 text-sm">
+          {rows.length - 8} more on the Pods page <Icon name="arrow" size={14} />
+        </a>
       )}
     </section>
   );
+}
+
+/**
+ * The thinnest persona × awareness cells on the Coverage Map over the last 30 days: nothing running
+ * first (ones that have hit before at the top), then the least spend; two per persona at most. A row opens the cell.
+ */
+function CoverageGaps() {
+  const { data, error, retry } = useApi<CoverageResponse>(`/api/coverage?${qs({ range: "month" })}`);
+  const gaps = data
+    ? data.personas
+        .flatMap((p) =>
+          Object.keys(AWARENESS).map((level) => {
+            const cell = data.cells.find((c) => c.personaId === p.id && c.awareness === level);
+            return { persona: p, level, spend: cell?.totals.spendCents ?? 0, ads: cell?.ads ?? 0, hits: cell?.hits ?? 0, concepts: cell?.concepts ?? 0 };
+          }),
+        )
+        .sort((a, b) => Number(a.ads > 0) - Number(b.ads > 0) || b.hits - a.hits || a.spend - b.spend)
+        // At most two per persona, so the list spans the map.
+        .filter((g, _, all) => all.filter((x) => x.persona.id === g.persona.id).indexOf(g) < 2)
+        .slice(0, 6)
+    : [];
+  const total = data?.totals.spendCents ?? 0;
+  const open = (g: (typeof gaps)[number]) =>
+    openDrill({
+      title: `${g.persona.name} × ${AWARENESS[g.level]}`,
+      range: "all",
+      filter: { persona: g.persona.id, awareness: g.level },
+      coverage: { range: "month", pod: "" },
+    });
+  return (
+    <section>
+      <SectionTitle
+        title="Coverage gaps"
+        right={
+          <a href="#/coverage" className="link inline-flex items-center gap-1 text-sm">
+            Coverage Map <Icon name="arrow" size={14} />
+          </a>
+        }
+      />
+      <LoadError error={error} retry={retry} what="coverage" />
+      {data && data.personas.length === 0 && (
+        <p className="py-3 text-sm text-ink-3">
+          Confirm the persona list in{" "}
+          <a href="#/settings?tab=personas" className="link">
+            Settings
+          </a>{" "}
+          to see the gaps.
+        </p>
+      )}
+      {data && data.personas.length > 0 && (
+        <>
+          <p className="mb-1 text-sm text-ink-2">
+            {data.filled} of {data.defined} persona × awareness cells have running ads · last 30 days
+          </p>
+          <ul>
+            {gaps.map((g) => (
+              <li key={`${g.persona.id}:${g.level}`} className="border-b border-divider">
+                <button type="button" onClick={() => open(g)} className="flex w-full items-baseline gap-3 py-2.5 text-left hover:bg-surface">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold text-ink">{g.persona.name}</span>
+                    <span className="block text-xs text-ink-3">{AWARENESS[g.level]}</span>
+                  </span>
+                  <span className="shrink-0 text-right text-xs text-ink-2">
+                    {g.ads === 0 ? "Nothing running" : `${money(g.spend, { compact: true })} · ${pct(total ? g.spend / total : null, 1)} of spend`}
+                    <span className="block text-ink-3">
+                      {g.concepts === 0 ? "Never tested" : `${g.hits} hit${g.hits === 1 ? "" : "s"} from ${g.concepts} concept${g.concepts === 1 ? "" : "s"} before`}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  )
 }
