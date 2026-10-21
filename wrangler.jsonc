@@ -35,7 +35,9 @@
     // Client ID of the Access service token the nightly Atria task uses (docs/ATRIA.md).
     "ATRIA_CLIENT_ID": "52d224fd6c7660e512605f4d71331b55.access",
     // The media buyer's sign-ins: only they can call a below-target concept a winner (worker/calls.ts).
-    "MEDIA_BUYER_EMAILS": "digitalbizcoms0024@gmail.com,adrian@kojeva.com"
+    "MEDIA_BUYER_EMAILS": "digitalbizcoms0024@gmail.com,adrian@kojeva.com",
+    // Which copy this is; the preview (env.preview) refuses to serve the live address.
+    "HUB_ENV": "live"
   },
   // Keep Worker logs and errors (Workers & Pages → kojeva-hub → Observability). Free plan allows
   // 200k events/day; this app makes a few hundred requests a day.
@@ -68,7 +70,8 @@
         "ACCESS_TEAM_DOMAIN": "tiny-band-a384.cloudflareaccess.com",
         "ACCESS_AUD": "",
         "ATRIA_CLIENT_ID": "",
-        "MEDIA_BUYER_EMAILS": "digitalbizcoms0024@gmail.com,adrian@kojeva.com"
+        "MEDIA_BUYER_EMAILS": "digitalbizcoms0024@gmail.com,adrian@kojeva.com",
+        "HUB_ENV": "preview"
       },
       "triggers": { "crons": [] }
     }
