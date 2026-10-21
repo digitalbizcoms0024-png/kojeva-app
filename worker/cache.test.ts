@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import app from "./index.ts";
 import type { Env } from "./env.ts";
-import { forgetMemory } from "./cache.ts";
+import { forgetMemory, readSnapshot, writeSnapshot } from "./cache.ts";
 import { attribute } from "./meta/sync.ts";
 import { accessFixture, TEST_TEAM } from "./testing/access.ts";
 import { testDb } from "./testing/db.ts";
@@ -120,5 +120,23 @@ describe("errors", () => {
     const res = await app.fetch(new Request("https://hub.test/api/rankings", { headers: person }), { ...env, DB: broken }, {} as ExecutionContext);
     expect(res.status).toBe(503);
     expect(((await res.json()) as { error: string }).error).toMatch(/free daily limit.*00:00 UTC/);
+  });
+});
+
+describe("large snapshots", () => {
+  it("stores big results gzipped and reads them back unchanged", async () => {
+    const db = await testDb();
+    // About 2 MB of post-list-like JSON: over the size cap uncompressed, well under it gzipped.
+    const rows = Array.from({ length: 4000 }, (_, i) => ({ post_id: `776862388850901_${i}`, tags: '{"theme":["Problem & Solution","Product Demo"],"persona":["Value-Focused Shopper"]}', thumb: `https://scontent.xx.fbcdn.net/v/t45/${"x".repeat(300)}` }));
+    const text = JSON.stringify(rows);
+    expect(text.length).toBeGreaterThan(900_000);
+    await writeSnapshot(db, "memo:post-base", "v1", text);
+    const raw = await db.prepare("SELECT body FROM snapshots WHERE key = 'memo:post-base'").first<{ body: string }>();
+    expect(raw!.body.startsWith("gz:")).toBe(true);
+    expect(raw!.body.length).toBeLessThan(900_000);
+    expect(await readSnapshot(db, "memo:post-base", "v1")).toBe(text);
+    // Small ones stay plain.
+    await writeSnapshot(db, "memo:small", "v1", '{"a":1}');
+    expect(await readSnapshot(db, "memo:small", "v1")).toBe('{"a":1}');
   });
 });

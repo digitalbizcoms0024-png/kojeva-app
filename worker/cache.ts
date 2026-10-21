@@ -61,18 +61,39 @@ export function bumpStats(db: D1Database) {
 // lost on each deploy; without these, every fresh isolate recomputed from ad_daily (~0.5–1M rows).
 const MAX_SNAPSHOT_BYTES = 900_000;
 
+// Large results are stored gzipped (base64, "gz:" prefix): the post list with its tags outgrew the
+// size cap once most creatives had Atria tags and labels, and was then rebuilt on every request.
+const COMPRESS_FROM = 64_000;
+
+async function gzip(text: string): Promise<string> {
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `gz:${btoa(bin)}`;
+}
+
+async function gunzip(stored: string): Promise<string> {
+  const bin = atob(stored.slice(3));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+}
+
 /** A stored result for this data version (1 row read), or undefined. */
 export async function readSnapshot(db: D1Database, key: string, version: string): Promise<string | undefined> {
   try {
     const row = await db.prepare("SELECT body FROM snapshots WHERE key = ?1 AND version = ?2").bind(key, version).first<{ body: string }>();
-    return row?.body;
+    if (!row) return undefined;
+    return row.body.startsWith("gz:") ? await gunzip(row.body) : row.body;
   } catch {
     return undefined; // e.g. before migration 0015 runs
   }
 }
 
 /** Stores a result for this data version (1 row written); too-large ones and failures are skipped. */
-export async function writeSnapshot(db: D1Database, key: string, version: string, body: string): Promise<void> {
+export async function writeSnapshot(db: D1Database, key: string, version: string, text: string): Promise<void> {
+  const body = text.length >= COMPRESS_FROM ? await gzip(text) : text;
   if (body.length > MAX_SNAPSHOT_BYTES) return;
   try {
     await db
