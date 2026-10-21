@@ -155,6 +155,7 @@ function checkTargets(t: Partial<Targets>): Problem {
   if (t.winnerMinSpend !== undefined && !num(t.winnerMinSpend, 0, 1_000_000)) return "Winner spend must be a positive amount.";
   if (t.winnerMinDays !== undefined && !(Number.isInteger(t.winnerMinDays) && num(t.winnerMinDays, 1, 90))) return "Winner days must be a whole number from 1 to 90.";
   if (t.superWinnerMinSpend !== undefined && !num(t.superWinnerMinSpend, 0, 10_000_000)) return "Super winner spend must be a positive amount.";
+  if (t.rankMinSpendPerDay !== undefined && !num(t.rankMinSpendPerDay, 0, 100_000)) return "The ranking minimum must be 0 or more per day.";
   return null;
 }
 
@@ -194,7 +195,8 @@ editing.put("/settings", requireAccess, async (c) => {
   const by = c.get("userEmail");
   if (body.targets) {
     await mergeSetting(db, "targets", body.targets, by);
-    await bumpStats(db); // hit results and fatigue depend on the targets
+    // Hit results and fatigue depend on the targets; the ranking minimum is applied per request, so it alone needs no recompute.
+    if (Object.keys(body.targets).some((k) => k !== "rankMinSpendPerDay")) await bumpStats(db);
   }
   if (body.attribution) {
     const a = { ...body.attribution };

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ConnectionStatus, MetaResponse, Persona } from "../../shared/api.ts";
 import { useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
-import { PageHeader, PodChip, SectionTitle } from "../components/ui.tsx";
+import { PageHeader, PodChip, SectionTitle, ViewOnlyNote, Tabs } from "../components/ui.tsx";
 import { POD_SLOTS } from "../../shared/taxonomy.ts";
 import { dateTime, shortDate } from "../format.ts";
 
@@ -328,6 +328,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
   const [wSpend, setWSpend] = useState(String(t.winnerMinSpend));
   const [wDays, setWDays] = useState(String(t.winnerMinDays));
   const [swSpend, setSwSpend] = useState(String(t.superWinnerMinSpend));
+  const [rankMin, setRankMin] = useState(String(t.rankMinSpendPerDay));
   const buyer = meta.isMediaBuyer;
   const { busy, run, note } = useSave(onSaved);
   const amberShown = amber ? Number(amber) : Number(cpa) * 1.25;
@@ -344,6 +345,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           minTestSpend: Number(min),
           hitRule: rule,
           lateWindowDays: Number(late),
+          rankMinSpendPerDay: Number(rankMin),
           // Only the media buyer sets these (the server refuses them from anyone else).
           ...(buyer
             ? { winnerMinRoas: Number(wRoas), winnerMinSpend: Number(wSpend), winnerMinDays: Number(wDays), superWinnerMinSpend: Number(swSpend) }
@@ -445,6 +447,17 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           ad is also judged on its own the same way; one ad hitting makes the concept a hit.
         </span>
       </div>
+      <h3 className="mt-6 mb-1 font-extrabold text-ink">Ad Rankings</h3>
+      <p className="mb-3 max-w-[90ch] text-sm text-ink-3">
+        Ranking by purchases, ROAS, CTR or CPA only includes ads that spent at least this much per day of the selected range, so a lucky ad on
+        a few dollars doesn't top the list. At ${Number(rankMin) || 0}/day: last 7 days ${(Number(rankMin) || 0) * 7}, last 30 days $
+        {(Number(rankMin) || 0) * 30}. Ranking by spend shows every ad.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-7">
+        <Labeled label="Minimum spend ($ per day)">
+          <input id="t-rankmin" type="number" min="0" step="5" value={rankMin} onChange={(e) => setRankMin(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+      </div>
       <h3 className="mt-6 mb-1 font-extrabold text-ink">Hit (call)</h3>
       <p className="mb-3 max-w-[90ch] text-sm text-ink-3">
         A miss that takes major spend and lifts the account can be called a hit (or super hit) by the media buyer, even below target. The hub
@@ -504,7 +517,7 @@ function AddedPods({ meta, onSaved }: { meta: MetaResponse; onSaved: () => void 
                 className="btn btn-ghost py-0 text-sm text-bad"
                 disabled={busy || !meta.canEdit}
                 onClick={() => {
-                  if (confirm(`Remove ${p.name}? Its ads go back to automatic crediting (or Needs Tagging).`))
+                  if (confirm(`Remove ${p.name}? Its ads go back to automatic crediting (or To review).`))
                     void run(`/api/pods/${p.id}`, "DELETE", {}, `Removed ${p.name}.`);
                 }}
               >
@@ -920,59 +933,91 @@ function PersonasCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => vo
   );
 }
 
+type SettingsTab = "targets" | "pods" | "personas" | "people" | "data";
+
+/** "#/settings?tab=personas" opens that tab (links from other pages). */
+function readSettingsTab(): SettingsTab {
+  const t = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("tab");
+  return t === "pods" || t === "personas" || t === "people" || t === "data" ? t : "targets";
+}
+
+/** Settings in tabs, one short page each, instead of one long page. */
 export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced: () => void }) {
+  const [tab, setTab] = useState<SettingsTab>(readSettingsTab);
+  // A link to another tab while Settings is open ("#/settings?tab=data") switches to it.
+  useEffect(() => {
+    const onHash = () => setTab(readSettingsTab());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const tabs: { value: SettingsTab; label: string }[] = [
+    { value: "targets", label: "Targets" },
+    { value: "pods", label: "Pods & editors" },
+    { value: "personas", label: "Personas" },
+    // The edit list is only for the people on it.
+    ...(meta.canEdit ? [{ value: "people" as const, label: "People & access" }] : []),
+    { value: "data", label: "Data sources" },
+  ];
   return (
     <div>
-      <PageHeader title="Settings" subtitle="Targets, pod roster and data sources">
+      <PageHeader title="Settings" subtitle="Targets, pods, personas, who can edit and data sources">
         <HeaderControls meta={meta} />
       </PageHeader>
-      <div className="flex flex-col gap-10 px-4 py-6 md:px-8">
-        <TargetsCard meta={meta} onSaved={onSynced} />
+      <div className="flex flex-col gap-8 px-4 py-6 md:px-8">
+        <ViewOnlyNote canEdit={meta.canEdit} accessProtected={meta.accessProtected} />
+        <Tabs value={tab} onChange={setTab} options={tabs} />
 
-        <section>
-          <SectionTitle title="Pod roster" right="Editors aren't in Meta: add them here, then assign them to ads in Needs Tagging." />
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {meta.pods
-              .filter((p) => p.kind === "pod")
-              .map((p) => (
-                <PodRosterCard key={p.id} meta={meta} podId={p.id} onSaved={onSynced} />
-              ))}
-          </div>
-        </section>
+        {tab === "targets" && <TargetsCard meta={meta} onSaved={onSynced} />}
 
-        <PersonasCard meta={meta} onSaved={onSynced} />
+        {tab === "pods" && (
+          <>
+            <section>
+              <SectionTitle title="Pod roster" right="Editors aren't in Meta: add them here, then assign them to ads in To review." />
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {meta.pods
+                  .filter((p) => p.kind === "pod")
+                  .map((p) => (
+                    <PodRosterCard key={p.id} meta={meta} podId={p.id} onSaved={onSynced} />
+                  ))}
+              </div>
+            </section>
+            <AttributionCard meta={meta} onSaved={onSynced} />
+          </>
+        )}
 
-        <AttributionCard meta={meta} onSaved={onSynced} />
+        {tab === "personas" && <PersonasCard meta={meta} onSaved={onSynced} />}
 
-        {meta.canEdit && <EditAccessCard meta={meta} onSaved={onSynced} />}
+        {tab === "people" && meta.canEdit && <EditAccessCard meta={meta} onSaved={onSynced} />}
 
-        <section>
-          <SectionTitle title="Data sources" />
-          <div className="border-b border-divider pb-5">
-            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-lg font-extrabold text-ink">Meta Ads</h3>
-              {meta.lastSync && (
-                <span className="inline-flex items-center gap-2 text-sm text-ink-2">
-                  <span className={`size-2 ${meta.lastSync.status === "error" ? "bg-bad" : "bg-good"}`} aria-hidden />
-                  {meta.lastSync.status === "error" ? "✕ Last sync failed" : "✓ Last sync ok"} · {dateTime(meta.lastSync.finishedAt)}
-                </span>
-              )}
+        {tab === "data" && (
+          <section>
+            <SectionTitle title="Data sources" />
+            <div className="border-b border-divider pb-5">
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-extrabold text-ink">Meta Ads</h3>
+                {meta.lastSync && (
+                  <span className="inline-flex items-center gap-2 text-sm text-ink-2">
+                    <span className={`size-2 ${meta.lastSync.status === "error" ? "bg-bad" : "bg-good"}`} aria-hidden />
+                    {meta.lastSync.status === "error" ? "✕ Last sync failed" : "✓ Last sync ok"} · {dateTime(meta.lastSync.finishedAt)}
+                  </span>
+                )}
+              </div>
+              <p className="mb-4 text-sm text-ink-3">
+                Spend, purchases, ROAS (Meta) and creatives. Read-only (<code>ads_read</code>). Syncs every night and re-pulls the last 7 days, since Meta keeps
+                revising recent results.
+                {meta.lastSync?.message && ` Last message: ${meta.lastSync.message}.`}
+              </p>
+              <MetaPanel onSynced={onSynced} canEdit={meta.canEdit} />
             </div>
-            <p className="mb-4 text-sm text-ink-3">
-              Spend, purchases, ROAS (Meta) and creatives. Read-only (<code>ads_read</code>). Syncs every night and re-pulls the last 7 days, since Meta keeps
-              revising recent results.
-              {meta.lastSync?.message && ` Last message: ${meta.lastSync.message}.`}
-            </p>
-            <MetaPanel onSynced={onSynced} canEdit={meta.canEdit} />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-divider py-4">
-            <div>
-              <h3 className="text-lg font-extrabold text-ink">Atria tags</h3>
-              <p className="text-sm text-ink-3">Theme, core desire and other creative tags, pushed nightly by a scheduled Claude task.</p>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-divider py-4">
+              <div>
+                <h3 className="text-lg font-extrabold text-ink">Atria tags</h3>
+                <p className="text-sm text-ink-3">Theme, core desire and other creative tags, pushed nightly by a scheduled Claude task.</p>
+              </div>
+              <span className="text-sm text-ink-2">Synced nightly</span>
             </div>
-            <span className="text-sm text-ink-2">Synced nightly</span>
-          </div>
-        </section>
+          </section>
+        )}
       </div>
     </div>
   );

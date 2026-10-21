@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import type { AssignmentPatch, MetaResponse, PodsResponse, PostSummary, RankingsResponse, SuggestionsResponse } from "../../shared/api.ts";
+import type { AssignmentPatch, CoverageResponse, MetaResponse, PodsResponse, PostSummary, RankingsResponse, SuggestionsResponse } from "../../shared/api.ts";
 import { podById, ANGLES, AWARENESS, FORMAT_DEFINITIONS, FORMATS, HOOKS, LANDING_PAGES, MOTIVATIONS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
-import { Empty, PageHeader, PodChip, Segmented } from "../components/ui.tsx";
+import { Empty, PageHeader, PodChip, Segmented, LoadError, ViewOnlyNote, Tabs } from "../components/ui.tsx";
 import { money, pct, shortDate } from "../format.ts";
 import { conceptHref } from "../drill.ts";
 import { PlayableThumb } from "../components/AdPreview.tsx";
@@ -54,14 +54,16 @@ function MotivationPicker({ manual, claude, disabled, onChange }: { manual: stri
   );
 }
 
-type View = "unassigned" | "unplaced" | "all";
+type View = "unassigned" | "unplaced" | "suggestions" | "all";
 type Period = "month" | "all";
+
+const activePersonasCount = (meta: MetaResponse) => meta.personas.filter((p) => p.status === "active").length;
 
 export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged: () => void }) {
   // "#/tagging?view=unplaced" (the Coverage map's "place them") opens on that list.
   const [view, setView] = useState<View>(() => {
     const v = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("view");
-    return v === "unplaced" || v === "all" ? v : "unassigned";
+    return v === "unplaced" || v === "suggestions" || v === "all" ? v : "unassigned";
   });
   const [period, setPeriod] = useState<Period>("month");
   const [search, setSearch] = useState("");
@@ -79,21 +81,33 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
   }, [search]);
 
   // "Not placed": running in the last 7 days (the coverage map's default) without a persona or awareness level.
-  const { data, error } = useApi<RankingsResponse>(
+  const { data, error, retry } = useApi<RankingsResponse>(
     `/api/rankings?${qs({ range: view === "unplaced" ? "week" : period, pod: view === "unassigned" ? "unassigned" : "all", q, limit: view === "unplaced" ? 2000 : 300, r: reload })}`,
   );
   const coverage = useApi<PodsResponse>(`/api/pods?${qs({ range: "month", r: reload })}`);
+  // The coverage map's own numbers (last 7 days, $50+): the "Not on the coverage map" tab's summary.
+  const map = useApi<CoverageResponse>(activePersonasCount(meta) ? `/api/coverage?${qs({ range: "week", r: reload })}` : null);
   const sugg = useApi<SuggestionsResponse>(`/api/suggestions?r=${reload}`);
   const suggestions = sugg.data?.suggestions ?? {};
   const activePersonas = meta.personas.filter((p) => p.status === "active");
   const personaName = (id: string | null) => activePersonas.find((p) => p.id === id)?.name ?? null;
+  // Claude's open suggestions for a post: a pod, and a format that differs from the one set.
+  const formatSuggestion = (r: PostSummary) => (r.labels.format && r.labels.format !== r.assignment.format ? r.labels.format : null);
+  const suggestionsOf = (r: PostSummary) => (suggestions[r.postId] ? 1 : 0) + (formatSuggestion(r) ? 1 : 0);
   const placed = (r: PostSummary) => !!personaName(r.assignment.personaId ?? r.labels.personaId) && !!(r.assignment.awareness ?? r.labels.awareness);
   useEffect(() => {
     // The map leaves out ads under MIN_MAP_SPEND_CENTS in the period, so this list does too.
-    if (data) setRows(view === "unplaced" ? data.items.filter((r) => !placed(r) && r.totals.spendCents >= MIN_MAP_SPEND_CENTS) : data.items);
+    if (data)
+      setRows(
+        view === "unplaced"
+          ? data.items.filter((r) => !placed(r) && r.totals.spendCents >= MIN_MAP_SPEND_CENTS)
+          : view === "suggestions"
+            ? data.items.filter((r) => suggestionsOf(r) > 0)
+            : data.items,
+      );
     setSelected(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
+  }, [data, view === "suggestions" ? sugg.data : null]);
 
   const pods = meta.pods;
   const podOptions = [{ value: "", label: "No pod" }, ...pods.map((p) => ({ value: p.id, label: p.name }))];
@@ -156,14 +170,19 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
 
   const acceptSuggestions = async () => {
     const byPod = new Map<string, string[]>();
-    for (const id of selected) {
-      const s = suggestions[id];
-      if (s) byPod.set(s.podId, [...(byPod.get(s.podId) ?? []), id]);
+    const byFormat = new Map<string, string[]>();
+    for (const r of rows) {
+      if (!selected.has(r.postId)) continue;
+      const s = suggestions[r.postId];
+      if (s) byPod.set(s.podId, [...(byPod.get(s.podId) ?? []), r.postId]);
+      const f = formatSuggestion(r);
+      if (f) byFormat.set(f, [...(byFormat.get(f) ?? []), r.postId]);
     }
-    const n = [...byPod.values()].reduce((k, ids) => k + ids.length, 0);
+    const n = [...byPod.values(), ...byFormat.values()].reduce((k, ids) => k + ids.length, 0);
     setBulkMsg("Saving…");
     try {
       for (const [podId, ids] of byPod) await bulk(ids, { podId });
+      for (const [format, ids] of byFormat) await bulk(ids, { format });
       setBulkMsg(`Accepted ${n} ${n === 1 ? "suggestion" : "suggestions"}.`);
       done();
     } catch (e) {
@@ -173,55 +192,82 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
 
   const allChecked = rows.length > 0 && rows.every((r) => selected.has(r.postId));
   const selectedSpend = rows.filter((r) => selected.has(r.postId)).reduce((n, r) => n + r.totals.spendCents, 0);
-  const selectedWithSuggestion = [...selected].filter((id) => suggestions[id]).length;
+  const selectedWithSuggestion = rows.filter((r) => selected.has(r.postId)).reduce((n, r) => n + suggestionsOf(r), 0);
   const stagedCount = Object.values(staged).filter((v) => v !== undefined).length;
   const stage = (k: keyof AssignmentPatch, v: string) => setStaged((s) => ({ ...s, [k]: v === "" ? undefined : v === "__none" ? null : v }));
 
   return (
     <div>
-      <PageHeader title="Needs Tagging" subtitle="Ads the hub couldn't credit to a pod from their names. Hand-set values are kept when syncs run.">
+      <PageHeader title="To review" subtitle="Fix what the hub can't work out on its own. Hand-set values are kept when syncs run.">
         <HeaderControls meta={meta} />
       </PageHeader>
 
       <div className="flex flex-col gap-5 px-4 py-6 md:px-8">
-        {disabled && (
-          <p className="bg-warn-soft px-3 py-2 text-sm text-ink">
-            {meta.accessProtected
-              ? "You have view-only access. Ask someone on the edit list (Settings → Who can edit) to add you."
-              : "Editing is off until Cloudflare Access is set up for this app."}
+        <ViewOnlyNote canEdit={!disabled} accessProtected={meta.accessProtected} />
+
+        {/* Each tab is its own job, with its own summary, period and instructions. */}
+        <Tabs
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "unassigned", label: `Needs a pod${meta.needsTagging ? ` · ${meta.needsTagging}` : ""}` },
+            ...(activePersonas.length
+              ? [{ value: "unplaced" as const, label: `Not on the coverage map${map.data?.unplaced ? ` · ${map.data.unplaced}` : ""}` }]
+              : []),
+            { value: "suggestions", label: "Claude's suggestions" },
+            { value: "all", label: "All ads" },
+          ]}
+        />
+
+        {view === "unassigned" && (
+          <div className="flex flex-wrap items-end gap-6">
+            <div>
+              <div className="num text-[56px] leading-none font-extrabold tracking-[-0.03em] text-ink">{pct(covShare, 0)}</div>
+              <div className="mt-1 text-sm text-ink-3">of spend credited to a pod or the agency · last 30 days</div>
+            </div>
+            <div className="min-w-64 flex-1">
+              <div className="h-3 bg-surface-2">
+                <div className="h-full bg-ink" style={{ width: `${(covShare ?? 0) * 100}%` }} />
+              </div>
+              <div className="mt-2 flex flex-wrap justify-between gap-2 text-sm">
+                <span className="num text-ink">
+                  {meta.needsTagging} {meta.needsTagging === 1 ? "ad" : "ads"} · {money(covMissing)} not credited
+                </span>
+                <span className="text-ink-3">Ads whose ad set name doesn't say which pod made them. Set the pod so their spend counts.</span>
+              </div>
+            </div>
+          </div>
+        )}
+        {view === "unplaced" && (
+          <div className="flex flex-wrap items-end gap-6">
+            <div>
+              <div className="num text-[56px] leading-none font-extrabold tracking-[-0.03em] text-ink">
+                {map.data ? money(map.data.unplacedSpendCents, { compact: true }) : "…"}
+              </div>
+              <div className="mt-1 text-sm text-ink-3">
+                of spend not on the{" "}
+                <a href="#/coverage" className="link">
+                  coverage map
+                </a>
+                {map.data && map.data.totals.spendCents > 0 ? ` (${pct(map.data.unplacedSpendCents / map.data.totals.spendCents, 0)})` : ""} · last 7 days, ads with $50+
+              </div>
+            </div>
+            <p className="min-w-64 flex-1 text-sm text-ink-3">
+              These ads have no persona or awareness level yet. Claude labels new creatives nightly; to place some now, tick them and set a persona and
+              awareness in the bar that appears. Press ▶ to watch an ad first.
+            </p>
+          </div>
+        )}
+        {view === "suggestions" && (
+          <p className="text-sm text-ink-3">
+            Pods and formats Claude suggests, never applied without you. Use one with its <b className="text-ink-2">use</b> link, or tick several and press{" "}
+            <b className="text-ink-2">Accept</b> in the bar that appears.
           </p>
         )}
-
-        <div className="flex flex-wrap items-end gap-6">
-          <div>
-            <div className="num text-[56px] leading-none font-extrabold tracking-[-0.03em] text-ink">{pct(covShare, 0)}</div>
-            <div className="mt-1 text-sm text-ink-3">of spend credited to a pod or the agency · last 30 days</div>
-          </div>
-          <div className="min-w-64 flex-1">
-            <div className="h-3 bg-surface-2">
-              <div className="h-full bg-ink" style={{ width: `${(covShare ?? 0) * 100}%` }} />
-            </div>
-            <div className="mt-2 flex flex-wrap justify-between gap-2 text-sm">
-              <span className="num text-ink">
-                {meta.needsTagging} {meta.needsTagging === 1 ? "ad" : "ads"} · {money(covMissing)} not credited
-              </span>
-              <span className="text-ink-3">Highest spend first. Suggestions are never applied without you.</span>
-            </div>
-          </div>
-        </div>
+        {view === "all" && <p className="text-sm text-ink-3">Every ad, highest spend first, to change any tag by hand.</p>}
 
         <div className="flex flex-wrap items-center gap-3">
           <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ad name…" className="field min-w-56 flex-1" />
-          <Segmented
-            label="Which ads"
-            value={view}
-            onChange={setView}
-            options={[
-              { value: "unassigned", label: "Needs a pod" },
-              ...(activePersonas.length ? [{ value: "unplaced" as const, label: "Not on the coverage map" }] : []),
-              { value: "all", label: "All ads" },
-            ]}
-          />
           {view !== "unplaced" && (
             <Segmented
               label="Period"
@@ -234,15 +280,6 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
             />
           )}
         </div>
-        {view === "unplaced" && (
-          <p className="text-sm text-ink-3">
-            Ads that spent $50 or more in the last 7 days but have no persona or awareness level yet, so they can't be placed on the{" "}
-            <a href="#/coverage" className="link">
-              coverage map
-            </a>
-            . Claude labels new creatives nightly from their tags, copy and names. To place several at once, tick them and set a persona and awareness above; press ▶ to watch an ad first.
-          </p>
-        )}
 
         {selected.size > 0 && (
           <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 bg-ink px-4 py-3 text-page">
@@ -344,7 +381,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
           </div>
         )}
 
-        {error && <Empty>Couldn't load ads: {error.message}</Empty>}
+        <LoadError error={error} retry={retry} what="ads" />
         {data && rows.length === 0 && (
           <Empty>
             {view === "unassigned"

@@ -1,12 +1,14 @@
 import { useState, type ReactNode } from "react";
-import type { AlertsResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
-import { cpa, roas, type Targets, type Totals } from "../../shared/metrics.ts";
+import type { ConceptsResponse, CoverageResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
+import { cpa, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, previousPeriod, rangeLabel, shiftDay, type Range } from "../components/HeaderControls.tsx";
 import { PodSpend } from "../components/PodSpend.tsx";
+import { AWARENESS } from "../../shared/taxonomy.ts";
+import { conceptHref, openDrill } from "../drill.ts";
 import { Sparkline } from "../components/Sparkline.tsx";
 import { TrendCharts } from "../components/TrendCharts.tsx";
-import { CpaValue, Empty, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb } from "../components/ui.tsx";
+import { CpaValue, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError } from "../components/ui.tsx";
 import { int, money, pct, shortDate } from "../format.ts";
 
 function Delta({ now, before, better, fmt }: { now: number | null; before: number | null; better: "up" | "down"; fmt: (d: number) => string }) {
@@ -36,7 +38,6 @@ function Kpi({ label, source, value, sub }: { label: string; source: string; val
 export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; range: Range; setRange: (r: Range) => void }) {
   const top = useApi<RankingsResponse>(`/api/rankings?${qs({ range, sort: "spend", limit: 5 })}`);
   const pods = useApi<PodsResponse>(`/api/pods?${qs({ range })}`);
-  const alerts = useApi<AlertsResponse>("/api/alerts");
   const launches = useApi<LaunchesResponse>("/api/launches?weeks=1");
   const prev = previousPeriod(range, meta.latestDate);
   const before = useApi<RankingsResponse>(prev ? `/api/rankings?${qs({ range: "custom", from: prev.from, to: prev.to, limit: 1 })}` : null);
@@ -47,6 +48,8 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
   const ranked = (pods.data?.rows ?? []).filter((r) => r.kind === "pod").sort((a, b) => (b.hitRate ?? -1) - (a.hitRate ?? -1) || b.totals.spendCents - a.totals.spendCents);
   const agency = pods.data?.rows.find((r) => r.kind === "agency");
   const pctFmt = (d: number) => pct(Math.abs(d), 1);
+  // While the totals load the cards say so ("…"); "—" is kept for numbers that really are missing.
+  const kpi = (v: ReactNode) => (t ? v : top.loading ? "…" : "—");
 
   return (
     <div>
@@ -55,29 +58,30 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
       </PageHeader>
 
       <div className="flex flex-col gap-8 px-4 py-6 md:px-8">
+        <LoadError error={top.error} retry={top.retry} what="the totals" />
         <div className="grid grid-cols-2 gap-0.5 border-2 border-divider bg-divider lg:grid-cols-4 [&>*]:bg-page">
           <Kpi
             label="Spend"
             source="Meta"
-            value={money(t?.spendCents, { compact: true })}
+            value={kpi(money(t?.spendCents, { compact: true }))}
             sub={b && t && <><Delta now={t.spendCents} before={b.spendCents} better="up" fmt={pctFmt} /> {prev?.label}</>}
           />
           <Kpi
             label="Purchases"
             source="Meta"
-            value={int(t?.purchases)}
+            value={kpi(int(t?.purchases))}
             sub={b && t && <><Delta now={t.purchases} before={b.purchases} better="up" fmt={pctFmt} /> {prev?.label}</>}
           />
           <Kpi
             label="CPA"
             source="Meta"
-            value={t ? <CpaValue value={cpa(t)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} /> : "—"}
+            value={kpi(t && <CpaValue value={cpa(t)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />)}
             sub={<>{b && t && <Delta now={cpa(t)} before={cpa(b)} better="down" fmt={pctFmt} />} Target ${tg.targetCpa.toFixed(2)}</>}
           />
           <Kpi
             label="ROAS"
             source="Meta"
-            value={t ? <RoasValue value={roas(t)} target={tg.targetRoas} /> : "—"}
+            value={kpi(t && <RoasValue value={roas(t)} target={tg.targetRoas} />)}
             sub={<>{b && t && <Delta now={roas(t)} before={roas(b)} better="up" fmt={pctFmt} />} Target {tg.targetRoas.toFixed(2)}</>}
           />
         </div>
@@ -86,36 +90,18 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
 
         <section>
           <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by hit rate · ${shortDate(pods.data.from === "2000-01-01" ? null : pods.data.from)} – ${shortDate(pods.data.to)} · Meta`} />
-          {pods.error && <Empty>{pods.error.message}</Empty>}
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {ranked.map((r, i) => (
-              <PodCard
-                key={r.podId}
-                r={r}
-                rank={i + 1}
-                targets={tg}
-                sparkDays={sparkDays}
-                launchedThisWeek={launches.data?.rows.find((l) => l.podId === r.podId)?.counts[0] ?? null}
-              />
-            ))}
-          </div>
-          {agency && agency.totals.spendCents > 0 && (
-            <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-2">
-              <PodChip podId="agency" />
-              <span className="num">
-                {money(agency.totals.spendCents, { compact: true })} spend · CPA{" "}
-                <CpaValue value={cpa(agency.totals)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} /> · ROAS{" "}
-                <RoasValue value={roas(agency.totals)} target={tg.targetRoas} />
-              </span>
-              <span className="text-xs text-ink-3">Shown beside the pods, never counted in them.</span>
-            </p>
-          )}
+          <LoadError error={pods.error} retry={pods.retry} what="the pods" />
+          <Leaderboard rows={ranked} agency={agency} targets={tg} sparkDays={sparkDays} launches={launches.data} />
         </section>
+
+        <div className="grid gap-10 lg:grid-cols-2">
+          <NewThisWeek meta={meta} />
+          <CoverageGaps />
+        </div>
 
         <TrendsSection meta={meta} range={range} />
 
-        <div className="grid gap-8 xl:grid-cols-2">
-          <section className="min-w-0">
+          <section>
             <SectionTitle
               title={`Top 5 ads ${rangeLabel(range)}`}
               right={
@@ -124,7 +110,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
                 </a>
               }
             />
-            {top.error && <Empty>{top.error.message}</Empty>}
+            <LoadError error={top.error} retry={top.retry} what="the top ads" />
             <table className="w-full table-fixed text-sm">
               <thead className="kicker text-left">
                 <tr className="border-b border-divider">
@@ -170,31 +156,6 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
             <p className="mt-2 text-xs text-ink-3">Ranked by spend · CPA and ROAS from Meta · copies grouped by post</p>
           </section>
 
-          <section className="min-w-0">
-            <SectionTitle title="Alerts" right={alerts.data && `${alerts.data.alerts.length} open${alerts.data.asOf ? ` · data through ${shortDate(alerts.data.asOf)}` : ""}`} />
-            {alerts.error && <Empty>{alerts.error.message}</Empty>}
-            {alerts.data && alerts.data.alerts.length === 0 && <p className="py-3 text-sm text-ink-3">Nothing needs a look right now.</p>}
-            <ul>
-              {alerts.data?.alerts.map((a) => (
-                <li key={a.id} className="flex items-start gap-3 border-b border-divider py-3">
-                  <span
-                    className={`mt-0.5 grid size-4 shrink-0 place-items-center text-[10px] font-bold text-page ${a.tone === "bad" ? "bg-bad" : a.tone === "warn" ? "bg-warn" : "bg-good"}`}
-                    aria-label={a.tone === "bad" ? "Problem" : a.tone === "warn" ? "Needs attention" : "Good news"}
-                  >
-                    {a.tone === "bad" ? "✕" : a.tone === "warn" ? "!" : "✓"}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-ink">{a.title}</div>
-                    <div className="text-sm text-ink-3">{a.detail}</div>
-                  </div>
-                  <a href={a.href} className="link shrink-0 text-sm">
-                    {a.action}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </div>
       </div>
     </div>
   );
@@ -203,7 +164,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
 function TrendsSection({ meta, range }: { meta: MetaResponse; range: Range }) {
   const [pod, setPod] = useState("");
   const [grain, setGrain] = useState<TrendGrain | "auto">("auto");
-  const { data, error } = useApi<TrendsResponse>(`/api/trends?${qs({ range, pod, grain: grain === "auto" ? undefined : grain })}`);
+  const { data, error, retry } = useApi<TrendsResponse>(`/api/trends?${qs({ range, pod, grain: grain === "auto" ? undefined : grain })}`);
   return (
     <section>
       <SectionTitle
@@ -228,78 +189,217 @@ function TrendsSection({ meta, range }: { meta: MetaResponse; range: Range }) {
           </span>
         }
       />
-      {error && <Empty>{error.message}</Empty>}
+      <LoadError error={error} retry={retry} what="trends" />
       {data && <TrendCharts points={data.points} targetCpa={meta.targets.targetCpa} targetRoas={meta.targets.targetRoas} />}
       <p className="mt-2 text-xs text-ink-3">Meta numbers. Weeks start on Monday.</p>
     </section>
   );
 }
 
-function PodCard({
-  r,
-  rank,
+
+
+/**
+ * The pods ranked by hit rate as one compact table (it replaced a card per pod, which made an empty
+ * pod as tall as a busy one). The agency sits under it, shown but never ranked.
+ */
+function Leaderboard({
+  rows,
+  agency,
   targets,
   sparkDays,
-  launchedThisWeek,
+  launches,
 }: {
-  r: PodRow;
-  rank: number;
+  rows: PodRow[];
+  agency: PodRow | undefined;
   targets: Targets;
   sparkDays: string[];
-  launchedThisWeek: number | null;
+  launches: LaunchesResponse | null;
 }) {
-  const editors = r.editors.filter((e) => e.editorId).length;
-  const decided = r.hits + r.misses;
-  const tot: Totals = r.totals;
-  return (
-    <div className="flex flex-col bg-surface p-4" style={{ borderTop: `4px solid var(--pod-${r.podId})` }}>
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="flex items-center gap-2 text-lg font-extrabold text-ink">
-            <span className="size-2.5" style={{ background: `var(--pod-${r.podId})` }} aria-hidden />
+  const line = (r: PodRow, rank: number | null) => {
+    const decided = r.hits + r.misses;
+    const week = launches?.rows.find((l) => l.podId === r.podId)?.counts[0] ?? null;
+    return (
+      <tr key={r.podId} className={`border-b border-divider ${rank == null ? "text-ink-3" : ""}`}>
+        <td className="num w-8 py-3 align-middle font-bold text-ink-3">{rank ?? ""}</td>
+        <td className="py-3 pr-3">
+          <a href="#/pods" className="inline-flex items-center gap-2 font-bold text-ink hover:underline">
+            <span className="size-2.5 shrink-0" style={{ background: `var(--pod-${r.podId})` }} aria-hidden />
             {r.name}
-          </div>
+          </a>
           <div className="text-xs text-ink-3">
-            Strategist · {editors} {editors === 1 ? "editor" : "editors"} with ads
-            {launchedThisWeek != null && (
-              <>
-                {" · "}
-                <b className="text-ink">{launchedThisWeek}</b> {launchedThisWeek === 1 ? "concept" : "concepts"} this week
-              </>
-            )}
+            {rank == null
+              ? "Shown beside the pods, never counted in them"
+              : `${week ?? 0} ${week === 1 ? "concept" : "concepts"} this week${r.testing ? ` · ${r.testing} testing` : ""}`}
           </div>
-        </div>
-        <span className="num text-sm font-bold text-ink-3">#{rank}</span>
-      </div>
-      <div className="kicker mt-4">Hit rate</div>
-      <div className="num text-[44px] leading-none font-extrabold tracking-[-0.03em] text-ink">{pct(r.hitRate, 0)}</div>
-      <div className="mt-1 text-xs text-ink-3">
-        {decided ? `${r.hits} of ${decided} concepts hit${r.lateHits ? ` (${r.lateHits} late)` : ""}` : "No decided concepts yet"}
-        {r.testing > 0 && ` · ${r.testing} testing`}
-      </div>
-      <div className="mt-4">
-        <Sparkline values={r.spark} days={sparkDays} color={`var(--pod-${r.podId})`} label={r.name} />
-        <div className="mt-1 text-[11px] text-ink-3">Daily spend, last 7 days</div>
-      </div>
-      <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-divider pt-3">
-        <div>
-          <dt className="kicker">Spend</dt>
-          <dd className="num font-bold text-ink">{money(tot.spendCents, { compact: true })}</dd>
-        </div>
-        <div>
-          <dt className="kicker">CPA</dt>
-          <dd>
-            <CpaValue value={cpa(tot)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
-          </dd>
-        </div>
-        <div>
-          <dt className="kicker">ROAS</dt>
-          <dd>
-            <RoasValue value={roas(tot)} target={targets.targetRoas} />
-          </dd>
-        </div>
-      </dl>
-    </div>
+        </td>
+        <td className="py-3 pr-3 text-right">
+          <div className="num text-xl leading-none font-extrabold text-ink">{pct(r.hitRate, 0)}</div>
+          <div className="num text-xs text-ink-3">{decided ? `${r.hits}/${decided}${r.lateHits ? ` · ${r.lateHits} late` : ""}` : "none decided"}</div>
+        </td>
+        <td className="hidden w-36 py-3 pr-3 md:table-cell">
+          <Sparkline values={r.spark} days={sparkDays} color={`var(--pod-${r.podId})`} label={r.name} />
+        </td>
+        <td className="num py-3 pr-3 text-right text-ink">{money(r.totals.spendCents, { compact: true })}</td>
+        <td className="hidden py-3 pr-3 text-right sm:table-cell">
+          <CpaValue value={cpa(r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
+        </td>
+        <td className="hidden py-3 text-right sm:table-cell">
+          <RoasValue value={roas(r.totals)} target={targets.targetRoas} />
+        </td>
+      </tr>
+    );
+  };
+  if (!rows.length) return null;
+  return (
+    <table className="w-full text-sm">
+      <thead className="kicker text-left">
+        <tr className="border-b border-divider">
+          <th className="py-2 font-normal">#</th>
+          <th className="py-2 font-normal">Pod</th>
+          <th className="py-2 pr-3 text-right font-normal">Hit rate</th>
+          <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
+          <th className="py-2 pr-3 text-right font-normal">Spend</th>
+          <th className="hidden py-2 pr-3 text-right font-normal sm:table-cell">CPA</th>
+          <th className="hidden py-2 text-right font-normal sm:table-cell">ROAS</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => line(r, i + 1))}
+        {agency && agency.totals.spendCents > 0 && line(agency, null)}
+      </tbody>
+    </table>
   );
 }
 
+/**
+ * Concepts launched in the last 7 days (first spend), newest first, with how each is tracking.
+ * A row opens the concept card.
+ */
+function NewThisWeek({ meta }: { meta: MetaResponse }) {
+  const { data, error, retry } = useApi<ConceptsResponse>(`/api/concepts?${qs({ range: "week" })}`);
+  const tg = meta.targets;
+  const rows = data?.rows ?? [];
+  return (
+    <section>
+      <SectionTitle
+        title="New this week"
+        right={
+          data && (
+            <span className="text-sm text-ink-3">
+              {rows.length} concept{rows.length === 1 ? "" : "s"} · launched {shortDate(data.from)} – {shortDate(data.to)}
+            </span>
+          )
+        }
+      />
+      <LoadError error={error} retry={retry} what="new concepts" />
+      {data && rows.length === 0 && <p className="py-3 text-sm text-ink-3">No concepts launched in the last 7 days.</p>}
+      <ul>
+        {rows.slice(0, 8).map((k) => (
+          <li key={k.conceptId} className="border-b border-divider">
+            <a href={conceptHref(k.conceptId)} className="flex items-center gap-3 py-2.5 hover:bg-surface">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-semibold text-ink" title={k.adsetName}>
+                  {k.label}
+                </span>
+                <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+                  <PodChip podId={k.podId} />
+                  <span>
+                    Launched {shortDate(k.firstSpend)} · {k.ads} ad{k.ads === 1 ? "" : "s"}
+                  </span>
+                </span>
+              </span>
+              <span className="num w-16 shrink-0 text-right text-sm text-ink">{money(k.allTime.spendCents, { compact: true })}</span>
+              <span className="hidden w-20 shrink-0 text-right sm:block">
+                <CpaValue value={cpa(k.allTime)} target={tg.targetCpa} warnMax={tg.cpaWarnMax} />
+              </span>
+              <span className="w-24 shrink-0 text-right">
+                <HitBadge status={k.status} stillRunning={k.stillRunning} />
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      {rows.length > 8 && (
+        <a href="#/pods" className="link mt-2 inline-flex items-center gap-1 text-sm">
+          {rows.length - 8} more on the Pods page <Icon name="arrow" size={14} />
+        </a>
+      )}
+    </section>
+  );
+}
+
+/**
+ * The thinnest persona × awareness cells on the Coverage Map over the last 30 days: nothing running
+ * first (ones that have hit before at the top), then the least spend; two per persona at most. A row opens the cell.
+ */
+function CoverageGaps() {
+  const { data, error, retry } = useApi<CoverageResponse>(`/api/coverage?${qs({ range: "month" })}`);
+  const gaps = data
+    ? data.personas
+        .flatMap((p) =>
+          Object.keys(AWARENESS).map((level) => {
+            const cell = data.cells.find((c) => c.personaId === p.id && c.awareness === level);
+            return { persona: p, level, spend: cell?.totals.spendCents ?? 0, ads: cell?.ads ?? 0, hits: cell?.hits ?? 0, concepts: cell?.concepts ?? 0 };
+          }),
+        )
+        .sort((a, b) => Number(a.ads > 0) - Number(b.ads > 0) || b.hits - a.hits || a.spend - b.spend)
+        // At most two per persona, so the list spans the map.
+        .filter((g, _, all) => all.filter((x) => x.persona.id === g.persona.id).indexOf(g) < 2)
+        .slice(0, 6)
+    : [];
+  const total = data?.totals.spendCents ?? 0;
+  const open = (g: (typeof gaps)[number]) =>
+    openDrill({
+      title: `${g.persona.name} × ${AWARENESS[g.level]}`,
+      range: "all",
+      filter: { persona: g.persona.id, awareness: g.level },
+      coverage: { range: "month", pod: "" },
+    });
+  return (
+    <section>
+      <SectionTitle
+        title="Coverage gaps"
+        right={
+          <a href="#/coverage" className="link inline-flex items-center gap-1 text-sm">
+            Coverage Map <Icon name="arrow" size={14} />
+          </a>
+        }
+      />
+      <LoadError error={error} retry={retry} what="coverage" />
+      {data && data.personas.length === 0 && (
+        <p className="py-3 text-sm text-ink-3">
+          Confirm the persona list in{" "}
+          <a href="#/settings?tab=personas" className="link">
+            Settings
+          </a>{" "}
+          to see the gaps.
+        </p>
+      )}
+      {data && data.personas.length > 0 && (
+        <>
+          <p className="mb-1 text-sm text-ink-2">
+            {data.filled} of {data.defined} persona × awareness cells have running ads · last 30 days
+          </p>
+          <ul>
+            {gaps.map((g) => (
+              <li key={`${g.persona.id}:${g.level}`} className="border-b border-divider">
+                <button type="button" onClick={() => open(g)} className="flex w-full items-baseline gap-3 py-2.5 text-left hover:bg-surface">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold text-ink">{g.persona.name}</span>
+                    <span className="block text-xs text-ink-3">{AWARENESS[g.level]}</span>
+                  </span>
+                  <span className="shrink-0 text-right text-xs text-ink-2">
+                    {g.ads === 0 ? "Nothing running" : `${money(g.spend, { compact: true })} · ${pct(total ? g.spend / total : null, 1)} of spend`}
+                    <span className="block text-ink-3">
+                      {g.concepts === 0 ? "Never tested" : `${g.hits} hit${g.hits === 1 ? "" : "s"} from ${g.concepts} concept${g.concepts === 1 ? "" : "s"} before`}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  )
+}

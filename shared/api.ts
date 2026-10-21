@@ -146,6 +146,11 @@ export interface RankingsResponse {
   totals: Totals;
   count: number;
   items: PostSummary[];
+  /** Ranking by a ratio or purchases: posts under this spend in the range are left out (rankMinSpendPerDay × days); null when none is applied. */
+  minSpendCents: number | null;
+  /** How many posts that leaves out, and over how many days the minimum was worked out. */
+  belowMin: number;
+  minDays: number;
 }
 
 export interface CopyRow {

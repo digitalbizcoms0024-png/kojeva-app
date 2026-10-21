@@ -5,7 +5,7 @@ import { AWARENESS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { openDrill } from "../drill.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, SectionTitle, Select, Thumb } from "../components/ui.tsx";
+import { CpaValue, CsvButton, HitBadge, PageHeader, PodChip, RoasValue, SectionTitle, Select, Thumb, LoadError } from "../components/ui.tsx";
 import { downloadCsv, money, pct, plain, plainDollars } from "../format.ts";
 
 const LEVELS = Object.keys(AWARENESS);
@@ -18,7 +18,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
   // "Running" means spent in the period; the map opens on the last 7 days.
   const [range, setRange] = useState<Range>("week");
   const [pod, setPod] = useState("");
-  const { data, error } = useApi<CoverageResponse>(`/api/coverage?${qs({ range, pod })}`);
+  const { data, error, retry } = useApi<CoverageResponse>(`/api/coverage?${qs({ range, pod })}`);
   const personas = data?.personas ?? [];
   const drafts = meta.personas.filter((p) => p.status === "draft").length;
   const cells = new Map((data?.cells ?? []).map((c) => [key(c.personaId, c.awareness), c]));
@@ -47,14 +47,14 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
       <div className="flex flex-col gap-8 px-4 py-6 md:px-8">
-        {error && <Empty>Couldn't load: {error.message}</Empty>}
+        <LoadError error={error} retry={retry} what="the coverage map" />
         {data && personas.length === 0 && (
           <div className="border-2 border-divider px-5 py-5 text-sm text-ink-2">
             <h2 className="mb-1 text-lg font-extrabold text-ink">The persona list isn't confirmed yet</h2>
             {drafts > 0 ? (
               <p>
                 Claude drafted {drafts} {drafts === 1 ? "persona" : "personas"} from Atria's tags.{" "}
-                <a href="#/settings" className="link">
+                <a href="#/settings?tab=personas" className="link">
                   Review and confirm them in Settings →
                 </a>{" "}
                 Claude places every ad on the next nightly run after that.
@@ -62,7 +62,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
             ) : (
               <p>
                 Claude drafts a list of personas from Atria's persona tags on its next nightly run. You'll then edit and confirm them in Settings, or{" "}
-                <a href="#/settings" className="link">
+                <a href="#/settings?tab=personas" className="link">
                   add your own now
                 </a>
                 .
@@ -163,7 +163,11 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                 <table className="w-full min-w-[920px] table-fixed border-collapse text-sm">
                   <thead className="kicker">
                     <tr>
-                      <th className="w-44 py-2 pr-2 text-left font-normal">Persona ↓ · Awareness →</th>
+                      {/* The grid's corner: columns are awareness levels, rows are personas. */}
+                      <th className="w-44 py-2 pr-2 text-left font-normal">
+                        <span className="block whitespace-nowrap text-right">Awareness →</span>
+                        <span className="block whitespace-nowrap">Persona ↓</span>
+                      </th>
                       {cols.map((a) => (
                         <th key={a ?? "none"} className="px-1 py-2 text-left font-normal">
                           {levelOf(a)}
@@ -202,7 +206,7 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
               </div>
               <p className="mt-2 max-w-[100ch] text-xs text-ink-3">
                 Shading = share of spend in the period (Meta). CPA and ROAS are Meta's over the period; hit rate is every concept ever tested in the cell, so
-                empty cells still show what was tried. Persona and awareness are Claude's labels unless set by hand in Needs Tagging.
+                empty cells still show what was tried. Persona and awareness are Claude's labels unless set by hand in To review.
               </p>
             </section>
           </>

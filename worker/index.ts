@@ -36,7 +36,7 @@ import { adPreview, PREVIEW_FORMATS, type PreviewFormat } from "./meta/preview.t
 import { runSync, utcDay } from "./meta/sync.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
 import { baseline, INSIGHT_DIMENSIONS, insightRows, MATRIX_DIMENSIONS, matrix, overview, valuesOf } from "./insights.ts";
-import { getLatestDate, getTargets, loadConcepts, loadPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
+import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
 import { loadAddedPods } from "./pods.ts";
 import { ensureAttributed } from "./rules.ts";
@@ -203,6 +203,9 @@ app.get("/rankings", async (c) => {
   const limit = Math.min(Number(c.req.query("limit") ?? 500) || 500, 2000);
 
   let items = await loadPosts(c.env.DB, range.from, range.to);
+  // All time starts at the first day anything spent, not 2000-01-01.
+  const firstDay = items.reduce((min, p) => (p.firstSpend && p.firstSpend < min ? p.firstSpend : min), range.to);
+  const minDays = daysBetween(firstDay > range.from ? firstDay : range.from, range.to) + 1;
   if (status === "hits_off") {
     // Every winner that no longer runs anywhere, whatever the range spent (its test post, with the hit badge).
     const latest = await getLatestDate(c.env.DB);
@@ -222,6 +225,17 @@ app.get("/rankings", async (c) => {
   if (search)
     items = items.filter((p) => [p.name, p.assignment.editorName, p.assignment.angle, p.assignment.format].some((s) => s?.toLowerCase().includes(search)));
 
+  // Purchases and the ratios rank only posts with enough spend for the range (Settings → Targets), unless ?all=1;
+  // the turned-off-hits list keeps every hit.
+  let minSpendCents: number | null = null;
+  let belowMin = 0;
+  if (sort !== "spend" && status !== "hits_off" && c.req.query("all") !== "1") {
+    minSpendCents = Math.round((await getTargets(c.env.DB)).rankMinSpendPerDay * 100 * minDays);
+    const before = items.length;
+    items = items.filter((p) => p.totals.spendCents >= minSpendCents!);
+    belowMin = before - items.length;
+  }
+
   // Posts with no value for the sort metric (e.g. CPA with 0 purchases) go last.
   items.sort((a, b) => {
     const va = sorter(a.totals);
@@ -237,6 +251,9 @@ app.get("/rankings", async (c) => {
     totals: items.reduce((acc, p) => addTotals(acc, p.totals), ZERO_TOTALS),
     count: items.length,
     items: items.slice(0, limit),
+    minSpendCents,
+    belowMin,
+    minDays,
   };
   return c.json(body);
 });

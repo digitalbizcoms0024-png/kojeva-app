@@ -26,6 +26,9 @@ const ICONS = {
   grid: "M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18",
   scale: "M16 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1zM2 16l3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1zM7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2",
   download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
+  bell: "M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0",
+  search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.3-4.3",
+  panel: "M3 4h18v16H3zM9 4v16",
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -235,14 +238,16 @@ export function Segmented<T extends string>({
 /** Underlined tabs ("Ads · Pods · Editors"). */
 export function Tabs<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
   return (
-    <div className="flex gap-6 overflow-x-auto border-b-2 border-divider" role="tablist">
+    // The line is an inset shadow, not a border: with a border the active underline (pulled 2px over it)
+    // overflows the scrolling row and the browser shows a scrollbar.
+    <div className="flex gap-6 overflow-x-auto shadow-[inset_0_-2px_0_var(--divider)]" role="tablist">
       {options.map((o) => (
         <button
           key={o.value}
           role="tab"
           aria-selected={o.value === value}
           onClick={() => onChange(o.value)}
-          className={`-mb-0.5 border-b-2 pb-2 text-[15px] whitespace-nowrap transition ${
+          className={`border-b-2 pb-2 text-[15px] whitespace-nowrap transition ${
             o.value === value ? "border-accent font-bold text-ink" : "border-transparent text-ink-3 hover:text-ink"
           }`}
         >
@@ -343,5 +348,34 @@ export function Pager({ page, size, total, onPage }: { page: number; size: numbe
         </button>
       </span>
     </nav>
+  );
+}
+
+/** A panel that couldn't load: what happened and a way to try again, instead of empty values. */
+export function LoadError({ error, retry, what }: { error: Error | null; retry?: () => void; what?: string }) {
+  if (!error) return null;
+  return (
+    <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-divider px-4 py-3 text-sm text-ink-2">
+      <span>
+        <b className="text-ink">Couldn't load{what ? ` ${what}` : ""}.</b> {error.message}
+      </span>
+      {retry && (
+        <button type="button" className="link" onClick={retry}>
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Why the page's buttons are off for this person: view-only, or Access not set up yet. */
+export function ViewOnlyNote({ canEdit, accessProtected }: { canEdit: boolean; accessProtected: boolean }) {
+  if (canEdit) return null;
+  return (
+    <p className="bg-warn-soft px-3 py-2 text-sm text-ink">
+      {accessProtected
+        ? "You have view-only access, so changes here are off. Ask someone on the edit list (Settings → Who can edit) to add you."
+        : "Editing is off until Cloudflare Access is set up for this app."}
+    </p>
   );
 }

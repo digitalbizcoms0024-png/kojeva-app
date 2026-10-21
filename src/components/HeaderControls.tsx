@@ -109,7 +109,7 @@ export function HeaderControls({ meta, range, setRange }: { meta: MetaResponse; 
     <>
       {range && setRange && <RangeSwitch range={range} setRange={setRange} latest={meta.latestDate} />}
       <a
-        href="#/settings"
+        href="#/settings?tab=data"
         className="inline-flex items-center gap-2 border border-divider px-3 py-1.5 text-[13px] text-ink-2 hover:bg-surface"
         title={meta.lastSync?.message ?? undefined}
       >

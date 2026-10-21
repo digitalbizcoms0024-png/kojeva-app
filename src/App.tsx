@@ -17,18 +17,27 @@ import { ReportsPage } from "./pages/Reports.tsx";
 import { GroupDrawer } from "./components/GroupDrawer.tsx";
 import { closeHref, readDrill } from "./drill.ts";
 import { TaggingPage } from "./pages/Tagging.tsx";
+import { AlertsBell } from "./components/AlertsBell.tsx";
+import { QuickSearch } from "./components/QuickSearch.tsx";
 
 
-const NAV: { path: string; label: string; icon: IconName }[] = [
-  { path: "dashboard", label: "Dashboard", icon: "dashboard" },
-  { path: "rankings", label: "Ad Rankings", icon: "rankings" },
-  { path: "pods", label: "Pods", icon: "pods" },
-  { path: "insights", label: "Creative Insights", icon: "insights" },
-  { path: "coverage", label: "Coverage Map", icon: "grid" },
-  { path: "reports", label: "CS Reports", icon: "report" },
-  { path: "tagging", label: "Needs Tagging", icon: "tagging" },
-  { path: "naming", label: "Naming Tool", icon: "naming" },
-  { path: "settings", label: "Settings", icon: "settings" },
+/** The menu in two groups: pages to read, and tools (To review only for people on the edit list). */
+type NavGroup = "analyse" | "do" | "settings";
+const NAV: { path: string; label: string; icon: IconName; group: NavGroup }[] = [
+  { path: "dashboard", label: "Dashboard", icon: "dashboard", group: "analyse" },
+  { path: "rankings", label: "Ad Rankings", icon: "rankings", group: "analyse" },
+  { path: "pods", label: "Pods", icon: "pods", group: "analyse" },
+  { path: "insights", label: "Creative Insights", icon: "insights", group: "analyse" },
+  { path: "coverage", label: "Coverage Map", icon: "grid", group: "analyse" },
+  { path: "tagging", label: "To review", icon: "tagging", group: "do" },
+  { path: "reports", label: "CS Reports", icon: "report", group: "do" },
+  { path: "naming", label: "Naming Tool", icon: "naming", group: "do" },
+  { path: "settings", label: "Settings", icon: "settings", group: "settings" },
+];
+const NAV_GROUPS: { group: NavGroup; label: string | null }[] = [
+  { group: "analyse", label: "Analyse" },
+  { group: "do", label: "Do" },
+  { group: "settings", label: null },
 ];
 
 /** "#/rankings?post=123" → { path: "rankings", params: post=123 } */
@@ -91,6 +100,23 @@ export default function App() {
   const [range, setRange] = useState<Range>("month");
   const [metaVersion, setMetaVersion] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Desktop sidebar folded down to icons; remembered in this browser.
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("sidebar-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleCollapsed = () =>
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem("sidebar-collapsed", c ? "0" : "1");
+      } catch {
+        /* per-browser convenience only */
+      }
+      return !c;
+    });
   const [hideExpiry, setHideExpiry] = useState(false);
   const { theme, toggle } = useTheme();
   const meta = useApi<MetaResponse>(`/api/meta?v=${metaVersion}`);
@@ -124,51 +150,98 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[232px_minmax(0,1fr)]">
-      <aside className="border-b-2 border-divider bg-page md:sticky md:top-0 md:flex md:h-screen md:flex-col md:gap-8 md:border-r-2 md:border-b-0 md:px-4 md:py-6">
-        <div className="flex items-center justify-between px-4 py-3 md:block md:px-2 md:py-0">
-          <a href="#/dashboard" className="block">
-            <div className="text-[22px] font-extrabold tracking-[-0.02em] text-ink">Kojeva Hub</div>
-            <div className="hidden text-xs text-ink-3 md:block">Performance &amp; creative intelligence</div>
+    <div className={`min-h-screen md:grid ${collapsed ? "md:grid-cols-[76px_minmax(0,1fr)]" : "md:grid-cols-[232px_minmax(0,1fr)]"}`}>
+      <aside
+        className={`border-b-2 border-divider bg-page md:sticky md:top-0 md:flex md:h-screen md:flex-col md:border-r-2 md:border-b-0 md:py-6 ${collapsed ? "md:gap-5 md:overflow-y-auto md:px-2" : "md:gap-8 md:px-4"}`}
+      >
+        <div className={`flex items-center justify-between px-4 py-3 md:px-2 md:py-0 ${collapsed ? "md:flex-col md:gap-3 md:px-0" : "md:items-start md:gap-2"}`}>
+          <a href="#/dashboard" className="block" title="Kojeva Hub">
+            <div className={`text-[22px] font-extrabold tracking-[-0.02em] text-ink ${collapsed ? "md:hidden" : ""}`}>Kojeva Hub</div>
+            <div className={`hidden text-[22px] font-extrabold text-ink ${collapsed ? "md:block" : ""}`}>K</div>
+            <div className={`hidden text-xs text-ink-3 ${collapsed ? "" : "md:block"}`}>Performance &amp; creative intelligence</div>
           </a>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className="hidden p-1.5 text-ink-3 hover:bg-surface hover:text-ink md:block"
+            aria-label={collapsed ? "Expand the menu" : "Collapse the menu"}
+            title={collapsed ? "Expand the menu" : "Collapse the menu"}
+          >
+            <Icon name="panel" size={18} />
+          </button>
+          <span className="flex items-center gap-2 md:hidden">
+          {m && <AlertsBell version={metaVersion} compact />}
           <button className="btn btn-secondary md:hidden" aria-expanded={menuOpen} aria-controls="main-nav" onClick={() => setMenuOpen((o) => !o)}>
             <Icon name={menuOpen ? "x" : "menu"} size={16} />
             Menu
           </button>
+          </span>
+        </div>
+        <div className={`${menuOpen ? "block" : "hidden"} px-4 pb-2 md:block md:px-0 md:pb-0`}>
+          {m && (
+            <>
+              <span className={collapsed ? "md:hidden" : ""}>
+                <QuickSearch meta={m} />
+              </span>
+              {collapsed && (
+                <span className="hidden md:block">
+                  <QuickSearch meta={m} iconOnly />
+                </span>
+              )}
+            </>
+          )}
         </div>
         <nav id="main-nav" className={`${menuOpen ? "flex" : "hidden"} flex-col gap-0.5 px-2 pb-3 md:flex md:px-0 md:pb-0`}>
-          {NAV.map((n) => {
-            const active = path === n.path;
-            const badge = n.path === "tagging" && m && m.needsTagging > 0 ? m.needsTagging : null;
+          {NAV_GROUPS.map(({ group, label }) => {
+            // View-only people don't get the work pages; they can still open them by link.
+            // View-only people don't get To review (they can't act on it); everyone gets the Naming Tool.
+            const items = NAV.filter((x) => x.group === group && (x.path !== "tagging" || !m || m.canEdit));
+            if (!items.length) return null;
             return (
-              <a
-                key={n.path}
-                href={`#/${n.path}`}
-                aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-2.5 px-2.5 py-2 text-sm transition ${
-                  active ? "bg-surface font-bold text-accent-ink" : "text-ink hover:bg-surface"
-                }`}
-              >
-                <Icon name={n.icon} />
-                <span className="flex-1">{n.label}</span>
-                {badge != null && (
-                  <span className="bg-accent px-1.5 py-px text-[11px] font-semibold text-on-accent" title="Ads with spend in the last 30 days and no pod">
-                    {badge}
-                  </span>
-                )}
-              </a>
+              <div key={group} className={`flex flex-col gap-0.5 ${group === "analyse" ? "" : "mt-3"} ${group === "settings" ? "border-t border-divider pt-3" : ""}`}>
+                {label && <div className={`kicker px-2.5 pb-1 ${collapsed ? "md:hidden" : ""}`}>{label}</div>}
+                {items.map((n) => {
+                  const active = path === n.path;
+                  const badge = n.path === "tagging" && m && m.needsTagging > 0 ? m.needsTagging : null;
+                  return (
+                    <a
+                      key={n.path}
+                      href={`#/${n.path}`}
+                      aria-current={active ? "page" : undefined}
+                      title={collapsed ? n.label : undefined}
+                      className={`relative flex items-center gap-2.5 px-2.5 py-2 text-sm transition ${collapsed ? "md:justify-center md:py-2.5" : ""} ${
+                        active ? "bg-surface font-bold text-accent-ink" : "text-ink hover:bg-surface"
+                      }`}
+                    >
+                      <Icon name={n.icon} />
+                      <span className={`flex-1 ${collapsed ? "md:hidden" : ""}`}>{n.label}</span>
+                      {badge != null && (
+                        <span
+                          className={`bg-accent px-1.5 py-px text-[11px] font-semibold text-on-accent ${collapsed ? "md:absolute md:top-0 md:right-0 md:rounded-full md:px-1 md:text-[10px]" : ""}`}
+                          title="Ads with spend in the last 30 days and no pod"
+                        >
+                          {badge}
+                        </span>
+                      )}
+                    </a>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>
         <div className={`${menuOpen ? "flex" : "hidden"} flex-col gap-3 border-t-2 border-divider px-4 py-3 md:mt-auto md:flex md:px-0 md:pt-4 md:pb-0`}>
-          <button onClick={toggle} className="btn btn-secondary w-full">
-            <Icon name={theme === "dark" ? "sun" : "moon"} size={16} />
-            {theme === "dark" ? "Light mode" : "Dark mode"}
-          </button>
+          <div className={`grid gap-2 ${collapsed ? "md:grid-cols-1" : "grid-cols-2"}`}>
+            <div className="hidden md:block">{m && <AlertsBell version={metaVersion} panelLeft={collapsed ? "md:left-[88px]" : "md:left-[244px]"} />}</div>
+            <button onClick={toggle} className="tile" title={theme === "dark" ? "Light mode" : "Dark mode"}>
+              <Icon name={theme === "dark" ? "sun" : "moon"} size={18} />
+              {theme === "dark" ? "Light" : "Dark"}
+            </button>
+          </div>
           {m?.viewer && !m.viewer.startsWith("service:") && (
-            <div className="flex items-center gap-2.5 px-1">
-              <span className="grid size-8 shrink-0 place-items-center bg-ink text-xs font-bold text-page">{m.viewer.slice(0, 2).toUpperCase()}</span>
-              <span className="min-w-0 text-xs text-ink-2">
+            <div className={`flex items-center gap-2.5 px-1 ${collapsed ? "md:justify-center" : ""}`}>
+              <span className="grid size-8 shrink-0 place-items-center bg-ink text-xs font-bold text-page" title={m.viewer}>{m.viewer.slice(0, 2).toUpperCase()}</span>
+              <span className={`min-w-0 text-xs text-ink-2 ${collapsed ? "md:hidden" : ""}`}>
                 <span className="block truncate" title={m.viewer}>
                   {m.viewer}
                 </span>
@@ -196,7 +269,7 @@ export default function App() {
         {m?.dataMode === "sample" && (
           <Banner tone="warn">
             <b>Sample data</b> · these aren't real Kojeva numbers. Connect Meta in{" "}
-            <a href="#/settings" className="link">
+            <a href="#/settings?tab=data" className="link">
               Settings
             </a>
             .
@@ -211,7 +284,7 @@ export default function App() {
           <Banner tone="bad">
             <b>The last sync failed</b>
             {m.lastSync.message ? ` · ${m.lastSync.message}` : ""}.{" "}
-            <a href="#/settings" className="link">
+            <a href="#/settings?tab=data" className="link">
               Details
             </a>
           </Banner>
@@ -223,7 +296,7 @@ export default function App() {
                 <b>{expires < 0 ? "The Meta connection has expired" : `Meta connection expires in ${expires} days`}</b>
                 {expires < 0 ? ", so syncing has stopped" : ""} · data through {shortDate(m?.latestDate)}
               </span>
-              <a href="#/settings" className="btn btn-secondary bg-page py-1">
+              <a href="#/settings?tab=data" className="btn btn-secondary bg-page py-1">
                 Reconnect
               </a>
             </span>

@@ -18,7 +18,9 @@ function rowsOf(data: PodsResponse | null): PodRow[] {
 }
 
 function Change({ now, before }: { now: number; before: number | undefined }) {
-  if (before == null || before === 0) return <span className="text-ink-3">—</span>;
+  if (before == null || (before === 0 && now === 0)) return <span className="text-ink-3">—</span>;
+  // From (next to) nothing, a percentage means little ("+11,894%"): say it's new instead.
+  if (before === 0 || (now > 0 && before < now / 10)) return <span className="text-ink-2" title={`Previous period: ${money(before)}`}>New</span>;
   const c = now / before - 1;
   // Spend going up or down isn't good or bad by itself, so it stays in ink.
   return (

@@ -183,8 +183,11 @@ input[type="checkbox"] {
     cursor: pointer;
     transition: background-color 0.12s, color 0.12s, border-color 0.12s;
   }
+  /* Off reads as off: grey, not a faded accent that looks broken. */
   .btn:disabled {
-    opacity: 0.45;
+    background: var(--surface);
+    color: var(--ink-3);
+    border-color: var(--divider);
     cursor: not-allowed;
   }
   .btn-primary {
@@ -207,8 +210,34 @@ input[type="checkbox"] {
     color: var(--accent-ink);
     padding-inline: 0;
   }
+  /* A text button stays a text button when off: greyed, no box. */
+  .btn-ghost:disabled {
+    background: transparent;
+    border-color: transparent;
+  }
   .btn-ghost:not(:disabled):hover {
     color: var(--accent);
+  }
+
+  /* Square icon-and-label button in the sidebar (Alerts, theme, search when collapsed). */
+  .tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 100%;
+    min-height: 56px;
+    border: 1px solid var(--divider);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tile:hover {
+    border-color: var(--ink-3);
   }
 
   /* Form controls. */
@@ -227,11 +256,11 @@ input[type="checkbox"] {
     color: var(--ink-3);
   }
 
-  a.link {
+  .link {
     color: var(--accent-ink);
     font-weight: 700;
   }
-  a.link:hover {
+  .link:hover {
     color: var(--accent);
   }
 }
