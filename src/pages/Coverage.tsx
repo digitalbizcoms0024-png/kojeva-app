@@ -107,6 +107,25 @@ export function CoveragePage({ meta }: { meta: MetaResponse }) {
                     place them
                   </a>
                 </div>
+                {data.unplaced > 0 && (
+                  <ul className="num mt-2 flex flex-col gap-0.5 text-xs text-ink-2">
+                    {data.unplacedWhy.untagged > 0 && (
+                      <li>
+                        <b className="text-ink">{data.unplacedWhy.untagged}</b> not tagged by Atria, so Claude can't label them
+                      </li>
+                    )}
+                    {data.unplacedWhy.none > 0 && (
+                      <li>
+                        <b className="text-ink">{data.unplacedWhy.none}</b> fit none of the personas
+                      </li>
+                    )}
+                    {data.unplacedWhy.waiting > 0 && (
+                      <li>
+                        <b className="text-ink">{data.unplacedWhy.waiting}</b> waiting for Claude's nightly labels
+                      </li>
+                    )}
+                  </ul>
+                )}
               </div>
             </section>
 

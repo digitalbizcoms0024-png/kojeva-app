@@ -1,6 +1,6 @@
 // The coverage map: every running ad placed by persona × awareness level, with each cell's
 // spend, results and all-time concept track record. Read-only.
-import type { ConceptResult, CoverageCell, CoveragePost, CoverageResponse, Persona, PostSummary } from "../shared/api.ts";
+import type { ConceptResult, CoverageCell, CoveragePost, CoverageResponse, Persona, PostSummary, UnplacedReason } from "../shared/api.ts";
 import { addTotals, hitRate, isHit, ZERO_TOTALS } from "../shared/metrics.ts";
 import { AWARENESS } from "../shared/taxonomy.ts";
 import { loadPersonas } from "./personas.ts";
@@ -17,18 +17,25 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
 
   const running: CoveragePost[] = posts
     .filter((p) => p.totals.spendCents > 0)
-    .map((p) => ({
+    .map((p) => {
+      const personaId = persona(p.assignment.personaId ?? p.labels.personaId);
+      const awareness = level(p.assignment.awareness ?? p.labels.awareness);
+      // Claude labels only Atria-tagged creatives; one with awareness but no persona was judged to fit none.
+      const why: UnplacedReason | null = personaId && awareness ? null : !p.atria && !personaId && !awareness ? "untagged" : awareness && !personaId ? "none" : "waiting";
+      return {
       postId: p.postId,
       name: p.name,
       thumbnailUrl: p.thumbnailUrl,
       mediaType: p.mediaType,
       podId: p.assignment.podId,
       totals: p.totals,
-      personaId: persona(p.assignment.personaId ?? p.labels.personaId),
-      awareness: level(p.assignment.awareness ?? p.labels.awareness),
+      personaId,
+      awareness,
       offer: p.assignment.offer ?? p.labels.offer,
       hit: p.hit,
-    }))
+      why,
+      };
+    })
     .sort((a, b) => b.totals.spendCents - a.totals.spendCents);
 
   const cells = new Map<string, CoverageCell>();
@@ -92,7 +99,12 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
             offerShare: best.offerKnownSpendCents > 0 ? best.offerSpendCents / best.offerKnownSpendCents : null,
           }
         : null,
-    unplaced: running.filter((p) => !p.personaId || !p.awareness).length,
+    unplaced: running.filter((p) => p.why).length,
+    unplacedWhy: {
+      untagged: running.filter((p) => p.why === "untagged").length,
+      waiting: running.filter((p) => p.why === "waiting").length,
+      none: running.filter((p) => p.why === "none").length,
+    },
   };
 }
 

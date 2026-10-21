@@ -424,7 +424,11 @@ export interface CoveragePost {
   awareness: string | null;
   offer: boolean | null;
   hit: HitStatus | null;
+  /** Why it's off the map (null when placed): Atria hasn't tagged it, Claude hasn't labelled it yet, or it fits no persona. */
+  why: UnplacedReason | null;
 }
+
+export type UnplacedReason = "untagged" | "waiting" | "none";
 
 /** One persona × awareness cell. personaId / awareness null = not placed yet. */
 export interface CoverageCell {
@@ -460,6 +464,8 @@ export interface CoverageResponse {
   top: { personaId: string; awareness: string; share: number; offerShare: number | null } | null;
   /** Running posts missing a persona or an awareness level. */
   unplaced: number;
+  /** The unplaced ones by reason (see CoveragePost.why). */
+  unplacedWhy: Record<UnplacedReason, number>;
 }
 
 /** Totals for one stretch of days in a winner call's evidence. */

@@ -206,6 +206,8 @@ describe("coverage map", () => {
     expect(map.defined).toBe(10);
     expect(map.filled).toBe(2);
     expect(map.unplaced).toBe(1); // p3 has no persona
+    expect(map.unplacedWhy).toEqual({ untagged: 0, waiting: 0, none: 1 }); // labelled, fits no persona
+    expect(map.posts.find((p) => p.postId === "p3")?.why).toBe("none");
     expect(map.top).toEqual({ personaId: lisa, awareness: "product", share: 0.7, offerShare: 1 });
     const cell = map.cells.find((c) => c.personaId === sam && c.awareness === "unaware")!;
     expect(cell).toMatchObject({ ads: 1, offerSpendCents: 0, offerKnownSpendCents: 10000, concepts: 1 });
@@ -241,6 +243,7 @@ describe("coverage map", () => {
   it("shows an empty grid until personas are confirmed", async () => {
     const map = await json<CoverageResponse>(call("/api/coverage?range=all", person));
     expect(map).toMatchObject({ personas: [], defined: 0, filled: 0, unplaced: 3, top: null });
+    expect(map.unplacedWhy.none).toBe(0);
     expect((await json<AlertsResponse>(call("/api/alerts", person))).alerts.some((a) => a.id === "concentration")).toBe(false);
   });
 });
