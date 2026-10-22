@@ -13,6 +13,7 @@ import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
 
 type Tab = "ads" | "pods" | "editors";
+type Preset = "all" | "new" | "inhouse";
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: "spend", label: "Spend" },
@@ -116,24 +117,32 @@ export function RankingsPage({
                 </div>
               </div>
               <div className="flex flex-wrap items-end gap-3">
-                {/* Presets: one click for the views people use most; they combine with the filters. */}
-                <div className="flex w-full flex-wrap items-center gap-2 text-sm">
-                  <span className="text-ink-2">Presets</span>
-                  {[
-                    { key: "all", label: "All ads", on: !launched && pod === "all", set: () => (setLaunched(false), setPod("all")) },
-                    { key: "new", label: "New in the last 2 weeks", on: launched, set: () => setLaunched((v) => !v) },
-                    { key: "inhouse", label: "In-house pods", on: pod === "inhouse", set: () => setPod(pod === "inhouse" ? "all" : "inhouse") },
-                  ].map((p) => (
-                    <button
-                      key={p.key}
-                      type="button"
-                      aria-pressed={p.on}
-                      onClick={p.set}
-                      className={`border px-3 py-1.5 transition ${p.on ? "border-accent bg-accent text-on-accent" : "border-divider bg-page text-ink hover:bg-surface"}`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
+                {/* Presets: one view at a time (the filters below still narrow it further). */}
+                <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <span className="text-ink-2">Preset</span>
+                  <Segmented
+                    label="Preset"
+                    value={launched ? "new" : pod === "inhouse" ? "inhouse" : pod === "all" ? "all" : ("" as Preset)}
+                    onChange={(v: Preset) => {
+                      setLaunched(v === "new");
+                      setPod(v === "inhouse" ? "inhouse" : "all");
+                    }}
+                    options={[
+                      { value: "all", label: "All ads" },
+                      { value: "new", label: "New in the last 2 weeks" },
+                      { value: "inhouse", label: "In-house pods" },
+                    ]}
+                  />
+                  <span className="text-xs text-ink-3">
+                    {launched
+                      ? "Ads first launched since Monday of last week, with their numbers since then."
+                      : pod === "inhouse"
+                        ? `${meta.pods
+                            .filter((p) => p.kind === "pod" && !p.prefix)
+                            .map((p) => p.name)
+                            .join(", ")} only: no agency, no pods added in Settings.`
+                        : ""}
+                  </span>
                 </div>
                 <Select
                   stacked
