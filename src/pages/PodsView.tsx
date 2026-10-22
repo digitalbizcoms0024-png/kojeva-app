@@ -150,7 +150,6 @@ function PodsCompare({
 export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range: Range; setRange: (r: Range) => void }) {
   const pods = useApi<PodsResponse>(`/api/pods?${qs({ range })}`);
   const concepts = useApi<ConceptsResponse>(`/api/concepts?${qs({ range })}`);
-  const [open, setOpen] = useState("");
   const t = meta.targets;
   const rows = pods.data?.rows ?? [];
   const inHouse = rows.filter((r) => r.kind === "pod").sort((a, b) => podOrder(a.podId) - podOrder(b.podId));
@@ -202,10 +201,8 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
             targets={t}
             editorsOf={editorsOf}
             topRate={topRate}
-            onOpen={(podId) => {
-              setOpen(podId);
-              document.getElementById("concepts")?.scrollIntoView({ behavior: "smooth" });
-            }}
+            // A pod's concepts slide in from the right (src/drill.ts), like everywhere else.
+            onOpen={(podId) => openDrill({ title: `${podById(podId)?.name ?? "Agency"} concepts`, range, filter: { pod: podId } })}
           />
         )}
         {meta.pods
@@ -235,13 +232,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
           }
         />
         <div id="concepts" className="scroll-mt-4">
-          <ConceptsTable
-            key={open}
-            range={range}
-            targets={t}
-            pods={rows}
-            filter={{ pod: open }}
-          />
+          <ConceptsTable range={range} targets={t} pods={rows} filter={{ pod: "" }} />
         </div>
       </div>
     </div>
