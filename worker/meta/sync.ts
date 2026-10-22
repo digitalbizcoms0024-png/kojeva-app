@@ -21,6 +21,7 @@ import {
   pickVideoCover,
   postIdFor,
   thumbnailFor,
+  type DailyRow,
   type GraphAd,
   type GraphInsight,
 } from "./transform.ts";
@@ -449,7 +450,16 @@ export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, si
   const old = new Map(storedDaily.map((d) => [`${d.ad_id}|${d.date}`, d]));
 
   const stmts: D1PreparedStatement[] = [];
-  const daily = rows.map(insightToDaily);
+  // One row per ad and day: if Meta repeats one (seen Oct 2026: days with purchases but no spend or
+  // impressions), keep the copy with the delivery.
+  const byKey = new Map<string, DailyRow>();
+  for (const d of rows.map(insightToDaily)) {
+    const key = `${d.adId}|${d.date}`;
+    const seen = byKey.get(key);
+    if (!seen || d.spendCents + d.impressions > seen.spendCents + seen.impressions) byKey.set(key, d);
+  }
+  const daily = [...byKey.values()];
+  let incomplete = 0;
   for (const d of daily) {
     const key = `${d.adId}|${d.date}`;
     const prev = old.get(key);
@@ -464,6 +474,17 @@ export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, si
       purchases: d.purchases,
       revenue_cents: d.revenueCents,
     };
+    // A day Meta sends with purchases but no spend or impressions is incomplete: never let it wipe the
+    // delivery already stored for that day (purchases and revenue still update).
+    if (next.spend_cents === 0 && next.impressions === 0 && next.purchases > 0) {
+      incomplete++;
+      if (prev && (prev.spend_cents > 0 || prev.impressions > 0)) {
+        next.spend_cents = prev.spend_cents;
+        next.impressions = prev.impressions;
+        next.reach = prev.reach;
+        next.link_clicks = prev.link_clicks;
+      }
+    }
     if (prev && same(prev, next, DAILY_COLS)) continue;
     stmts.push(
       db
@@ -481,7 +502,7 @@ export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, si
     stmts.push(db.prepare("DELETE FROM ad_daily WHERE ad_id = ?1 AND date = ?2").bind(gone.ad_id, gone.date));
   await runBatched(db, stmts);
   if (missing.size) await attribute(db);
-  return { rows: daily.length, written: stmts.length + placeholderStmts.length };
+  return { rows: daily.length, written: stmts.length + placeholderStmts.length, incomplete };
 }
 
 type WindowDbRow = {
@@ -559,6 +580,8 @@ export interface SyncResult {
   rows?: number;
   /** Row writes this sync made (D1 free plan allows 100k/day). */
   written?: number;
+  /** Days Meta sent with purchases but no spend or impressions (stored spend was kept). */
+  incomplete?: number;
   error?: string;
   reconnect?: boolean;
 }
@@ -598,12 +621,14 @@ export async function runSync(
     }
     const i = await syncInsights(env, db, gc, opts.since, opts.until);
     result.rows = i.rows;
+    result.incomplete = i.incomplete;
     result.written = (result.written ?? 0) + i.written;
     const w = await syncAttributionWindows(env, db, gc, opts.since, opts.until);
     result.written += w.written;
     await finish(
       "ok",
       `${opts.since} → ${opts.until} · ${result.rows} rows${opts.ads ? ` · ${result.ads} ads` : ""} · ${result.written} changed` +
+        (i.incomplete ? ` · ${i.incomplete} incomplete days from Meta (purchases, no spend) kept their stored spend` : "") +
         (w.error ? ` · 7-day click / incremental not available: ${w.error}` : ""),
       result.written > 0,
     );

@@ -299,3 +299,18 @@ input[type="checkbox"] {
     animation: none;
   }
 }
+
+/* Side cards slide in from the right. */
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+.slide-in {
+  animation: slide-in 0.2s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .slide-in {
+    animation: none;
+  }
+}

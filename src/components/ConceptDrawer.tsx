@@ -77,7 +77,7 @@ export function ConceptDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={k ? `Concept ${k.label}` : "Concept"}>
       <button className="absolute inset-0 bg-black/40" aria-label="Close" onClick={onClose} />
-      <div ref={panel} tabIndex={-1} className="relative flex h-full w-full max-w-[640px] flex-col overflow-y-auto bg-page shadow-xl outline-none">
+      <div ref={panel} tabIndex={-1} className="slide-in relative flex h-full w-full max-w-[640px] flex-col overflow-y-auto bg-page shadow-xl outline-none">
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b-2 border-divider bg-page px-5 py-4">
           <div className="min-w-0">
             {back && (

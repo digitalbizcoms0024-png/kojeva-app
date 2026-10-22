@@ -226,6 +226,22 @@ describe("runSync", () => {
     expect((await changes()) - before).toBe(2);
   });
 
+  it("never lets an incomplete day from Meta (purchases, no spend) wipe stored spend, and keeps one row per ad and day", async () => {
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, metaApi());
+    const ad = "120250321798060075";
+    // Meta sends Oct 8 twice: the full row, then a copy with purchases and no delivery.
+    const repeated = () => [...insights(), { ad_id: ad, date_start: "2026-10-08", spend: "0", impressions: "0", inline_link_clicks: "0", ...purchases(8, 190) }];
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: false }, metaApi(repeated));
+    const spend = async () => (await q<{ spend_cents: number; purchases: number }>("SELECT spend_cents, purchases FROM ad_daily WHERE ad_id = ?1", ad))[0];
+    expect(await spend()).toEqual({ spend_cents: 10050, purchases: 8 });
+
+    // Only the incomplete copy arrives (purchases revised to 9): spend stays, purchases update, and the sync says so.
+    const incomplete = () => insights().map((r) => (r.ad_id === ad ? { ...r, spend: "0", impressions: "0", inline_link_clicks: "0", ...purchases(9, 210) } : r));
+    const res = await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: false }, metaApi(incomplete));
+    expect(res.incomplete).toBe(1);
+    expect(await spend()).toEqual({ spend_cents: 10050, purchases: 9 });
+  });
+
   it("judges a slow concept up to the day one ad crossed $100", async () => {
     await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, metaApi());
     // Dhia's concept (one ad): $50 on Oct 9, then $20/day, crossing $100 on Oct 12 (day 4).
