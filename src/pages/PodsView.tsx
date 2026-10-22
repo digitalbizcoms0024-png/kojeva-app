@@ -171,7 +171,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
       <div className="flex flex-col gap-6 px-4 py-6 md:px-8">
-        <PodSpend range={range} latest={meta.latestDate} targets={t} />
+        <PodSpend range={range} latest={meta.latestDate} targets={t} inhouseIds={meta.pods.filter((p) => p.inhouse).map((p) => p.id)} />
         <SectionTitle title="Hit rate by pod" className="mb-0" />
         <details className="text-sm text-ink-3">
           <summary className="cursor-pointer text-ink-2">How it's measured</summary>

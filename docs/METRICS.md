@@ -132,6 +132,7 @@ then Oct 5 – 18, Oct 19 – Nov 1, and so on.
   rich text (bold and bullets survive) with a mrkdwn fallback.
 
 ## Spend by pod
+- **In-house** view (default): the share bar and Share column cover in-house pods only (Settings → In-house tick); the agency, partners (Trybe) and uncredited spend are listed under "Outside the pods" with their spend but no share. **All spend** shows everyone in one bar, as before.
 - Pods page section (and a share bar on the Dashboard): spend per pod, the agency and unassigned for the global range, share of
   total, and change vs the period before (same length). Spend changes are shown without good/bad color.
 

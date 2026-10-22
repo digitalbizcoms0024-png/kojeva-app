@@ -91,7 +91,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
           />
         </div>
 
-        <PodSpend range={range} latest={meta.latestDate} targets={tg} compact />
+        <PodSpend range={range} latest={meta.latestDate} targets={tg} inhouseIds={meta.pods.filter((p) => p.inhouse).map((p) => p.id)} compact />
 
         <section>
           <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by hit rate · ${shortDate(pods.data.from === "2000-01-01" ? null : pods.data.from)} – ${shortDate(pods.data.to)} · Meta`} />
