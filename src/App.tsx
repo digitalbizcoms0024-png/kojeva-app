@@ -335,7 +335,7 @@ export default function App() {
         {m && path === "dashboard" && <DashboardPage meta={m} range={range} setRange={setRange} />}
         {m && path === "rankings" && <RankingsPage meta={m} range={range} setRange={setRange} initialPost={route.params.get("post")} initialStatus={route.params.get("status")} />}
         {m && path === "pods" && <PodsPage meta={m} range={range} setRange={setRange} />}
-        {m && path === "tagging" && <TaggingPage meta={m} onChanged={refresh} />}
+        {m && path === "tagging" && <TaggingPage meta={m} onChanged={refresh} range={range} />}
         {m && path === "naming" && <NamingToolPage meta={m} />}
         {m && path === "settings" && <SettingsPage meta={m} onSynced={refresh} />}
         {m && path === "insights" && <InsightsPage meta={m} range={range} setRange={setRange} />}
