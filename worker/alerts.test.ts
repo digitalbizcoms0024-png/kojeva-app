@@ -33,6 +33,18 @@ beforeEach(async () => {
 });
 
 describe("alerts", () => {
+  it("flags days stored with purchases but no spend (an incomplete report from Meta)", async () => {
+    await ad("p1", "a1", "1", { pod: "shameer" });
+    await day("a1", "2026-10-16", 366, 21);
+    await db.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, link_clicks, purchases, revenue_cents) VALUES ('a1', '2026-10-17', 0, 0, 0, 22, 65800)").run();
+    const { alerts } = await loadAlerts(db);
+    expect(alerts.find((x) => x.id.startsWith("incomplete:"))).toMatchObject({
+      tone: "bad",
+      title: "1 ad-day has purchases but no spend",
+      href: "#/settings?tab=data",
+    });
+  });
+
   it("flags an ad whose CPA jumped over the last 3 days", async () => {
     await ad("p1", "a1", "Video 131", { pod: "dhia" });
     // Oct 6–12: $10 CPA. Oct 13–15: $25 CPA.

@@ -73,14 +73,14 @@ export function RankingsPage({
   const pods = useApi<PodsResponse>(tab !== "ads" ? `/api/pods?${qs({ range })}` : null);
 
   const items = rankings.data?.items ?? [];
-  const activeId = selected ?? items[0]?.postId ?? null;
+  // The ad whose details slide in from the right; none until one is clicked (or linked with ?post=).
+  const activeId = selected;
   // 10 a page (the full list ran to hundreds of cards); a new filter goes back to page 1.
   const query = `${range}|${sort}|${pod}|${status}|${q}|${format}|${angle}`;
   const [page, setPage] = useState({ query, n: 0 });
   const pageNo = page.query === query ? Math.min(page.n, Math.max(0, Math.ceil(items.length / PAGE) - 1)) : 0;
   const start = pageNo * PAGE;
   // On a phone the ad's details open over the list instead of below all of it.
-  const [sheet, setSheet] = useState(false);
   const rank = items.findIndex((p) => p.postId === activeId) + 1;
 
   return (
@@ -191,7 +191,7 @@ export function RankingsPage({
               )}
             </div>
 
-            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div>
               <div className="min-w-0">
                 <LoadError error={rankings.error} retry={rankings.retry} what="rankings" loading={!rankings.data} rows={8} />
                 {rankings.data && items.length === 0 && (
@@ -205,10 +205,7 @@ export function RankingsPage({
                       rank={start + i + 1}
                       targets={meta.targets}
                       active={p.postId === activeId}
-                      onSelect={() => {
-                        setSelected(p.postId);
-                        setSheet(true);
-                      }}
+                      onSelect={() => setSelected(p.postId)}
                     />
                   ))}
                 </ol>
@@ -222,27 +219,25 @@ export function RankingsPage({
                   }}
                 />
               </div>
-              {sheet && activeId && (
-                <div className="fixed inset-0 z-50 flex flex-col bg-page lg:hidden" role="dialog" aria-modal="true" aria-label="Ad details">
-                  <div className="flex items-center justify-between border-b-2 border-divider px-4 py-3">
-                    <span className="kicker">Ad #{rank}</span>
-                    <button className="btn btn-secondary" onClick={() => setSheet(false)} aria-label="Close">
-                      ✕
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto px-4 py-4">
-                    <PostDetailPanel postId={activeId} range={range} targets={meta.targets} rank={rank} sortLabel={SORTS.find((s) => s.value === sort)!.label} />
-                  </div>
-                </div>
-              )}
-              <div className="hidden min-w-0 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:overscroll-contain">
-                {activeId ? (
-                  <PostDetailPanel postId={activeId} range={range} targets={meta.targets} rank={rank} sortLabel={SORTS.find((s) => s.value === sort)!.label} />
-                ) : (
-                  <Empty>Select an ad to see its details.</Empty>
-                )}
-              </div>
             </div>
+            {activeId && (
+              <AdDrawer
+                title={rank > 0 ? `Ad #${rank} · by ${SORTS.find((x) => x.value === sort)!.label.toLowerCase()}` : "Ad details"}
+                onClose={() => {
+                  setSelected(null);
+                  // Drop ?post= so a reload doesn't reopen it.
+                  const [page = "", q = ""] = window.location.hash.replace(/^#\/?/, "").split("?");
+                  const params = new URLSearchParams(q);
+                  if (params.has("post")) {
+                    params.delete("post");
+                    const rest = params.toString();
+                    history.replaceState(null, "", `#/${page}${rest ? `?${rest}` : ""}`);
+                  }
+                }}
+              >
+                <PostDetailPanel postId={activeId} range={range} targets={meta.targets} rank={rank} sortLabel={SORTS.find((x) => x.value === sort)!.label} />
+              </AdDrawer>
+            )}
           </>
         )}
 
@@ -580,6 +575,29 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
         ) : (
           <p className="text-sm text-ink-3">Not tagged by Atria yet. Atria tags creatives in order of spend; the nightly sync picks up new tags.</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** An ad's details, sliding in from the right over the list (full screen on a phone). Esc or the backdrop closes it. */
+function AdDrawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Ad details">
+      <button className="absolute inset-0 bg-black/40" aria-label="Close" onClick={onClose} />
+      <div className="slide-in relative flex h-full w-full max-w-[760px] flex-col bg-page shadow-xl">
+        <div className="flex items-center justify-between border-b-2 border-divider px-5 py-3">
+          <span className="kicker">{title}</span>
+          <button className="btn btn-secondary" onClick={onClose} aria-label="Close ad details">
+            ✕
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
       </div>
     </div>
   );

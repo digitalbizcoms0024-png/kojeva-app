@@ -226,6 +226,22 @@ describe("runSync", () => {
     expect((await changes()) - before).toBe(2);
   });
 
+  it("never lets an incomplete day from Meta (purchases, no spend) wipe stored spend, and keeps one row per ad and day", async () => {
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, metaApi());
+    const ad = "120250321798060075";
+    // Meta sends Oct 8 twice: the full row, then a copy with purchases and no delivery.
+    const repeated = () => [...insights(), { ad_id: ad, date_start: "2026-10-08", spend: "0", impressions: "0", inline_link_clicks: "0", ...purchases(8, 190) }];
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: false }, metaApi(repeated));
+    const spend = async () => (await q<{ spend_cents: number; purchases: number }>("SELECT spend_cents, purchases FROM ad_daily WHERE ad_id = ?1", ad))[0];
+    expect(await spend()).toEqual({ spend_cents: 10050, purchases: 8 });
+
+    // Only the incomplete copy arrives (purchases revised to 9): spend stays, purchases update, and the sync says so.
+    const incomplete = () => insights().map((r) => (r.ad_id === ad ? { ...r, spend: "0", impressions: "0", inline_link_clicks: "0", ...purchases(9, 210) } : r));
+    const res = await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: false }, metaApi(incomplete));
+    expect(res.incomplete).toBe(1);
+    expect(await spend()).toEqual({ spend_cents: 10050, purchases: 9 });
+  });
+
   it("judges a slow concept up to the day one ad crossed $100", async () => {
     await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, metaApi());
     // Dhia's concept (one ad): $50 on Oct 9, then $20/day, crossing $100 on Oct 12 (day 4).
@@ -337,6 +353,59 @@ describe("thumbnails", () => {
     expect((await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, again)).written).toBe(0);
     // The cover isn't fetched again once a sharp one is stored.
     expect(again.calls.some((u) => u.searchParams.has("ids"))).toBe(false);
+  });
+
+  it("shows the Facebook feed image of an ad with one image per placement, and writes nothing on a re-sync", async () => {
+    const STORY = "https://scontent.example/story.png";
+    const FEED = "https://scontent.example/feed.png";
+    const post = "776862388850901_122147682321047339";
+    const spec = (rules: boolean) => ({
+      images: [
+        { hash: "h-story", adlabels: [{ name: "story" }] },
+        { hash: "h-feed", adlabels: [{ name: "feed" }] },
+      ],
+      asset_customization_rules: rules
+        ? [
+            { customization_spec: { publisher_platforms: ["facebook"], facebook_positions: ["story"] }, image_label: { name: "story" }, priority: 1 },
+            { customization_spec: { publisher_platforms: ["facebook"], facebook_positions: ["feed"] }, image_label: { name: "feed" }, priority: 2 },
+          ]
+        : [],
+    });
+    const meta = (rules: boolean) =>
+      fakeMeta((url) => {
+        if (url.pathname.endsWith(`${ACT}/adimages`))
+          return {
+            data: [
+              { hash: "h-story", url: STORY, width: 1080, height: 1920 },
+              { hash: "h-feed", url: FEED, width: 1080, height: 1350 },
+            ],
+          };
+        if (url.pathname.endsWith(`${ACT}/ads`))
+          return {
+            data: [
+              {
+                id: "120250303598690075",
+                name: "1",
+                adset: { id: "as9", name: "Shameer | Static 3 | Negative Marketing #2" },
+                creative: { id: "1709247247216003", effective_object_story_id: post, object_type: "SHARE", thumbnail_url: STORY, asset_feed_spec: spec(rules) },
+              },
+            ],
+          };
+        if (url.pathname.endsWith(`${ACT}/insights`)) return { data: [] };
+        return { error: { message: `Unexpected ${url.pathname}`, code: 100 } };
+      });
+    const thumb = async () => (await env.DB.prepare("SELECT thumbnail_url, thumb_hash FROM posts WHERE id = ?1").bind(post).first())!;
+
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, meta(true));
+    expect(await thumb()).toEqual({ thumbnail_url: FEED, thumb_hash: "h-feed" });
+    const again = meta(true);
+    expect((await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, again)).written).toBe(0);
+    expect(again.calls.some((u) => u.pathname.endsWith("/adimages"))).toBe(false);
+
+    // Without placement rules, the feed-shaped image (4:5, not 9:16) wins.
+    await env.DB.prepare("UPDATE posts SET thumb_hash = NULL").run();
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, meta(false));
+    expect(await thumb()).toEqual({ thumbnail_url: FEED, thumb_hash: "h-feed" });
   });
 });
 

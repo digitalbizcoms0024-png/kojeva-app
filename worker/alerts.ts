@@ -7,6 +7,7 @@ import { loadCoverage } from "./coverage.ts";
 import { confirmed, loadPersonas } from "./personas.ts";
 import { loadFatigue } from "./fatigue.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
+import { memoize } from "./cache.ts";
 import { getLatestDate, getTargets, loadConcepts, shiftDay, untaggedSpend } from "./queries.ts";
 
 /** Share of a week's spend in a single persona × awareness cell that raises an alert. */
@@ -92,6 +93,20 @@ export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null;
       detail: `Last 7 days${offer}. ${map.filled} of ${map.defined} persona × awareness cells have ads running`,
       href: "#/coverage",
       action: "Open coverage map",
+    });
+  }
+
+  // Days stored with purchases but no spend or impressions: an incomplete report from Meta (Oct 2026).
+  // A backfill re-pulls them; until then those ads' CPA and ROAS look far better than they are.
+  const gaps = await incompleteDays(db, shiftDay(latest, -29), latest);
+  if (gaps.days > 0) {
+    alerts.push({
+      id: `incomplete:${latest}:${gaps.days}`,
+      tone: "bad",
+      title: `${gaps.days} ad-${gaps.days === 1 ? "day has" : "days have"} purchases but no spend`,
+      detail: `${gaps.ads} ${gaps.ads === 1 ? "ad" : "ads"} in the last 30 days, so their CPA and ROAS look better than they are. Settings → Data sources → Backfill (90 days) re-pulls them from Meta`,
+      href: "#/settings?tab=data",
+      action: "Open data sources",
     });
   }
 
@@ -236,4 +251,23 @@ export async function loadSuggestions(db: D1Database, editors: Editor[]): Promis
     out[r.post_id] = { podId: ed.podId!, confidence: "medium", reason: `Editor ${ed.name} is in the ad name` };
   }
   return out;
+}
+
+/** Ad-days in [from, to] with purchases but no spend or impressions; once per sync (stats version). */
+export function incompleteDays(db: D1Database, from: string, to: string): Promise<{ days: number; ads: number }> {
+  return memoize(
+    db,
+    `incomplete-${from}-${to}`,
+    async () => {
+      const r = await db
+        .prepare(
+          `SELECT COUNT(*) AS days, COUNT(DISTINCT ad_id) AS ads FROM ad_daily
+           WHERE date BETWEEN ?1 AND ?2 AND purchases > 0 AND spend_cents = 0 AND impressions = 0`,
+        )
+        .bind(from, to)
+        .first<{ days: number; ads: number }>();
+      return { days: Number(r?.days ?? 0), ads: Number(r?.ads ?? 0) };
+    },
+    { durable: true, scope: "stats" },
+  );
 }
