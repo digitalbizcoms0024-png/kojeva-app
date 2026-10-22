@@ -5,13 +5,13 @@ import { qs, useApi } from "../api.ts";
 import { conceptHref } from "../components/ConceptDrawer.tsx";
 import { openDrill } from "../drill.ts";
 import { LaunchCadence } from "../components/LaunchCadence.tsx";
-import { PodSpend } from "../components/PodSpend.tsx";
+import { PodSpend, type SpendView } from "../components/PodSpend.tsx";
 import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { addTotals, cpa, isHit, roas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
 import { byStrategist } from "../../shared/strategists.ts";
-import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select, LoadError, Skeleton } from "../components/ui.tsx";
+import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, LoadError, Skeleton } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
 
 type Props = {
@@ -150,29 +150,53 @@ function PodsCompare({
 export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range: Range; setRange: (r: Range) => void }) {
   const pods = useApi<PodsResponse>(`/api/pods?${qs({ range })}`);
   const concepts = useApi<ConceptsResponse>(`/api/concepts?${qs({ range })}`);
-  const [open, setOpen] = useState("");
   const t = meta.targets;
   const rows = pods.data?.rows ?? [];
   const inHouse = rows.filter((r) => r.kind === "pod").sort((a, b) => podOrder(a.podId) - podOrder(b.podId));
   const agency = rows.find((r) => r.kind === "agency");
   const unassigned = rows.find((r) => r.kind === "unassigned");
-  const topRate = Math.max(...inHouse.map((r) => r.hitRate ?? -1));
-  const columns = [...inHouse, ...(agency && (agency.totals.spendCents > 0 || agency.concepts > 0) ? [agency] : [])];
+  // In-house (default): only Kojeva's own pods, in every section; All adds partners (Trybe) and the agency.
+  const [view, setView] = useState<SpendView>("inhouse");
+  const inhouseIds = meta.pods.filter((p) => p.inhouse).map((p) => p.id);
+  const shown = view === "inhouse" ? inHouse.filter((r) => r.podId != null && inhouseIds.includes(r.podId)) : inHouse;
+  const topRate = Math.max(...shown.map((r) => r.hitRate ?? -1));
+  const columns = [...shown, ...(view === "all" && agency && (agency.totals.spendCents > 0 || agency.concepts > 0) ? [agency] : [])];
   const editorsOf = (podId: string | null) => meta.editors.filter((e) => e.podId === podId).map((e) => e.name);
 
   return (
     <div>
       <PageHeader
         title="Pods"
-        subtitle={`${GROUPS.filter((g) => g.id !== "agency")
+        subtitle={`${meta.pods
+          .filter((p) => p.kind === "pod" && (view === "all" || p.inhouse))
           .map((p) => p.name)
           .join(" vs ")} · hit rate per concept`}
       >
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
       <div className="flex flex-col gap-6 px-4 py-6 md:px-8">
-        <PodSpend range={range} latest={meta.latestDate} targets={t} />
-        <SectionTitle title="Hit rate by pod" className="mb-0" />
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span className="text-ink-2">Show</span>
+          <Segmented
+            label="Pods shown"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "inhouse", label: "In-house pods" },
+              { value: "all", label: "All, with agency & partners" },
+            ]}
+          />
+        </div>
+        <PodSpend range={range} latest={meta.latestDate} targets={t} inhouseIds={inhouseIds} view={view} />
+        <SectionTitle
+          title="Hit rate by pod"
+          className="mb-0"
+          right={
+            <button type="button" className="link inline-flex items-center gap-1 text-sm" onClick={() => openDrill({ title: "All concepts tested", range, filter: {} })}>
+              All concepts tested{concepts.data ? ` · ${concepts.data.rows.length}` : ""} <Icon name="arrow" size={14} />
+            </button>
+          }
+        />
         <details className="text-sm text-ink-3">
           <summary className="cursor-pointer text-ink-2">How it's measured</summary>
           <p className="mt-2 max-w-[110ch]">{hitRuleText(t)} Concepts count toward the period in which they first spent.</p>
@@ -185,10 +209,8 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
             targets={t}
             editorsOf={editorsOf}
             topRate={topRate}
-            onOpen={(podId) => {
-              setOpen(podId);
-              document.getElementById("concepts")?.scrollIntoView({ behavior: "smooth" });
-            }}
+            // A pod's concepts slide in from the right (src/drill.ts), like everywhere else.
+            onOpen={(podId) => openDrill({ title: `${podById(podId)?.name ?? "Agency"} concepts`, range, filter: { pod: podId } })}
           />
         )}
         {meta.pods
@@ -217,15 +239,6 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
             })
           }
         />
-        <div id="concepts" className="scroll-mt-4">
-          <ConceptsTable
-            key={open}
-            range={range}
-            targets={t}
-            pods={rows}
-            filter={{ pod: open }}
-          />
-        </div>
       </div>
     </div>
   );
