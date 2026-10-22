@@ -13,6 +13,13 @@ strategists, matched by a **prefix** that is one of the ad set name's `|` parts:
 `TRYBE | <creator> | <angle>` ("TRYBE | Larissa V | Jawline Angle"). They're counted like any pod.
 Up to three, each with a validated color (`POD_SLOTS` in `shared/taxonomy.ts`); adding or removing one
 re-credits every ad except hand-set ones.
+- A prefix matches ignoring case, spaces and punctuation, or as a part's first word: `POD0` matches
+  "Pod 0 | Andrei | …" and `CAICOS` matches "Caicos Pod | …".
+- **In-house** (a tick per pod, migration 0027): Kojeva's own teams. The four built-in pods, Caicos (Pod 5)
+  and Pod 0 are in-house; Trybe, a partner, isn't. The Ad Rankings "In-house pods" view follows the tick.
+- **Strategists** (per pod, migration 0028): a pod run by several strategists lists them (Pod 0: Andrei,
+  Reika, Adrian) and names one in each ad set ("POD0 | Andrei | Depuff Static"). Each gets their own hit
+  rate on the Pods page and in the CS report (`shared/strategists.ts`); the pod's own numbers don't change.
 
 First match wins:
 1. **Set by hand** in the app. Never overwritten by a sync.

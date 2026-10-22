@@ -72,7 +72,7 @@ export interface MetaResponse {
   latestDate: string | null;
   targets: Targets;
   /** Built-in pods, pods added in Settings (with their ad set prefix and color slot), then the agency. */
-  pods: { id: string; code: string; name: string; color: string; kind: "pod" | "agency"; prefix: string | null; slot: number | null }[];
+  pods: { id: string; code: string; name: string; color: string; kind: "pod" | "agency"; prefix: string | null; slot: number | null; inhouse: boolean; members: string[] }[];
   attribution: { agencyPrefixes: string[]; podsStartDate: string | null; detected: boolean };
   editors: Editor[];
   /** Whether the signed-in viewer can make changes: Access is on and they're on the edit list (or it's empty). */
@@ -574,7 +574,8 @@ export interface ReportData {
   /** Report number (1 = Sep 18 – Oct 4, 2026), when the range is a report period. */
   n: number | null;
   targets: Targets;
-  pods: { podId: string; name: string; testingSpendCents: number }[];
+  /** members: the pod's strategists when it has several (a per-strategist line in its section). */
+  pods: { podId: string; name: string; testingSpendCents: number; members: string[] }[];
   concepts: ReportConcept[];
   lateVerdicts: LateVerdict[];
   /** The previous period's concepts' results as they stand now (its hit rate, updated). */

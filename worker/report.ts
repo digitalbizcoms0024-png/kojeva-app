@@ -13,6 +13,7 @@ import { bumpVersion } from "./cache.ts";
 import type { AppEnv } from "./env.ts";
 import { getLatestDate, getTargets, loadConcepts, toTotals } from "./queries.ts";
 import { loadPersonas } from "./personas.ts";
+import { parseMembers } from "./pods.ts";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** D1 allows 100 bound values per statement. */
@@ -43,7 +44,7 @@ export async function buildReport(db: D1Database, from: string, to: string): Pro
     getTargets(db),
     loadConcepts(db),
     loadPersonas(db),
-    db.prepare("SELECT id, name, kind FROM pods").all<{ id: string; name: string; kind: string }>(),
+    db.prepare("SELECT id, name, kind, members FROM pods").all<{ id: string; name: string; kind: string; members: string | null }>(),
   ]);
   const podIds = new Set(pods.results.filter((p) => p.kind === "pod").map((p) => p.id));
   // Pod concepts launched in the period; the agency is shown elsewhere, never counted.
@@ -172,7 +173,7 @@ export async function buildReport(db: D1Database, from: string, to: string): Pro
         .map((k) => ({ podId: k.podId, label: k.label, status: k.status })),
     },
     targets,
-    pods: pods.results.filter((p) => podIds.has(p.id)).map((p) => ({ podId: p.id, name: p.name, testingSpendCents: testingSpend.get(p.id) ?? 0 })),
+    pods: pods.results.filter((p) => podIds.has(p.id)).map((p) => ({ podId: p.id, name: p.name, testingSpendCents: testingSpend.get(p.id) ?? 0, members: parseMembers(p.members) })),
     concepts,
   };
 }

@@ -57,6 +57,36 @@ describe("added pods", () => {
     expect(podFromAdSetName("GLOW | Ana R | Puffiness")).toBe("GLO");
   });
 
+  it("matches a prefix ignoring spaces and case, or as a part's first word; in-house pods are ticked in Settings", async () => {
+    // Trybe (added before the tick existed) is a partner; a new pod defaults to in-house.
+    const pod0 = await call("/api/pods", { method: "POST", body: JSON.stringify({ name: "Pod 0", prefix: "POD0" }), headers: { "content-type": "application/json" } });
+    expect(pod0.status).toBe(201);
+    await call("/api/pods", { method: "POST", body: JSON.stringify({ name: "Caicos", prefix: "CAICOS" }), headers: { "content-type": "application/json" } });
+    expect(podFromAdSetName("Pod 0 | Andrei | Depuff Static")).toBe(podFromAdSetName("POD0 | Andrei | x"));
+    expect(podFromAdSetName("pod-0 | Reika | Hook test")).not.toBeNull();
+    expect(podFromAdSetName("Caicos Pod | Jawline Hook | Static")).not.toBeNull();
+    expect(podFromAdSetName("Caicos | Jawline Hook")).toBe(podFromAdSetName("Caicos Pod | Jawline Hook | Static"));
+    const meta = await json<MetaResponse>(call("/api/meta"));
+    const inhouse = (id: string) => meta.pods.find((p) => p.id === id)?.inhouse;
+    expect([inhouse("harris"), inhouse("pod-0"), inhouse("caicos"), inhouse("trybe"), inhouse("agency")]).toEqual([true, true, true, false, false]);
+
+    // The In-house view follows the tick: Trybe's ad joins once it's ticked.
+    const inhouseIds = async () => (await json<RankingsResponse>(call("/api/rankings?range=all&pod=inhouse"))).items.map((p) => p.postId).sort();
+    expect(await inhouseIds()).toEqual(["p3"]);
+    await call("/api/pods/trybe", { method: "PATCH", body: JSON.stringify({ inhouse: true }), headers: { "content-type": "application/json" } });
+    expect(await inhouseIds()).toEqual(["p1", "p3"]);
+  });
+
+  it("stores a pod's strategists for a per-strategist hit rate, and checks them", async () => {
+    const patch = (body: unknown) => call("/api/pods/trybe", { method: "PATCH", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
+    expect((await patch({ members: ["Andrei", " Reika ", "andrei", "Adrian"] })).status).toBe(200);
+    const meta = await json<MetaResponse>(call("/api/meta"));
+    expect(meta.pods.find((p) => p.id === "trybe")?.members).toEqual(["Andrei", "Reika", "Adrian"]);
+    expect((await patch({ members: ["A"] })).status).toBe(400);
+    expect((await patch({ members: [] })).status).toBe(200);
+    expect((await json<MetaResponse>(call("/api/meta"))).pods.find((p) => p.id === "trybe")?.members).toEqual([]);
+  });
+
   it("rejects clashes, agency codes and a full palette", async () => {
     const add = (name: string, prefix: string) => call("/api/pods", { method: "POST", body: JSON.stringify({ name, prefix }) });
     expect((await add("Trybe", "TRY2")).status).toBe(400); // name taken

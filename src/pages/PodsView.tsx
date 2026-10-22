@@ -10,6 +10,7 @@ import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { addTotals, cpa, isHit, roas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
+import { byStrategist } from "../../shared/strategists.ts";
 import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select, LoadError, Skeleton } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
 
@@ -190,6 +191,11 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
             }}
           />
         )}
+        {meta.pods
+          .filter((p) => p.members.length > 0)
+          .map((p) => (
+            <StrategistSplit key={p.id} podId={p.id} members={p.members} concepts={(concepts.data?.rows ?? []).filter((k) => k.podId === p.id)} targets={t} />
+          ))}
         {unassigned && unassigned.totals.spendCents > 0 && (
           <p className="text-sm text-ink-2">
             <b className="text-ink">{money(unassigned.totals.spendCents, { compact: true })}</b> of spend in this period is on ads the hub can't credit to a pod
@@ -547,5 +553,59 @@ export function EditorsTab({ data, error, targets }: Props) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** A pod run by several strategists: each one's concepts and hit rate in the range (named in their ad sets). */
+function StrategistSplit({ podId, members, concepts, targets }: { podId: string; members: string[]; concepts: ConceptResult[]; targets: Targets }) {
+  const rows = byStrategist(concepts, members).map(({ name, concepts: list }) => {
+    const hits = list.filter((k) => isHit(k.status)).length;
+    const decided = hits + list.filter((k) => k.status === "miss").length;
+    const test = list.reduce((acc, k) => addTotals(acc, k.window), ZERO_TOTALS);
+    return { name, launched: list.length, decided, hits, rate: decided ? hits / decided : null, test };
+  });
+  return (
+    <section>
+      <SectionTitle
+        title={
+          <span className="inline-flex items-center gap-2">
+            <PodChip podId={podId} /> by strategist
+          </span>
+        }
+        right={<span className="text-xs text-ink-3">From the strategist named in each ad set ("POD0 | Andrei | …")</span>}
+      />
+      <div className="overflow-x-auto">
+        <table className="pin-first w-full min-w-[560px] text-sm">
+          <thead className="kicker text-left">
+            <tr className="border-b border-divider">
+              <th className="py-2 pr-3 font-normal">Strategist</th>
+              <th className="py-2 pr-3 text-right font-normal">
+                Hit rate <Info id="hitRate" />
+              </th>
+              <th className="py-2 pr-3 text-right font-normal">Hits / decided</th>
+              <th className="py-2 pr-3 text-right font-normal">Launched</th>
+              <th className="py-2 pr-3 text-right font-normal">Test spend</th>
+              <th className="py-2 text-right font-normal">Test CPA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.name} className="border-b border-divider">
+                <td className={`py-2.5 pr-3 font-semibold ${r.name === "Not named" ? "text-ink-3" : "text-ink"}`}>{r.name}</td>
+                <td className="num py-2.5 pr-3 text-right font-bold text-ink">{r.rate == null ? "—" : pct(r.rate, 0)}</td>
+                <td className="num py-2.5 pr-3 text-right text-ink-2">
+                  {r.hits} / {r.decided}
+                </td>
+                <td className="num py-2.5 pr-3 text-right text-ink-2">{r.launched}</td>
+                <td className="num py-2.5 pr-3 text-right text-ink-2">{money(r.test.spendCents, { compact: true })}</td>
+                <td className="py-2.5 text-right">
+                  <CpaValue value={cpa(r.test)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
