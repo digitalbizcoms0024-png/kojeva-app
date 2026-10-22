@@ -117,3 +117,20 @@ describe("ranking minimum", () => {
     expect((await rankings("range=all&sort=cpa")).minDays).toBe(36);
   });
 });
+
+describe("ranking presets", () => {
+  it("New in the last 2 weeks: launched since Monday of last week, numbers from then; In-house: built-in pods only", async () => {
+    // Data runs to Thu Oct 15, so the 2 weeks start Mon Oct 5. A new Harris ad from Oct 8, and an agency one from Oct 9.
+    await ad("p8", "new-test", { asset: "i:new", test: ["s5", "IH | Harris | New One"] });
+    await spend("new-test", 8, 15);
+    await ad("p9", "agency-new", { asset: "i:agency" });
+    await env.DB.prepare("UPDATE assignments SET pod_id = 'agency' WHERE post_id = 'p9'").run();
+    await spend("agency-new", 9, 15);
+    const fresh = await rankings("range=month&launched=2w");
+    expect(fresh.from).toBe("2026-10-05");
+    expect(fresh.items.map((p) => p.postId).sort()).toEqual(["p8", "p9"]);
+    expect(fresh.items.find((p) => p.postId === "p8")!.totals.spendCents).toBe(80000);
+    expect((await rankings("range=month&launched=2w&pod=inhouse")).items.map((p) => p.postId)).toEqual(["p8"]);
+    expect((await rankings("range=month&pod=inhouse")).items.every((p) => p.assignment.podId === "harris")).toBe(true);
+  });
+});

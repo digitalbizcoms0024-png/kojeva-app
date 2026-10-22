@@ -204,7 +204,14 @@ app.get("/rankings", async (c) => {
   const search = (c.req.query("q") ?? "").trim().toLowerCase();
   const limit = Math.min(Number(c.req.query("limit") ?? 500) || 500, 2000);
 
+  // ?launched=2w: posts first launched since Monday of last week (as the Dashboard's "New in the last
+  // 2 weeks"), with their numbers from then on.
+  if (c.req.query("launched") === "2w") {
+    const day = new Date(`${range.to}T00:00:00Z`).getUTCDay();
+    range.from = shiftDay(range.to, -((day + 6) % 7) - 7);
+  }
   let items = await loadPosts(c.env.DB, range.from, range.to);
+  if (c.req.query("launched") === "2w") items = items.filter((p) => p.firstSpend != null && p.firstSpend >= range.from);
   // All time starts at the first day anything spent, not 2000-01-01.
   const firstDay = items.reduce((min, p) => (p.firstSpend && p.firstSpend < min ? p.firstSpend : min), range.to);
   const minDays = daysBetween(firstDay > range.from ? firstDay : range.from, range.to) + 1;
@@ -216,6 +223,12 @@ app.get("/rankings", async (c) => {
     items = items.filter((p) => ids.has(p.postId));
   } else items = items.filter((p) => p.totals.spendCents > 0);
   if (pod === "unassigned") items = items.filter((p) => !p.assignment.podId);
+  else if (pod === "inhouse") {
+    // The in-house pods: the built-in ones, not the agency or pods added in Settings (they have an ad set prefix, e.g. Trybe).
+    const { results } = await c.env.DB.prepare("SELECT id FROM pods WHERE kind = 'pod' AND prefix IS NULL").all<{ id: string }>();
+    const inhouse = new Set(results.map((r) => r.id));
+    items = items.filter((p) => p.assignment.podId != null && inhouse.has(p.assignment.podId));
+  }
   else if (pod !== "all") items = items.filter((p) => p.assignment.podId === pod);
   const format = c.req.query("format");
   const angle = c.req.query("angle");

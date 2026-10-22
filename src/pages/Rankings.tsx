@@ -49,6 +49,8 @@ export function RankingsPage({
   const [sort, setSort] = useState<SortKey>("spend");
   const [pod, setPod] = useState("all");
   const [status, setStatus] = useState(initialStatus ?? "all");
+  // Preset: only ads launched in the last 2 weeks (their numbers from Monday of last week on).
+  const [launched, setLaunched] = useState(false);
   const [format, setFormat] = useState("");
   const [angle, setAngle] = useState("");
   const [search, setSearch] = useState("");
@@ -68,7 +70,7 @@ export function RankingsPage({
 
   const [showAll, setShowAll] = useState(false);
   const rankings = useApi<RankingsResponse>(
-    tab === "ads" ? `/api/rankings?${qs({ range, sort, pod, status, q, format, angle, all: showAll && sort !== "spend" ? "1" : undefined })}` : null,
+    tab === "ads" ? `/api/rankings?${qs({ range, sort, pod, status, q, format, angle, launched: launched ? "2w" : undefined, all: showAll && sort !== "spend" ? "1" : undefined })}` : null,
   );
   const pods = useApi<PodsResponse>(tab !== "ads" ? `/api/pods?${qs({ range })}` : null);
 
@@ -76,7 +78,7 @@ export function RankingsPage({
   // The ad whose details slide in from the right; none until one is clicked (or linked with ?post=).
   const activeId = selected;
   // 10 a page (the full list ran to hundreds of cards); a new filter goes back to page 1.
-  const query = `${range}|${sort}|${pod}|${status}|${q}|${format}|${angle}`;
+  const query = `${range}|${sort}|${pod}|${status}|${q}|${format}|${angle}|${launched}`;
   const [page, setPage] = useState({ query, n: 0 });
   const pageNo = page.query === query ? Math.min(page.n, Math.max(0, Math.ceil(items.length / PAGE) - 1)) : 0;
   const start = pageNo * PAGE;
@@ -114,6 +116,25 @@ export function RankingsPage({
                 </div>
               </div>
               <div className="flex flex-wrap items-end gap-3">
+                {/* Presets: one click for the views people use most; they combine with the filters. */}
+                <div className="flex w-full flex-wrap items-center gap-2 text-sm">
+                  <span className="text-ink-2">Presets</span>
+                  {[
+                    { key: "all", label: "All ads", on: !launched && pod === "all", set: () => (setLaunched(false), setPod("all")) },
+                    { key: "new", label: "New in the last 2 weeks", on: launched, set: () => setLaunched((v) => !v) },
+                    { key: "inhouse", label: "In-house pods", on: pod === "inhouse", set: () => setPod(pod === "inhouse" ? "all" : "inhouse") },
+                  ].map((p) => (
+                    <button
+                      key={p.key}
+                      type="button"
+                      aria-pressed={p.on}
+                      onClick={p.set}
+                      className={`border px-3 py-1.5 transition ${p.on ? "border-accent bg-accent text-on-accent" : "border-divider bg-page text-ink hover:bg-surface"}`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
                 <Select
                   stacked
                   label="Pod"
@@ -121,6 +142,7 @@ export function RankingsPage({
                   onChange={setPod}
                   options={[
                     { value: "all", label: "All pods" },
+                    { value: "inhouse", label: "In-house pods" },
                     ...meta.pods.map((p) => ({ value: p.id, label: p.name })),
                     { value: "unassigned", label: "Unassigned" },
                   ]}
