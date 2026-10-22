@@ -5,13 +5,13 @@ import { qs, useApi } from "../api.ts";
 import { conceptHref } from "../components/ConceptDrawer.tsx";
 import { openDrill } from "../drill.ts";
 import { LaunchCadence } from "../components/LaunchCadence.tsx";
-import { PodSpend } from "../components/PodSpend.tsx";
+import { PodSpend, type SpendView } from "../components/PodSpend.tsx";
 import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { addTotals, cpa, isHit, roas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
 import { byStrategist } from "../../shared/strategists.ts";
-import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Select, LoadError, Skeleton } from "../components/ui.tsx";
+import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, LoadError, Skeleton } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
 
 type Props = {
@@ -156,22 +156,39 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
   const inHouse = rows.filter((r) => r.kind === "pod").sort((a, b) => podOrder(a.podId) - podOrder(b.podId));
   const agency = rows.find((r) => r.kind === "agency");
   const unassigned = rows.find((r) => r.kind === "unassigned");
-  const topRate = Math.max(...inHouse.map((r) => r.hitRate ?? -1));
-  const columns = [...inHouse, ...(agency && (agency.totals.spendCents > 0 || agency.concepts > 0) ? [agency] : [])];
+  // In-house (default): only Kojeva's own pods, in every section; All adds partners (Trybe) and the agency.
+  const [view, setView] = useState<SpendView>("inhouse");
+  const inhouseIds = meta.pods.filter((p) => p.inhouse).map((p) => p.id);
+  const shown = view === "inhouse" ? inHouse.filter((r) => r.podId != null && inhouseIds.includes(r.podId)) : inHouse;
+  const topRate = Math.max(...shown.map((r) => r.hitRate ?? -1));
+  const columns = [...shown, ...(view === "all" && agency && (agency.totals.spendCents > 0 || agency.concepts > 0) ? [agency] : [])];
   const editorsOf = (podId: string | null) => meta.editors.filter((e) => e.podId === podId).map((e) => e.name);
 
   return (
     <div>
       <PageHeader
         title="Pods"
-        subtitle={`${GROUPS.filter((g) => g.id !== "agency")
+        subtitle={`${meta.pods
+          .filter((p) => p.kind === "pod" && (view === "all" || p.inhouse))
           .map((p) => p.name)
           .join(" vs ")} · hit rate per concept`}
       >
         <HeaderControls meta={meta} range={range} setRange={setRange} />
       </PageHeader>
       <div className="flex flex-col gap-6 px-4 py-6 md:px-8">
-        <PodSpend range={range} latest={meta.latestDate} targets={t} inhouseIds={meta.pods.filter((p) => p.inhouse).map((p) => p.id)} />
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span className="text-ink-2">Show</span>
+          <Segmented
+            label="Pods shown"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "inhouse", label: "In-house pods" },
+              { value: "all", label: "All, with agency & partners" },
+            ]}
+          />
+        </div>
+        <PodSpend range={range} latest={meta.latestDate} targets={t} inhouseIds={inhouseIds} view={view} />
         <SectionTitle title="Hit rate by pod" className="mb-0" />
         <details className="text-sm text-ink-3">
           <summary className="cursor-pointer text-ink-2">How it's measured</summary>

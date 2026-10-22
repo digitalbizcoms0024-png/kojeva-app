@@ -87,7 +87,7 @@ function OutsideLine({ rows, all }: { rows: PodRow[]; all: number }) {
   );
 }
 
-type View = "inhouse" | "all";
+export type SpendView = "inhouse" | "all";
 
 /**
  * Spend per pod for the global date range, with the change against the period before. By default
@@ -101,14 +101,18 @@ export function PodSpend({
   targets,
   inhouseIds,
   compact = false,
+  view: controlled,
 }: {
   range: Range;
   latest: string | null;
   targets: Targets;
   inhouseIds: string[];
   compact?: boolean;
+  /** Set by a page that switches In-house / All for all its sections; the section's own switch then hides. */
+  view?: SpendView;
 }) {
-  const [view, setView] = useState<View>("inhouse");
+  const [own, setView] = useState<SpendView>("inhouse");
+  const view = controlled ?? own;
   const now = useApi<PodsResponse>(`/api/pods?${qs({ range })}`);
   const prev = previousPeriod(range, latest);
   const before = useApi<PodsResponse>(prev ? `/api/pods?${qs({ range: "custom", from: prev.from, to: prev.to })}` : null);
@@ -119,7 +123,7 @@ export function PodSpend({
   // The share bar and "Share" column: in-house pods only, or everyone.
   const rows = view === "inhouse" ? all.filter(isInside) : all;
   const total = rows.reduce((n, r) => n + r.totals.spendCents, 0);
-  const switcher = (
+  const switcher = controlled ? null : (
     <Segmented
       label="Spend by pod view"
       value={view}
