@@ -120,6 +120,22 @@ export function chooseThumbnail(stored: string | null | undefined, candidate: st
 /** Up to this many video covers fetched per sync (5 Graph calls of 50). */
 const MAX_COVERS = 250;
 
+/** The ad account's timezone (times in the app are shown in it); written only when it changes. */
+async function syncAccountTimezone(env: Env, db: D1Database, gc: GraphClient) {
+  try {
+    const acct = await gc.get<{ timezone_name?: string }>(env.META_AD_ACCOUNT_ID, { fields: "timezone_name" });
+    if (!acct.timezone_name) return;
+    const stored = await db.prepare("SELECT value FROM settings WHERE key = 'account_timezone'").first<{ value: string }>();
+    if (stored?.value === acct.timezone_name) return;
+    await db
+      .prepare("INSERT INTO settings (key, value) VALUES ('account_timezone', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .bind(acct.timezone_name)
+      .run();
+  } catch {
+    // Not essential: times fall back to the viewer's own timezone.
+  }
+}
+
 /** Up to this many placement images looked up per sync (adimages takes 50 hashes a call). */
 const MAX_IMAGES = 250;
 
@@ -660,6 +676,7 @@ export async function runSync(
     const gc = clientFor(env, token, fetcher);
     const result: SyncResult = { ok: true, written: 0 };
     if (opts.ads) {
+      await syncAccountTimezone(env, db, gc);
       const a = await syncAds(env, db, gc);
       Object.assign(result, { ads: a.ads, posts: a.posts, written: a.written });
     }

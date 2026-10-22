@@ -4,7 +4,7 @@ import { RANGE_LABELS, SIGNED_OUT_EVENT, useApi } from "./api.ts";
 import { ConceptDrawer } from "./components/ConceptDrawer.tsx";
 import { customRange, type Range } from "./components/HeaderControls.tsx";
 import { Empty, Icon, type IconName } from "./components/ui.tsx";
-import { shortDate } from "./format.ts";
+import { setAccountTimezone, shortDate } from "./format.ts";
 import { DashboardPage } from "./pages/Dashboard.tsx";
 import { applyAddedPods } from "./podColors.ts";
 import { CoveragePage } from "./pages/Coverage.tsx";
@@ -137,6 +137,7 @@ export default function App() {
   if (m) {
     applyAddedPods(m.pods);
     setGlossaryTargets(m.targets);
+    setAccountTimezone(m.accountTimezone);
   }
 
   useEffect(() => {

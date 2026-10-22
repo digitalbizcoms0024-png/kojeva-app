@@ -67,6 +67,8 @@ export interface MetaResponse {
   connectionExpiresInDays: number | null;
   accessProtected: boolean;
   lastSync: { source: string; finishedAt: string | null; status: string; message: string | null } | null;
+  /** The Meta ad account's timezone ("America/Chicago"), from the last sync; times are shown in it. Null before one. */
+  accountTimezone: string | null;
   latestDate: string | null;
   targets: Targets;
   /** Built-in pods, pods added in Settings (with their ad set prefix and color slot), then the agency. */

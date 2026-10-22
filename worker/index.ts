@@ -153,11 +153,13 @@ app.get("/meta", async (c) => {
     loadPersonas(db),
     loadEditAccess(db),
   ]);
+  const tz = await db.prepare("SELECT value FROM settings WHERE key = 'account_timezone'").first<{ value: string }>();
   const attribution = { ...DEFAULT_ATTRIBUTION, ...(attr ? (JSON.parse(attr.value) as Partial<AttributionSettings>) : {}) };
   const body: MetaResponse = {
     dataMode: live ? "live" : "sample",
     connectionExpiresInDays: conn?.expires_at && !c.env.META_SYSTEM_TOKEN ? Math.floor((Date.parse(conn.expires_at) - Date.now()) / 86_400_000) : null,
     accessProtected: accessConfigured(c.env),
+    accountTimezone: tz?.value ?? null,
     lastSync: lastRun ? { source: lastRun.source, finishedAt: lastRun.finished_at, status: lastRun.status, message: lastRun.message } : null,
     latestDate,
     targets,

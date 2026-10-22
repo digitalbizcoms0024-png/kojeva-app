@@ -43,14 +43,24 @@ export function shortDate(iso: string | null | undefined): string {
   });
 }
 
+/** The Meta ad account's timezone, set by the app from /api/meta; times are shown in it. */
+let accountTimezone: string | null = null;
+export function setAccountTimezone(tz: string | null) {
+  accountTimezone = tz;
+}
+
+/** "Oct 21, 9:50 PM CDT": in the ad account's timezone (with its abbreviation), else the viewer's. */
 export function dateTime(iso: string | null | undefined): string {
   if (!iso) return DASH;
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" };
+  if (accountTimezone) {
+    try {
+      return new Date(iso).toLocaleString("en-US", { ...opts, timeZone: accountTimezone, timeZoneName: "short" });
+    } catch {
+      // An unknown zone name: fall through to the viewer's own.
+    }
+  }
+  return new Date(iso).toLocaleString("en-US", opts);
 }
 
 /** Plain dollars for exports: 1234.5 → "1234.50" (no symbol or separators). */
