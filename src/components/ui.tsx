@@ -304,6 +304,18 @@ export function Thumb({ mediaType, label, url, className = "" }: { mediaType: st
   );
 }
 
+/** The list pages' search box: magnifier inside, no label above (the placeholder says what it searches). */
+export function SearchBox({ value, onChange, placeholder, className = "" }: { value: string; onChange: (v: string) => void; placeholder: string; className?: string }) {
+  return (
+    <label className={`relative min-w-48 flex-1 ${className}`}>
+      <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-3">
+        <Icon name="search" size={16} />
+      </span>
+      <input type="search" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} className="field w-full pl-8" />
+    </label>
+  );
+}
+
 /** While a side card is open, the page behind it doesn't scroll (one scrollbar, the card's). */
 export function useLockBodyScroll() {
   useEffect(() => {

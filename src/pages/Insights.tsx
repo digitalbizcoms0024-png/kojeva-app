@@ -5,7 +5,7 @@ import { cpa, hitRateFloor, MIN_DECIDED, type Targets } from "../../shared/metri
 import { ANGLES, AWARENESS, FORMATS, MOTIVATIONS, podById } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { CpaValue, Empty, PageHeader, Pager, PodSwatch, SectionTitle, Segmented, Select, Tabs, LoadError } from "../components/ui.tsx";
+import { CpaValue, Empty, PageHeader, Pager, PodSwatch, SectionTitle, Select, Tabs, LoadError } from "../components/ui.tsx";
 import { money, pct } from "../format.ts";
 import { hitRuleText } from "./PodsView.tsx";
 import { openDrill } from "../drill.ts";
@@ -537,7 +537,7 @@ export function InsightsPage({ meta, range, setRange }: { meta: MetaResponse; ra
           <div className="flex flex-wrap items-end justify-between gap-3">
             <Tabs value={tab} onChange={setTab} options={TABS} />
             <div className="flex flex-wrap items-center gap-3">
-              {tab !== "combos" && <Segmented label="Sort" value={sort} onChange={setSort} options={SORTS} />}
+              {tab !== "combos" && <Select label="Sort" value={sort} onChange={(v) => setSort(v as Sort)} options={SORTS} />}
               <Select
                 label="Pod"
                 value={pod}

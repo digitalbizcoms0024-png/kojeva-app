@@ -7,7 +7,7 @@ import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { PlayableThumb } from "../components/AdPreview.tsx";
 import { DailyCharts } from "../components/DailyCharts.tsx";
-import { CpaValue, Icon, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb, LoadError, Pager, Skeleton, useLockBodyScroll } from "../components/ui.tsx";
+import { CpaValue, Icon, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb, LoadError, Pager, SearchBox, Skeleton, useLockBodyScroll } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, ratio, shortDate } from "../format.ts";
 import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
@@ -129,19 +129,7 @@ export function RankingsPage({
                     { value: "inhouse", label: "In-house pods" },
                   ]}
                 />
-                <label className="relative min-w-48 flex-1">
-                  <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-ink-3">
-                    <Icon name="search" size={16} />
-                  </span>
-                  <input
-                    type="search"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search ads, editors, angles…"
-                    aria-label="Search ads"
-                    className="field w-full pl-8"
-                  />
-                </label>
+                <SearchBox value={search} onChange={setSearch} placeholder="Search ads, editors, angles…" />
                 <Select label="Sort" value={sort} onChange={(v) => setSort(v as SortKey)} options={SORTS} />
                 <FiltersButton
                   count={[pod !== "all" && pod !== "inhouse", status !== "all", format !== "", angle !== ""].filter(Boolean).length}
