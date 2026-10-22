@@ -77,6 +77,16 @@ describe("added pods", () => {
     expect(await inhouseIds()).toEqual(["p1", "p3"]);
   });
 
+  it("stores a pod's strategists for a per-strategist hit rate, and checks them", async () => {
+    const patch = (body: unknown) => call("/api/pods/trybe", { method: "PATCH", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
+    expect((await patch({ members: ["Andrei", " Reika ", "andrei", "Adrian"] })).status).toBe(200);
+    const meta = await json<MetaResponse>(call("/api/meta"));
+    expect(meta.pods.find((p) => p.id === "trybe")?.members).toEqual(["Andrei", "Reika", "Adrian"]);
+    expect((await patch({ members: ["A"] })).status).toBe(400);
+    expect((await patch({ members: [] })).status).toBe(200);
+    expect((await json<MetaResponse>(call("/api/meta"))).pods.find((p) => p.id === "trybe")?.members).toEqual([]);
+  });
+
   it("rejects clashes, agency codes and a full palette", async () => {
     const add = (name: string, prefix: string) => call("/api/pods", { method: "POST", body: JSON.stringify({ name, prefix }) });
     expect((await add("Trybe", "TRY2")).status).toBe(400); // name taken

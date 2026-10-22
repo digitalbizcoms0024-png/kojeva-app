@@ -11,3 +11,13 @@ export async function loadAddedPods(db: D1Database): Promise<Group[]> {
   setAddedPods(list);
   return list;
 }
+
+/** pods.members: a JSON list of names; anything else reads as none. */
+export function parseMembers(v: string | null): string[] {
+  try {
+    const list: unknown = v ? JSON.parse(v) : [];
+    return Array.isArray(list) ? list.filter((m): m is string => typeof m === "string") : [];
+  } catch {
+    return [];
+  }
+}

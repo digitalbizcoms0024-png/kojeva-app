@@ -306,12 +306,26 @@ editing.post("/pods", requireAccess, async (c) => {
   return c.json({ id, code, slot }, 201);
 });
 
-/** Marks a pod in-house (Kojeva's own team) or not (a partner): { inhouse }. */
+/**
+ * Changes a pod: { inhouse } (Kojeva's own team or a partner) and/or { members } (its strategists,
+ * each named in its ad sets, for a per-strategist hit rate; [] for none).
+ */
 editing.patch("/pods/:id", requireAccess, async (c) => {
-  const body = await c.req.json<{ inhouse?: unknown }>().catch(() => null);
-  if (typeof body?.inhouse !== "boolean") return c.json({ error: "Send { inhouse: true | false }." }, 400);
-  const res = await c.env.DB.prepare("UPDATE pods SET inhouse = ?2 WHERE id = ?1 AND kind = 'pod'").bind(c.req.param("id"), body.inhouse ? 1 : 0).run();
-  if (!res.meta.changes) return c.json({ error: "Not found" }, 404);
+  const body = await c.req.json<{ inhouse?: unknown; members?: unknown }>().catch(() => null);
+  const db = c.env.DB;
+  const id = c.req.param("id");
+  if (!(await db.prepare("SELECT 1 AS x FROM pods WHERE id = ?1 AND kind = 'pod'").bind(id).first())) return c.json({ error: "Not found" }, 404);
+  if (body?.inhouse !== undefined) {
+    if (typeof body.inhouse !== "boolean") return c.json({ error: "In-house is true or false." }, 400);
+    await db.prepare("UPDATE pods SET inhouse = ?2 WHERE id = ?1").bind(id, body.inhouse ? 1 : 0).run();
+  }
+  if (body?.members !== undefined) {
+    const list = Array.isArray(body.members) ? body.members.map((m) => (typeof m === "string" ? m.trim() : "")) : null;
+    if (!list || list.length > 12 || list.some((m) => !/^[\p{L}\p{N} .'-]{2,30}$/u.test(m)))
+      return c.json({ error: "Strategists are up to 12 names of 2–30 letters, separated by commas." }, 400);
+    const unique = list.filter((m, i) => list.findIndex((x) => x.toLowerCase() === m.toLowerCase()) === i); // first spelling wins
+    await db.prepare("UPDATE pods SET members = ?2 WHERE id = ?1").bind(id, unique.length ? JSON.stringify(unique) : null).run();
+  }
   return c.json({ ok: true });
 });
 

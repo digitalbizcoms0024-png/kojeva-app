@@ -1,6 +1,7 @@
 // The CS report as blocks of text, built from the report data: rendered on the Reports page and
 // copied for Slack (rich text, plus mrkdwn as plain text) from the same blocks, so both match.
 import type { HitStatus } from "../shared/metrics.ts";
+import { byStrategist } from "../shared/strategists.ts";
 import { cpaBand, isHit } from "../shared/metrics.ts";
 import type { ReportConcept, ReportData, ReportFigures, ReportText } from "../shared/api.ts";
 import { FORMATS } from "../shared/taxonomy.ts";
@@ -135,6 +136,17 @@ export function reportBlocks(d: ReportData, text: ReportText | null, podNames: M
     if (el.length > 0 && el.length < 3) head.push(" (too few eligible to read much into)");
     blocks.push({ kind: "p", parts: ["• ", ...head] });
     items.push([line(sum(mine.map((k) => k.period)), t.targetCpa, t.cpaWarnMax)]);
+    // Pods run by several strategists: each one's hit rate (the strategist is named in the ad set).
+    if (p.members?.length)
+      items.push([
+        "By strategist: ",
+        byStrategist(mine, p.members)
+          .map(({ name: who, concepts: list }) => {
+            const e = list.filter((k) => isEligible(k.status)).length;
+            return `${who} ${list.filter((k) => isHit(k.status)).length} / ${e}${e ? ` (${rate(list.filter((k) => isHit(k.status)).length, e)})` : ""}`;
+          })
+          .join(" · "),
+      ]);
     for (const k of h.sort((a, b) => b.allTime.spendCents - a.allTime.spendCents)) items.push(hitLine(k));
     // The best miss: a signal to build on, or the closest when nothing hit.
     const best = mine

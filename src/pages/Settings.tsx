@@ -516,6 +516,7 @@ function AddedPods({ meta, onSaved }: { meta: MetaResponse; onSaved: () => void 
             <li key={p.id} className="flex flex-wrap items-center gap-3 text-sm">
               <PodChip podId={p.id} />
               <span className="text-ink-3">ad sets with "{p.prefix}" · code {p.code}</span>
+              <MembersField pod={p} disabled={busy || !meta.canEdit} onSave={(members) => run(`/api/pods/${p.id}`, "PATCH", { members }, `Saved ${p.name}'s strategists.`)} />
               <label className="inline-flex items-center gap-1.5 text-ink-2">
                 <input
                   type="checkbox"
@@ -1036,5 +1037,33 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
         )}
       </div>
     </div>
+  );
+}
+
+/** A pod's strategists, comma-separated: each named in their ad sets gets their own hit rate. */
+function MembersField({ pod, disabled, onSave }: { pod: MetaResponse["pods"][number]; disabled: boolean; onSave: (members: string[]) => unknown }) {
+  const [value, setValue] = useState(pod.members.join(", "));
+  const list = value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const changed = list.join("|") !== pod.members.join("|");
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <input
+        aria-label={`${pod.name}'s strategists`}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Strategists, e.g. Andrei, Reika"
+        className="field min-w-56 py-1 text-sm"
+        disabled={disabled}
+        title="Each strategist named in this pod's ad sets gets their own hit rate"
+      />
+      {changed && (
+        <button type="button" className="btn btn-secondary py-1 text-sm" disabled={disabled} onClick={() => void onSave(list)}>
+          Save
+        </button>
+      )}
+    </span>
   );
 }

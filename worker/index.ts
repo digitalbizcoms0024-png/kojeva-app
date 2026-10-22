@@ -38,7 +38,7 @@ import { loadHitCreatives } from "./hitsoff.ts";
 import { baseline, INSIGHT_DIMENSIONS, insightRows, MATRIX_DIMENSIONS, matrix, overview, valuesOf } from "./insights.ts";
 import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
-import { loadAddedPods } from "./pods.ts";
+import { loadAddedPods, parseMembers } from "./pods.ts";
 import { ensureAttributed } from "./rules.ts";
 import { loadPersonas } from "./personas.ts";
 import { canEditWith, loadEditAccess } from "./roles.ts";
@@ -144,9 +144,9 @@ app.get("/meta", async (c) => {
       .prepare("SELECT source, finished_at, status, message FROM sync_runs ORDER BY id DESC LIMIT 1")
       .first<{ source: string; finished_at: string | null; status: string; message: string | null }>(),
     db
-      .prepare("SELECT id, code, name, color, kind, prefix, slot, inhouse FROM pods ORDER BY kind DESC, name")
-      .all<Omit<MetaResponse["pods"][number], "inhouse"> & { inhouse: number }>()
-      .then((r) => ({ results: r.results.map((p) => ({ ...p, inhouse: Number(p.inhouse) === 1 })) })),
+      .prepare("SELECT id, code, name, color, kind, prefix, slot, inhouse, members FROM pods ORDER BY kind DESC, name")
+      .all<Omit<MetaResponse["pods"][number], "inhouse" | "members"> & { inhouse: number; members: string | null }>()
+      .then((r) => ({ results: r.results.map((p) => ({ ...p, inhouse: Number(p.inhouse) === 1, members: parseMembers(p.members) })) })),
     db.prepare("SELECT 1 AS x FROM sync_runs WHERE source = 'meta' AND status = 'ok' LIMIT 1").first(),
     db.prepare("SELECT expires_at FROM meta_connections WHERE id = 1").first<{ expires_at: string | null }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),
@@ -719,3 +719,4 @@ export default {
     ctx.waitUntil(runSync(env, { since: utcDay(-6), until: utcDay(0), ads: true }));
   },
 } satisfies ExportedHandler<Env>;
+
