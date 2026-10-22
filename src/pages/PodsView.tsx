@@ -188,7 +188,15 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
           />
         </div>
         <PodSpend range={range} latest={meta.latestDate} targets={t} inhouseIds={inhouseIds} view={view} />
-        <SectionTitle title="Hit rate by pod" className="mb-0" />
+        <SectionTitle
+          title="Hit rate by pod"
+          className="mb-0"
+          right={
+            <button type="button" className="link inline-flex items-center gap-1 text-sm" onClick={() => openDrill({ title: "All concepts tested", range, filter: {} })}>
+              All concepts tested{concepts.data ? ` · ${concepts.data.rows.length}` : ""} <Icon name="arrow" size={14} />
+            </button>
+          }
+        />
         <details className="text-sm text-ink-3">
           <summary className="cursor-pointer text-ink-2">How it's measured</summary>
           <p className="mt-2 max-w-[110ch]">{hitRuleText(t)} Concepts count toward the period in which they first spent.</p>
@@ -231,9 +239,6 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
             })
           }
         />
-        <div id="concepts" className="scroll-mt-4">
-          <ConceptsTable range={range} targets={t} pods={rows} filter={{ pod: "" }} />
-        </div>
       </div>
     </div>
   );
