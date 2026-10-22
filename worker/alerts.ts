@@ -104,7 +104,7 @@ export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null;
       id: `incomplete:${latest}:${gaps.days}`,
       tone: "bad",
       title: `${gaps.days} ad-${gaps.days === 1 ? "day has" : "days have"} purchases but no spend`,
-      detail: `${gaps.ads} ${gaps.ads === 1 ? "ad" : "ads"} in the last 30 days, so their CPA and ROAS look better than they are. A 30-day backfill re-pulls them from Meta`,
+      detail: `${gaps.ads} ${gaps.ads === 1 ? "ad" : "ads"} in the last 30 days, so their CPA and ROAS look better than they are. Settings → Data sources → Backfill (90 days) re-pulls them from Meta`,
       href: "#/settings?tab=data",
       action: "Open data sources",
     });

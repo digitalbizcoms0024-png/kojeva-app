@@ -55,7 +55,7 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   but comparable between the two windows; without reach for a window, the frequency signal is skipped, not zero.
 
 ## Dashboard alerts (`worker/alerts.ts`)
-- **Purchases but no spend** (✕): ad-days in the last 30 with purchases and no spend or impressions, an incomplete report from Meta (seen Oct 2026, which made CPA/ROAS look ~3× better). A 30-day backfill re-pulls them. The sync itself keeps one row per ad and day (the one with delivery) and never lets such a day replace stored spend; it counts them in its message.
+- **Purchases but no spend** (✕): ad-days in the last 30 with purchases and no spend or impressions, an incomplete report from Meta (seen Oct 2026, which made CPA/ROAS look ~3× better). A backfill (Settings → Data sources, 90 days) re-pulls them. The sync itself keeps one row per ad and day (the one with delivery) and never lets such a day replace stored spend; it counts them in its message.
 - **Fatigue** (✕): Fatigued posts, and posts whose only signal is CPA (a CPA jump is worth a look on its own); biggest recent
   spend first, at most 3.
 - **Hit** (✓): a concept whose judging window closed in the last 7 days as a hit. "View concept" opens its card (`?concept=<id>` on any page,
