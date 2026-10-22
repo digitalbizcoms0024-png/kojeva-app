@@ -91,8 +91,8 @@ export type SpendView = "inhouse" | "all";
 
 /**
  * Spend per pod for the global date range, with the change against the period before. By default
- * only the in-house pods share the bar (the agency, partners like Trybe and uncredited spend would
- * dwarf them) and are listed under "Outside the pods"; "All spend" shows everyone in one bar.
+ * only the in-house pods are in the bar and the table (the agency, partners like Trybe and uncredited
+ * spend would dwarf them; one line under the bar keeps them in view); "All spend" shows everyone.
  * `compact` shows only the share bar (Dashboard).
  */
 export function PodSpend({
@@ -209,19 +209,6 @@ export function PodSpend({
               <SpendRow key={r.podId ?? "none"} r={r} share={total > 0 ? r.totals.spendCents / total : null} before={prevBy.get(r.podId ?? "none")} prev={!!prev} targets={targets} />
             ))}
             <TotalRow label={view === "inhouse" ? "In-house total" : "Total"} rows={rows} prevBy={prevBy} prev={!!prev} />
-            {view === "inhouse" && outside.some((r) => r.totals.spendCents > 0) && (
-              <>
-                <tr>
-                  <td colSpan={7} className="kicker pt-5 pb-1">
-                    Outside the pods · not in the share
-                  </td>
-                </tr>
-                {outside.map((r) => (
-                  <SpendRow key={r.podId ?? "none"} r={r} share={null} before={prevBy.get(r.podId ?? "none")} prev={!!prev} targets={targets} />
-                ))}
-                <TotalRow label="All spend" rows={all} prevBy={prevBy} prev={!!prev} />
-              </>
-            )}
           </tbody>
         </table>
       </div>
