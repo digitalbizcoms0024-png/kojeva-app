@@ -143,7 +143,10 @@ app.get("/meta", async (c) => {
     db
       .prepare("SELECT source, finished_at, status, message FROM sync_runs ORDER BY id DESC LIMIT 1")
       .first<{ source: string; finished_at: string | null; status: string; message: string | null }>(),
-    db.prepare("SELECT id, code, name, color, kind, prefix, slot FROM pods ORDER BY kind DESC, name").all<MetaResponse["pods"][number]>(),
+    db
+      .prepare("SELECT id, code, name, color, kind, prefix, slot, inhouse FROM pods ORDER BY kind DESC, name")
+      .all<Omit<MetaResponse["pods"][number], "inhouse"> & { inhouse: number }>()
+      .then((r) => ({ results: r.results.map((p) => ({ ...p, inhouse: Number(p.inhouse) === 1 })) })),
     db.prepare("SELECT 1 AS x FROM sync_runs WHERE source = 'meta' AND status = 'ok' LIMIT 1").first(),
     db.prepare("SELECT expires_at FROM meta_connections WHERE id = 1").first<{ expires_at: string | null }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),
@@ -224,8 +227,8 @@ app.get("/rankings", async (c) => {
   } else items = items.filter((p) => p.totals.spendCents > 0);
   if (pod === "unassigned") items = items.filter((p) => !p.assignment.podId);
   else if (pod === "inhouse") {
-    // The in-house pods: the built-in ones, not the agency or pods added in Settings (they have an ad set prefix, e.g. Trybe).
-    const { results } = await c.env.DB.prepare("SELECT id FROM pods WHERE kind = 'pod' AND prefix IS NULL").all<{ id: string }>();
+    // The in-house pods: those ticked "In-house" in Settings (not the agency or partners like Trybe).
+    const { results } = await c.env.DB.prepare("SELECT id FROM pods WHERE kind = 'pod' AND inhouse = 1").all<{ id: string }>();
     const inhouse = new Set(results.map((r) => r.id));
     items = items.filter((p) => p.assignment.podId != null && inhouse.has(p.assignment.podId));
   }

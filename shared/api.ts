@@ -72,7 +72,7 @@ export interface MetaResponse {
   latestDate: string | null;
   targets: Targets;
   /** Built-in pods, pods added in Settings (with their ad set prefix and color slot), then the agency. */
-  pods: { id: string; code: string; name: string; color: string; kind: "pod" | "agency"; prefix: string | null; slot: number | null }[];
+  pods: { id: string; code: string; name: string; color: string; kind: "pod" | "agency"; prefix: string | null; slot: number | null; inhouse: boolean }[];
   attribution: { agencyPrefixes: string[]; podsStartDate: string | null; detected: boolean };
   editors: Editor[];
   /** Whether the signed-in viewer can make changes: Access is on and they're on the edit list (or it's empty). */

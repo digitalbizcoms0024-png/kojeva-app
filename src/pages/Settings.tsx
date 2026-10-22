@@ -492,11 +492,12 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
 function AddedPods({ meta, onSaved }: { meta: MetaResponse; onSaved: () => void }) {
   const [name, setName] = useState("");
   const [prefix, setPrefix] = useState("");
+  const [inhouse, setInhouse] = useState(true);
   const { busy, run, note } = useSave(onSaved);
   const added = meta.pods.filter((p) => p.prefix);
   const full = added.length >= POD_SLOTS.length;
   const add = async () => {
-    if (await run("/api/pods", "POST", { name: name.trim(), prefix: prefix.trim() }, `Added ${name.trim()}; its ads have been credited.`)) {
+    if (await run("/api/pods", "POST", { name: name.trim(), prefix: prefix.trim(), inhouse }, `Added ${name.trim()}; its ads have been credited.`)) {
       setName("");
       setPrefix("");
     }
@@ -505,8 +506,9 @@ function AddedPods({ meta, onSaved }: { meta: MetaResponse; onSaved: () => void 
     <div className="mt-5 border-t border-divider pt-4">
       <h3 className="font-extrabold text-ink">Added pods</h3>
       <p className="mb-2 max-w-[70ch] text-xs text-ink-3">
-        For teams or partners beyond the four strategists. Ad sets with the prefix as one of their parts ("TRYBE | Larissa V | …") are credited to the pod
-        and counted like any pod. Up to {POD_SLOTS.length}, each with its own tested color.
+        For teams or partners beyond the four strategists. Ad sets with the prefix as one of their parts are credited to the pod and counted like any pod;
+        case, spaces and dashes don't matter, so POD0 also matches "Pod 0 | Andrei | …" and CAICOS matches "Caicos Pod | …". Tick In-house for Kojeva's own
+        teams (the In-house pods view); leave it off for partners. Up to {POD_SLOTS.length}, each with its own tested color.
       </p>
       {added.length > 0 && (
         <ul className="mb-3 flex flex-col gap-1.5">
@@ -514,6 +516,15 @@ function AddedPods({ meta, onSaved }: { meta: MetaResponse; onSaved: () => void 
             <li key={p.id} className="flex flex-wrap items-center gap-3 text-sm">
               <PodChip podId={p.id} />
               <span className="text-ink-3">ad sets with "{p.prefix}" · code {p.code}</span>
+              <label className="inline-flex items-center gap-1.5 text-ink-2">
+                <input
+                  type="checkbox"
+                  checked={p.inhouse}
+                  disabled={busy || !meta.canEdit}
+                  onChange={(e) => void run(`/api/pods/${p.id}`, "PATCH", { inhouse: e.target.checked }, e.target.checked ? `${p.name} is in-house.` : `${p.name} is a partner.`)}
+                />
+                In-house
+              </label>
               <button
                 className="btn btn-ghost py-0 text-sm text-bad"
                 disabled={busy || !meta.canEdit}
@@ -545,6 +556,10 @@ function AddedPods({ meta, onSaved }: { meta: MetaResponse; onSaved: () => void 
           className={`${field} min-w-52`}
           disabled={!meta.canEdit || full}
         />
+        <label className="inline-flex items-center gap-1.5 self-center text-sm text-ink-2">
+          <input type="checkbox" checked={inhouse} onChange={(e) => setInhouse(e.target.checked)} disabled={!meta.canEdit || full} />
+          In-house
+        </label>
         <button className={secondary} disabled={!name.trim() || !prefix.trim() || busy || !meta.canEdit || full}>
           Add pod
         </button>

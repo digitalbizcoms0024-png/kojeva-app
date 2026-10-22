@@ -174,7 +174,7 @@ export function RankingsPage({
                 {pod === "inhouse" && (
                   <span className="text-ink-2">
                     {meta.pods
-                      .filter((p) => p.kind === "pod" && !p.prefix)
+                      .filter((p) => p.kind === "pod" && p.inhouse)
                       .map((p) => p.name)
                       .join(", ")}{" "}
                     only ·

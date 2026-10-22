@@ -26,11 +26,21 @@ export const DEFAULT_ATTRIBUTION: AttributionSettings = {
 /**
  * Pod named in an ad set: a built-in strategist as a separate word ("IH | Harris | KOJEVA 3" → HAR),
  * or an added pod's prefix as one of the "|" parts ("TRYBE | Larissa V | Jawline Angle" → Trybe).
+ * A part matches its prefix ignoring case, spaces and punctuation ("Pod 0" → POD0), or by its first
+ * word ("Caicos Pod" → CAICOS).
  */
 export function podFromAdSetName(adsetName: string | null): PodCode | null {
   if (!adsetName) return null;
   const words = new Set(adsetName.toUpperCase().split(/[^A-Z]+/).filter(Boolean));
-  const parts = new Set(adsetName.split("|").map((s) => s.trim().toUpperCase()).filter(Boolean));
+  const parts = new Set(
+    adsetName
+      .split("|")
+      .flatMap((s) => {
+        const up = s.trim().toUpperCase();
+        return [up.replace(/[^A-Z0-9]/g, ""), up.split(/[^A-Z0-9]+/).filter(Boolean)[0] ?? ""];
+      })
+      .filter(Boolean),
+  );
   const found = allPods().filter((p) => (p.prefix ? parts.has(p.prefix.toUpperCase()) : words.has(p.name.toUpperCase())));
   // Two strategists in one ad set name is ambiguous; leave it for a human.
   return found.length === 1 ? found[0]!.code : null;
