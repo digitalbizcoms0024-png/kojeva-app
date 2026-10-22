@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { AssignmentPatch, CoverageResponse, MetaResponse, PodsResponse, PostSummary, RankingsResponse, SuggestionsResponse } from "../../shared/api.ts";
 import { podById, ANGLES, AWARENESS, FORMAT_DEFINITIONS, FORMATS, HOOKS, LANDING_PAGES, MOTIVATIONS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
-import { HeaderControls } from "../components/HeaderControls.tsx";
+import { HeaderControls, rangeLabel, type Range } from "../components/HeaderControls.tsx";
 import { Empty, PageHeader, PodChip, SearchBox, Segmented, LoadError, ViewOnlyNote, Tabs } from "../components/ui.tsx";
 import { money, pct, shortDate } from "../format.ts";
 import { conceptHref } from "../drill.ts";
@@ -59,7 +59,7 @@ type Period = "month" | "all";
 
 const activePersonasCount = (meta: MetaResponse) => meta.personas.filter((p) => p.status === "active").length;
 
-export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged: () => void }) {
+export function TaggingPage({ meta, onChanged, range }: { meta: MetaResponse; onChanged: () => void; range: Range }) {
   // "#/tagging?view=unplaced" (the Coverage map's "place them") opens on that list.
   const [view, setView] = useState<View>(() => {
     const v = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("view");
@@ -80,13 +80,13 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
     return () => clearTimeout(t);
   }, [search]);
 
-  // "Not placed": running in the last 7 days (the coverage map's default) without a persona or awareness level.
+  // "Not placed": running in the shared date range (the same as the Coverage map's) without a persona or awareness level.
   const { data, error, retry } = useApi<RankingsResponse>(
-    `/api/rankings?${qs({ range: view === "unplaced" ? "week" : period, pod: view === "unassigned" ? "unassigned" : "all", q, limit: view === "unplaced" ? 2000 : 300, r: reload })}`,
+    `/api/rankings?${qs({ range: view === "unplaced" ? range : period, pod: view === "unassigned" ? "unassigned" : "all", q, limit: view === "unplaced" ? 2000 : 300, r: reload })}`,
   );
   const coverage = useApi<PodsResponse>(`/api/pods?${qs({ range: "month", r: reload })}`);
-  // The coverage map's own numbers (last 7 days, $50+): the "Not on the coverage map" tab's summary.
-  const map = useApi<CoverageResponse>(activePersonasCount(meta) ? `/api/coverage?${qs({ range: "week", r: reload })}` : null);
+  // The coverage map's own numbers (same range, $50+): the "Not on the coverage map" tab's summary.
+  const map = useApi<CoverageResponse>(activePersonasCount(meta) ? `/api/coverage?${qs({ range, r: reload })}` : null);
   const sugg = useApi<SuggestionsResponse>(`/api/suggestions?r=${reload}`);
   const suggestions = sugg.data?.suggestions ?? {};
   const activePersonas = meta.personas.filter((p) => p.status === "active");
@@ -249,7 +249,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
                 <a href="#/coverage" className="link">
                   coverage map
                 </a>
-                {map.data && map.data.totals.spendCents > 0 ? ` (${pct(map.data.unplacedSpendCents / map.data.totals.spendCents, 0)})` : ""} · last 7 days, ads with $50+
+                {map.data && map.data.totals.spendCents > 0 ? ` (${pct(map.data.unplacedSpendCents / map.data.totals.spendCents, 0)})` : ""} · {rangeLabel(range).replace(/^(in the|of) /, "")} (the Coverage map's dates), ads with $50+
               </div>
             </div>
             <p className="min-w-64 flex-1 text-sm text-ink-3">
@@ -387,7 +387,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
             {view === "unassigned"
               ? "Every ad with spend in this period has a pod."
               : view === "unplaced"
-                ? "Every ad running this week is on the coverage map."
+                ? `Every ad running ${rangeLabel(range).replace(/^of /, "over ")} is on the coverage map.`
                 : "No ads match."}
           </Empty>
         )}
