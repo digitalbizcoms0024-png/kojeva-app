@@ -3,6 +3,7 @@ import type { ConceptDetail, RankingsResponse } from "../shared/api.ts";
 import { loadAlerts } from "./alerts.ts";
 import type { Env } from "./env.ts";
 import app from "./index.ts";
+import { bumpStats } from "./cache.ts";
 import { attribute } from "./meta/sync.ts";
 import { testDb } from "./testing/db.ts";
 
@@ -73,6 +74,24 @@ describe("hits turned off", () => {
     expect((await rankings("range=week")).items.map((p) => p.postId).sort()).toEqual(["p2", "p4"]);
   });
 
+  it("ignores pausing a winning ad set's weak variations while its winner still runs", async () => {
+    // A hit ad set with two statics: the winner keeps running, a weak variation was paused on Oct 10.
+    await ad("p6", "win", { asset: "i:win", test: ["s4", "IH | Harris | Two Variations"] });
+    await ad("p7", "weak", { asset: "i:weak", test: ["s4", "IH | Harris | Two Variations"], status: "PAUSED" });
+    await spend("win", 1, 15);
+    await spend("weak", 1, 10);
+    await attribute(env.DB);
+    const { alerts } = await loadAlerts(env.DB);
+    expect(alerts.some((a) => a.id === "hit-off:s4")).toBe(false);
+    expect((await rankings("range=week&status=hits_off")).items.map((p) => p.postId)).not.toContain("p7");
+
+    // Once the winner stops too, the ad set's hit is off everywhere: one alert for the concept.
+    await env.DB.prepare("UPDATE ads SET status = 'PAUSED' WHERE id = 'win'").run();
+    await bumpStats(env.DB); // as the sync that saw the pause would
+    const after = await loadAlerts(env.DB);
+    expect(after.alerts.filter((a) => a.id === "hit-off:s4")).toHaveLength(1);
+  });
+
   it("serves a concept's card: result, its ads and its days", async () => {
     const res = await app.fetch(new Request("https://hub.test/api/concepts/s1"), env, {} as ExecutionContext);
     expect(res.status).toBe(200);
@@ -96,5 +115,22 @@ describe("ranking minimum", () => {
     expect((await rankings("range=week&sort=spend")).minSpendCents).toBeNull();
     // All time counts from the first day anything spent (Sep 10), not from 2000.
     expect((await rankings("range=all&sort=cpa")).minDays).toBe(36);
+  });
+});
+
+describe("ranking presets", () => {
+  it("New in the last 2 weeks: launched since Monday of last week, numbers from then; In-house: built-in pods only", async () => {
+    // Data runs to Thu Oct 15, so the 2 weeks start Mon Oct 5. A new Harris ad from Oct 8, and an agency one from Oct 9.
+    await ad("p8", "new-test", { asset: "i:new", test: ["s5", "IH | Harris | New One"] });
+    await spend("new-test", 8, 15);
+    await ad("p9", "agency-new", { asset: "i:agency" });
+    await env.DB.prepare("UPDATE assignments SET pod_id = 'agency' WHERE post_id = 'p9'").run();
+    await spend("agency-new", 9, 15);
+    const fresh = await rankings("range=month&launched=2w");
+    expect(fresh.from).toBe("2026-10-05");
+    expect(fresh.items.map((p) => p.postId).sort()).toEqual(["p8", "p9"]);
+    expect(fresh.items.find((p) => p.postId === "p8")!.totals.spendCents).toBe(80000);
+    expect((await rankings("range=month&launched=2w&pod=inhouse")).items.map((p) => p.postId)).toEqual(["p8"]);
+    expect((await rankings("range=month&pod=inhouse")).items.every((p) => p.assignment.podId === "harris")).toBe(true);
   });
 });

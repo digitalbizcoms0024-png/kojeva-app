@@ -242,6 +242,16 @@ describe("runSync", () => {
     expect(await spend()).toEqual({ spend_cents: 10050, purchases: 9 });
   });
 
+  it("stores the ad account's timezone, and only when it changes", async () => {
+    const withTz = () => fakeMeta((url) => (url.pathname.endsWith(ACT) ? { timezone_name: "America/Chicago" } : metaHandler()(url)));
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, withTz());
+    const tz = await env.DB.prepare("SELECT value FROM settings WHERE key = 'account_timezone'").first<{ value: string }>();
+    expect(tz?.value).toBe("America/Chicago");
+    expect((await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, withTz())).written).toBe(0);
+    const metaRes = await app.fetch(new Request("https://hub.test/api/meta"), env, {} as ExecutionContext);
+    expect(await metaRes.json()).toMatchObject({ accountTimezone: "America/Chicago" });
+  });
+
   it("judges a slow concept up to the day one ad crossed $100", async () => {
     await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, metaApi());
     // Dhia's concept (one ad): $50 on Oct 9, then $20/day, crossing $100 on Oct 12 (day 4).

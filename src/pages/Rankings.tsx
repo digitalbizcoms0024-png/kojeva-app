@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Info } from "../glossary.tsx";
 import type { AttributionResponse, MetaResponse, PodsResponse, PostDetail, PostSummary, RankingsResponse, SortKey } from "../../shared/api.ts";
 import { attributedCpa, attributedRoas, cpa, ctr, roas, type Targets, type Totals } from "../../shared/metrics.ts";
@@ -7,12 +7,21 @@ import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { PlayableThumb } from "../components/AdPreview.tsx";
 import { DailyCharts } from "../components/DailyCharts.tsx";
-import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb, LoadError, Pager, Skeleton } from "../components/ui.tsx";
+import { CpaValue, Icon, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb, LoadError, Pager, SearchBox, Skeleton, useLockBodyScroll } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, ratio, shortDate } from "../format.ts";
 import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
 
 type Tab = "ads" | "pods" | "editors";
+type Preset = "all" | "new" | "inhouse";
+
+const STATUSES = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "paused", label: "Paused" },
+  { value: "fatigued", label: "Fatigued or watch" },
+  { value: "hits_off", label: "Hits turned off" },
+];
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: "spend", label: "Spend" },
@@ -49,6 +58,8 @@ export function RankingsPage({
   const [sort, setSort] = useState<SortKey>("spend");
   const [pod, setPod] = useState("all");
   const [status, setStatus] = useState(initialStatus ?? "all");
+  // Preset: only ads launched in the last 2 weeks (their numbers from Monday of last week on).
+  const [launched, setLaunched] = useState(false);
   const [format, setFormat] = useState("");
   const [angle, setAngle] = useState("");
   const [search, setSearch] = useState("");
@@ -68,7 +79,7 @@ export function RankingsPage({
 
   const [showAll, setShowAll] = useState(false);
   const rankings = useApi<RankingsResponse>(
-    tab === "ads" ? `/api/rankings?${qs({ range, sort, pod, status, q, format, angle, all: showAll && sort !== "spend" ? "1" : undefined })}` : null,
+    tab === "ads" ? `/api/rankings?${qs({ range, sort, pod, status, q, format, angle, launched: launched ? "2w" : undefined, all: showAll && sort !== "spend" ? "1" : undefined })}` : null,
   );
   const pods = useApi<PodsResponse>(tab !== "ads" ? `/api/pods?${qs({ range })}` : null);
 
@@ -76,7 +87,7 @@ export function RankingsPage({
   // The ad whose details slide in from the right; none until one is clicked (or linked with ?post=).
   const activeId = selected;
   // 10 a page (the full list ran to hundreds of cards); a new filter goes back to page 1.
-  const query = `${range}|${sort}|${pod}|${status}|${q}|${format}|${angle}`;
+  const query = `${range}|${sort}|${pod}|${status}|${q}|${format}|${angle}|${launched}`;
   const [page, setPage] = useState({ query, n: 0 });
   const pageNo = page.query === query ? Math.min(page.n, Math.max(0, Math.ceil(items.length / PAGE) - 1)) : 0;
   const start = pageNo * PAGE;
@@ -103,43 +114,107 @@ export function RankingsPage({
         {tab === "ads" && (
           <>
             <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-end gap-3">
-                <label className="flex min-w-56 flex-1 flex-col gap-1 text-sm text-ink-2">
-                  Search
-                  <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ad name, editor, angle…" className="field" />
-                </label>
-                <div className="flex flex-col gap-1 text-sm text-ink-2">
-                  Rank by
-                  <Segmented label="Rank by" value={sort} onChange={setSort} options={SORTS} />
-                </div>
+              {/* Row 1: preset · search · sort · filters · CSV. */}
+              <div className="flex flex-wrap items-center gap-3">
+                <Segmented
+                  label="Preset"
+                  value={launched ? "new" : pod === "inhouse" ? "inhouse" : pod === "all" ? "all" : ("" as Preset)}
+                  onChange={(v: Preset) => {
+                    setLaunched(v === "new");
+                    setPod(v === "inhouse" ? "inhouse" : "all");
+                  }}
+                  options={[
+                    { value: "all", label: "All ads" },
+                    { value: "new", label: "New (2 weeks)" },
+                    { value: "inhouse", label: "In-house pods" },
+                  ]}
+                />
+                <SearchBox value={search} onChange={setSearch} placeholder="Search ads, editors, angles…" />
+                <Select label="Sort" value={sort} onChange={(v) => setSort(v as SortKey)} options={SORTS} />
+                <FiltersButton
+                  count={[pod !== "all" && pod !== "inhouse", status !== "all", format !== "", angle !== ""].filter(Boolean).length}
+                >
+                  <Select
+                    stacked
+                    label="Pod"
+                    value={pod}
+                    onChange={setPod}
+                    options={[
+                      { value: "all", label: "All pods" },
+                      { value: "inhouse", label: "In-house pods" },
+                      ...meta.pods.map((p) => ({ value: p.id, label: p.name })),
+                      { value: "unassigned", label: "Unassigned" },
+                    ]}
+                  />
+                  <Select
+                    stacked
+                    label="Status"
+                    value={status}
+                    onChange={setStatus}
+                    options={STATUSES}
+                  />
+                  <Select stacked label="Format" value={format} onChange={setFormat} options={vocab(FORMATS, "All formats")} />
+                  <Select stacked label="Angle" value={angle} onChange={setAngle} options={vocab(ANGLES, "All angles")} />
+                </FiltersButton>
+                <button
+                  type="button"
+                  className="btn btn-secondary px-2.5"
+                  disabled={items.length === 0}
+                  onClick={() => exportRankings(items, rankings.data!.from, rankings.data!.to)}
+                  title="Download these ads as CSV"
+                  aria-label="Download CSV"
+                >
+                  <Icon name="download" size={16} />
+                </button>
               </div>
-              <div className="flex flex-wrap items-end gap-3">
-                <Select
-                  stacked
-                  label="Pod"
-                  value={pod}
-                  onChange={setPod}
-                  options={[
-                    { value: "all", label: "All pods" },
-                    ...meta.pods.map((p) => ({ value: p.id, label: p.name })),
-                    { value: "unassigned", label: "Unassigned" },
-                  ]}
-                />
-                <Select
-                  stacked
-                  label="Status"
-                  value={status}
-                  onChange={setStatus}
-                  options={[
-                    { value: "all", label: "All" },
-                    { value: "active", label: "Active" },
-                    { value: "paused", label: "Paused" },
-                    { value: "fatigued", label: "Fatigued or watch" },
-                    { value: "hits_off", label: "Hits turned off" },
-                  ]}
-                />
-                <Select stacked label="Format" value={format} onChange={setFormat} options={vocab(FORMATS, "All formats")} />
-                <Select stacked label="Angle" value={angle} onChange={setAngle} options={vocab(ANGLES, "All angles")} />
+
+              {/* Row 2: what's applied (removable) and the totals. */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs">
+                {launched && <span className="text-ink-2">Launched since Monday of last week ·</span>}
+                {pod === "inhouse" && (
+                  <span className="text-ink-2">
+                    {meta.pods
+                      .filter((p) => p.kind === "pod" && !p.prefix)
+                      .map((p) => p.name)
+                      .join(", ")}{" "}
+                    only ·
+                  </span>
+                )}
+                {[
+                  pod !== "all" && pod !== "inhouse" && { key: "pod", text: `Pod: ${pod === "unassigned" ? "Unassigned" : (meta.pods.find((x) => x.id === pod)?.name ?? pod)}`, clear: () => setPod("all") },
+                  status !== "all" && { key: "status", text: `Status: ${STATUSES.find((x) => x.value === status)?.label ?? status}`, clear: () => setStatus("all") },
+                  format !== "" && { key: "format", text: `Format: ${FORMATS[format] ?? format}`, clear: () => setFormat("") },
+                  angle !== "" && { key: "angle", text: `Angle: ${ANGLES[angle] ?? angle}`, clear: () => setAngle("") },
+                ]
+                  .filter((c): c is { key: string; text: string; clear: () => void } => Boolean(c))
+                  .map((c, _, all) => (
+                    <span key={c.key} className="contents">
+                      <button type="button" onClick={c.clear} className="inline-flex items-center gap-1 border border-divider bg-surface px-2 py-1 text-ink hover:border-ink-3" title="Remove this filter">
+                        {c.text} <span aria-hidden>✕</span>
+                      </button>
+                      {c === all[all.length - 1] && all.length > 1 && (
+                        <button
+                          type="button"
+                          className="link"
+                          onClick={() => {
+                            setPod(pod === "inhouse" ? "inhouse" : "all");
+                            setStatus("all");
+                            setFormat("");
+                            setAngle("");
+                          }}
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                {rankings.data && (
+                  <span className="num ml-auto text-ink-3">
+                    {int(rankings.data.count)} ads · {shortDate(rankings.data.from === "2000-01-01" ? null : rankings.data.from)} – {shortDate(rankings.data.to)} · spend{" "}
+                    <b className="text-ink">{money(rankings.data.totals.spendCents, { compact: true })}</b> · CPA{" "}
+                    <b className="text-ink">{dollars(cpa(rankings.data.totals))}</b> · ROAS <b className="text-ink">{roas(rankings.data.totals)?.toFixed(2) ?? "—"}</b>
+                  </span>
+                )}
               </div>
               {status === "hits_off" && (
                 <p className="bg-warn-soft px-3 py-2 text-sm text-ink">
@@ -147,22 +222,6 @@ export function RankingsPage({
                   last 3 synced days. Listed whatever the date range spent; results are for the range shown, so pick All time to see their full
                   results.
                 </p>
-              )}
-              {rankings.data && (
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="num text-xs text-ink-3">
-                    {int(rankings.data.count)} posts · {shortDate(rankings.data.from === "2000-01-01" ? null : rankings.data.from)} –{" "}
-                    {shortDate(rankings.data.to)} · spend{" "}
-                    <b className="text-ink">
-                      {money(rankings.data.totals.spendCents, {
-                        compact: true,
-                      })}
-                    </b>{" "}
-                    · CPA <b className="text-ink">{dollars(cpa(rankings.data.totals))}</b> · ROAS{" "}
-                    <b className="text-ink">{roas(rankings.data.totals)?.toFixed(2) ?? "—"}</b> · targets ${meta.targets.targetCpa} / {meta.targets.targetRoas}
-                  </p>
-                  <CsvButton disabled={items.length === 0} onClick={() => exportRankings(items, rankings.data!.from, rankings.data!.to)} />
-                </div>
               )}
               {sort !== "spend" && status !== "hits_off" && rankings.data && (rankings.data.minSpendCents != null || showAll) && (
                 <p className="text-xs text-ink-2">
@@ -235,7 +294,7 @@ export function RankingsPage({
                   }
                 }}
               >
-                <PostDetailPanel postId={activeId} range={range} targets={meta.targets} rank={rank} sortLabel={SORTS.find((x) => x.value === sort)!.label} />
+                <PostDetailPanel postId={activeId} range={range} targets={meta.targets} />
               </AdDrawer>
             )}
           </>
@@ -411,7 +470,7 @@ const ATRIA_FIELDS = [
   ["key_message", "Key message"],
 ] as const;
 
-function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: string; range: Range; targets: Targets; rank: number; sortLabel: string }) {
+function PostDetailPanel({ postId, range, targets }: { postId: string; range: Range; targets: Targets }) {
   const { data, error } = useApi<PostDetail>(`/api/posts/${encodeURIComponent(postId)}?${qs({ range })}`);
   const attr = useApi<AttributionResponse>(`/api/attribution?${qs({ range, level: "post", post: postId })}`);
   const click7 = attr.data?.rows[0]?.click7 ?? null;
@@ -427,20 +486,12 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
   const campaigns = [...new Set(data.copyRows.map((c) => c.campaignName).filter(Boolean))];
 
   return (
-    <div className="flex flex-col gap-5 bg-surface p-4">
-      <div className="flex items-center justify-between gap-2 border-b-2 border-divider pb-2">
-        <span className="kicker">Ad details</span>
-        <span className="flex gap-1.5">
-          {rank > 0 && (
-            <Tag tone="ink">
-              #{rank} by {sortLabel}
-            </Tag>
-          )}
-          <Tag>{data.active ? "Active" : "Paused"}</Tag>
-          <FatigueTag f={data.fatigue} />
-          <HitBadge status={data.hit} />
-        </span>
-      </div>
+    <div className="flex flex-col gap-5">
+      <span className="flex flex-wrap gap-1.5">
+        <Tag>{data.active ? "Active" : "Paused"}</Tag>
+        <FatigueTag f={data.fatigue} />
+        <HitBadge status={data.hit} />
+      </span>
       {data.fatigue && (
         <p className={`px-3 py-2 text-sm ${data.fatigue.status === "fatigued" ? "bg-bad-soft text-ink" : "bg-warn-soft text-ink"}`}>
           <b>{data.fatigue.status === "fatigued" ? "✕ Fatiguing" : "! Worth watching"}</b> · {fatigueText(data.fatigue)}
@@ -454,7 +505,8 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
           mediaType={data.mediaType}
           label={a.format ? (FORMATS[a.format] ?? a.format) : ""}
           url={data.thumbnailUrl}
-          className="aspect-[9/16] w-full max-w-40 shrink-0"
+          // Images in the feed's 4:5, videos in 9:16, so neither is cropped.
+          className={`${data.mediaType === "image" ? "aspect-[4/5] max-w-48" : "aspect-[9/16] max-w-40"} w-full shrink-0`}
         />
         <div className="min-w-0 flex-1 space-y-3">
           <div className="text-xl leading-tight font-extrabold break-words text-ink">{data.name}</div>
@@ -582,6 +634,7 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
 
 /** An ad's details, sliding in from the right over the list (full screen on a phone). Esc or the backdrop closes it. */
 function AdDrawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useLockBodyScroll();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -597,8 +650,36 @@ function AdDrawer({ title, onClose, children }: { title: string; onClose: () => 
             ✕
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
+        <div className="drawer-scroll flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
       </div>
+    </div>
+  );
+}
+
+/** "Filters · 2": opens a small panel with the filter dropdowns; Esc or a click outside closes it. */
+function FiltersButton({ count, children }: { count: number; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onDown = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("mousedown", onDown);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("mousedown", onDown);
+    };
+  }, [open]);
+  return (
+    <div ref={box} className="relative">
+      <button type="button" className={`btn ${count ? "btn-primary" : "btn-secondary"}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Icon name="filter" size={16} />
+        Filters{count ? ` · ${count}` : ""}
+      </button>
+      {open && (
+        <div className="absolute top-full right-0 z-30 mt-1 grid w-[min(92vw,420px)] grid-cols-2 gap-3 border-2 border-divider bg-page p-4 shadow-xl">{children}</div>
+      )}
     </div>
   );
 }

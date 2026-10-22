@@ -6,7 +6,7 @@ import type { DrillSpec } from "../drill.ts";
 import { money, pct } from "../format.ts";
 import { CellAds } from "../pages/Coverage.tsx";
 import { ConceptsTable } from "../pages/PodsView.tsx";
-import { CpaValue } from "./ui.tsx";
+import { CpaValue, useLockBodyScroll } from "./ui.tsx";
 
 const DECIDED = new Set(["hit", "late_hit", "winner", "super_winner", "miss"]);
 
@@ -21,6 +21,7 @@ export function GroupDrawer({ spec, meta, onClose }: { spec: DrillSpec; meta: Me
   const cov = spec.coverage;
   const { data: coverage } = useApi<CoverageResponse>(cov ? `/api/coverage?${qs({ range: cov.range, pod: cov.pod })}` : null);
   const panel = useRef<HTMLDivElement>(null);
+  useLockBodyScroll();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -41,7 +42,7 @@ export function GroupDrawer({ spec, meta, onClose }: { spec: DrillSpec; meta: Me
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={spec.title}>
       <button className="absolute inset-0 bg-black/40" aria-label="Close" onClick={onClose} />
-      <div ref={panel} tabIndex={-1} className={`slide-in relative flex h-full w-full ${cov ? "max-w-[840px]" : "max-w-[680px]"} flex-col overflow-y-auto bg-page shadow-xl outline-none`}>
+      <div ref={panel} tabIndex={-1} className={`slide-in drawer-scroll relative flex h-full w-full ${cov ? "max-w-[840px]" : "max-w-[680px]"} flex-col overflow-y-auto bg-page shadow-xl outline-none`}>
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b-2 border-divider bg-page px-5 py-4">
           <div className="min-w-0">
             <div className="kicker">Concepts</div>

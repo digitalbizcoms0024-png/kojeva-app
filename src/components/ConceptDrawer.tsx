@@ -7,7 +7,7 @@ import { dollars, int, money, ratio, shortDate } from "../format.ts";
 import { PlayableThumb } from "./AdPreview.tsx";
 import { WinnerCall } from "./WinnerCall.tsx";
 import { DailyCharts } from "./DailyCharts.tsx";
-import { CpaValue, HitBadge, PodChip, RoasValue, Tag, Thumb } from "./ui.tsx";
+import { CpaValue, HitBadge, PodChip, RoasValue, Tag, Thumb, useLockBodyScroll } from "./ui.tsx";
 
 /** Opens a concept's card over the current page (an open group stays underneath; see drill.ts). */
 export { conceptHref } from "../drill.ts";
@@ -61,6 +61,7 @@ export function ConceptDrawer({
   const [reload, setReload] = useState(0);
   const { data, error } = useApi<ConceptDetail>(`/api/concepts/${encodeURIComponent(conceptId)}${reload ? `?r=${reload}` : ""}`);
   const panel = useRef<HTMLDivElement>(null);
+  useLockBodyScroll();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && (back ? back.onBack() : onClose());
     window.addEventListener("keydown", onKey);
@@ -77,7 +78,7 @@ export function ConceptDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={k ? `Concept ${k.label}` : "Concept"}>
       <button className="absolute inset-0 bg-black/40" aria-label="Close" onClick={onClose} />
-      <div ref={panel} tabIndex={-1} className="slide-in relative flex h-full w-full max-w-[640px] flex-col overflow-y-auto bg-page shadow-xl outline-none">
+      <div ref={panel} tabIndex={-1} className="slide-in drawer-scroll relative flex h-full w-full max-w-[640px] flex-col overflow-y-auto bg-page shadow-xl outline-none">
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b-2 border-divider bg-page px-5 py-4">
           <div className="min-w-0">
             {back && (

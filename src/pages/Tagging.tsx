@@ -3,7 +3,7 @@ import type { AssignmentPatch, CoverageResponse, MetaResponse, PodsResponse, Pos
 import { podById, ANGLES, AWARENESS, FORMAT_DEFINITIONS, FORMATS, HOOKS, LANDING_PAGES, MOTIVATIONS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls } from "../components/HeaderControls.tsx";
-import { Empty, PageHeader, PodChip, Segmented, LoadError, ViewOnlyNote, Tabs } from "../components/ui.tsx";
+import { Empty, PageHeader, PodChip, SearchBox, Segmented, LoadError, ViewOnlyNote, Tabs } from "../components/ui.tsx";
 import { money, pct, shortDate } from "../format.ts";
 import { conceptHref } from "../drill.ts";
 import { PlayableThumb } from "../components/AdPreview.tsx";
@@ -267,7 +267,7 @@ export function TaggingPage({ meta, onChanged }: { meta: MetaResponse; onChanged
         {view === "all" && <p className="text-sm text-ink-3">Every ad, highest spend first, to change any tag by hand.</p>}
 
         <div className="flex flex-wrap items-center gap-3">
-          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ad name…" className="field min-w-56 flex-1" />
+          <SearchBox value={search} onChange={setSearch} placeholder="Search ads…" />
           {view !== "unplaced" && (
             <Segmented
               label="Period"
