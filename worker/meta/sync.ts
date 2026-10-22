@@ -14,6 +14,8 @@ import {
   COMPARE_WINDOWS,
   insightToDaily,
   insightToWindows,
+  feedImageHash,
+  feedShaped,
   isoTime,
   isTinyThumbnail,
   mediaHidden,
@@ -28,7 +30,8 @@ import {
 
 const AD_FIELDS =
   "id,name,status,effective_status,created_time,adset{id,name},campaign{id,name}," +
-  "creative{id,effective_object_story_id,thumbnail_url,image_url,object_type,video_id,image_hash}";
+  "creative{id,effective_object_story_id,thumbnail_url,image_url,object_type,video_id,image_hash," +
+  "asset_feed_spec{images{hash,adlabels},asset_customization_rules{customization_spec,image_label,priority}}}";
 const INSIGHT_FIELDS =
   "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,reach,inline_link_clicks,actions,action_values";
 const ALL_STATUSES = [
@@ -89,7 +92,7 @@ type AdRow = {
   creative_id: string | null;
   asset_id: string | null;
 };
-type PostRow = { id: string; media_type: string; thumbnail_url: string | null; created_time: string | null };
+type PostRow = { id: string; media_type: string; thumbnail_url: string | null; created_time: string | null; thumb_hash?: string | null };
 
 const AD_COLS = ["post_id", "name", "campaign_id", "campaign_name", "adset_id", "adset_name", "status", "created_time", "creative_id", "asset_id"] as const;
 
@@ -117,6 +120,27 @@ export function chooseThumbnail(stored: string | null | undefined, candidate: st
 /** Up to this many video covers fetched per sync (5 Graph calls of 50). */
 const MAX_COVERS = 250;
 
+/** Up to this many placement images looked up per sync (adimages takes 50 hashes a call). */
+const MAX_IMAGES = 250;
+
+/** Full-size URL and size of ad images, by hash; failures leave the current thumbnail in place. */
+async function adImages(gc: GraphClient, account: string, hashes: string[]): Promise<Map<string, { hash: string; url: string; width?: number; height?: number }>> {
+  const out = new Map<string, { hash: string; url: string; width?: number; height?: number }>();
+  const list = hashes.slice(0, MAX_IMAGES);
+  for (let i = 0; i < list.length; i += 50) {
+    try {
+      const res = await gc.get<{ data?: { hash: string; url?: string; width?: number; height?: number }[] }>(`${account}/adimages`, {
+        hashes: JSON.stringify(list.slice(i, i + 50)),
+        fields: "hash,url,width,height",
+      });
+      for (const img of res.data ?? []) if (img.url) out.set(img.hash, { hash: img.hash, url: img.url, width: img.width, height: img.height });
+    } catch {
+      // Keep Meta's own thumbnail when the images can't be read.
+    }
+  }
+  return out;
+}
+
 /** Full-size cover frames for videos, by video id; failures leave the 64px thumbnail in place. */
 async function videoCovers(gc: GraphClient, videoIds: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
@@ -143,7 +167,7 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
   const now = new Date().toISOString();
   const [{ results: storedAds }, { results: storedPosts }] = await Promise.all([
     db.prepare(`SELECT id, ${AD_COLS.join(", ")} FROM ads`).all<AdRow>(),
-    db.prepare("SELECT id, media_type, thumbnail_url, created_time FROM posts").all<PostRow>(),
+    db.prepare("SELECT id, media_type, thumbnail_url, created_time, thumb_hash FROM posts").all<PostRow>(),
   ]);
   const oldAds = new Map(storedAds.map((a) => [a.id, a]));
   const oldPosts = new Map(storedPosts.map((p) => [p.id, p]));
@@ -151,6 +175,7 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
   const posts = new Map<string, PostRow>();
   const hidden = new Set<string>();
   const videoOf = new Map<string, string>();
+  const placements = new Map<string, { hashes: string[]; feed: string | null }>();
   const ads: AdRow[] = [];
   for await (const page of gc.pages<GraphAd>(`${env.META_AD_ACCOUNT_ID}/ads`, {
     fields: AD_FIELDS,
@@ -163,6 +188,9 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
       const prev = posts.get(postId);
       if (mediaHidden(ad)) hidden.add(postId);
       if (ad.creative?.video_id && !videoOf.has(postId)) videoOf.set(postId, ad.creative.video_id);
+      const images = ad.creative?.asset_feed_spec?.images ?? [];
+      if (!ad.creative?.video_id && images.length > 1 && !placements.has(postId))
+        placements.set(postId, { hashes: images.map((i) => i.hash), feed: feedImageHash(ad) });
       posts.set(postId, {
         id: postId,
         media_type: mediaTypeFor(ad),
@@ -193,22 +221,38 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
   });
   const covers = await videoCovers(gc, [...new Set(needCover.map(([, v]) => v))].slice(0, MAX_COVERS));
 
+  // Ads with an image per placement: show the Facebook feed one, not Meta's pick (often Stories).
+  // Looked up only when the stored one isn't it yet, or its URL is about to expire.
+  const needFeed = [...placements].filter(([postId, p]) => {
+    const old = oldPosts.get(postId);
+    if (hidden.has(postId) || !old?.thumb_hash || !old.thumbnail_url || thumbnailNeedsRefresh(old.thumbnail_url)) return !hidden.has(postId);
+    return p.feed ? old.thumb_hash !== p.feed : !p.hashes.includes(old.thumb_hash);
+  });
+  const imageUrls = await adImages(gc, env.META_AD_ACCOUNT_ID, [...new Set(needFeed.flatMap(([, p]) => p.hashes))]);
+  const feedThumb = new Map<string, { hash: string; url: string }>();
+  for (const [postId, p] of needFeed) {
+    const found = p.hashes.map((h) => imageUrls.get(h)).filter((i): i is NonNullable<typeof i> => i != null);
+    const pick = (p.feed && found.find((i) => i.hash === p.feed)) || feedShaped(found);
+    if (pick) feedThumb.set(postId, pick);
+  }
+
   const postStmts: D1PreparedStatement[] = [];
   for (const p of posts.values()) {
     const old = oldPosts.get(p.id);
     const created = old?.created_time && p.created_time ? (old.created_time < p.created_time ? old.created_time : p.created_time) : (old?.created_time ?? p.created_time);
     const video = videoOf.get(p.id);
-    const thumb = chooseThumbnail(old?.thumbnail_url, (video && covers.get(video)) ?? p.thumbnail_url, hidden.has(p.id));
-    const next = { ...p, thumbnail_url: thumb, created_time: created };
-    if (old && same(old, next, ["media_type", "thumbnail_url", "created_time"])) continue;
+    const feed = feedThumb.get(p.id);
+    const thumb = feed ? feed.url : chooseThumbnail(old?.thumbnail_url, (video && covers.get(video)) ?? p.thumbnail_url, hidden.has(p.id));
+    const next = { ...p, thumbnail_url: thumb, created_time: created, thumb_hash: feed ? feed.hash : (old?.thumb_hash ?? null) };
+    if (old && same(old, next, ["media_type", "thumbnail_url", "created_time", "thumb_hash"])) continue;
     postStmts.push(
       db
         .prepare(
-          `INSERT INTO posts (id, media_type, thumbnail_url, created_time) VALUES (?1, ?2, ?3, ?4)
+          `INSERT INTO posts (id, media_type, thumbnail_url, created_time, thumb_hash) VALUES (?1, ?2, ?3, ?4, ?5)
            ON CONFLICT(id) DO UPDATE SET media_type = excluded.media_type, thumbnail_url = excluded.thumbnail_url,
-             created_time = excluded.created_time`,
+             created_time = excluded.created_time, thumb_hash = excluded.thumb_hash`,
         )
-        .bind(next.id, next.media_type, next.thumbnail_url, next.created_time),
+        .bind(next.id, next.media_type, next.thumbnail_url, next.created_time, next.thumb_hash),
     );
   }
 

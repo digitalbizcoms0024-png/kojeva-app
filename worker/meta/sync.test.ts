@@ -354,6 +354,59 @@ describe("thumbnails", () => {
     // The cover isn't fetched again once a sharp one is stored.
     expect(again.calls.some((u) => u.searchParams.has("ids"))).toBe(false);
   });
+
+  it("shows the Facebook feed image of an ad with one image per placement, and writes nothing on a re-sync", async () => {
+    const STORY = "https://scontent.example/story.png";
+    const FEED = "https://scontent.example/feed.png";
+    const post = "776862388850901_122147682321047339";
+    const spec = (rules: boolean) => ({
+      images: [
+        { hash: "h-story", adlabels: [{ name: "story" }] },
+        { hash: "h-feed", adlabels: [{ name: "feed" }] },
+      ],
+      asset_customization_rules: rules
+        ? [
+            { customization_spec: { publisher_platforms: ["facebook"], facebook_positions: ["story"] }, image_label: { name: "story" }, priority: 1 },
+            { customization_spec: { publisher_platforms: ["facebook"], facebook_positions: ["feed"] }, image_label: { name: "feed" }, priority: 2 },
+          ]
+        : [],
+    });
+    const meta = (rules: boolean) =>
+      fakeMeta((url) => {
+        if (url.pathname.endsWith(`${ACT}/adimages`))
+          return {
+            data: [
+              { hash: "h-story", url: STORY, width: 1080, height: 1920 },
+              { hash: "h-feed", url: FEED, width: 1080, height: 1350 },
+            ],
+          };
+        if (url.pathname.endsWith(`${ACT}/ads`))
+          return {
+            data: [
+              {
+                id: "120250303598690075",
+                name: "1",
+                adset: { id: "as9", name: "Shameer | Static 3 | Negative Marketing #2" },
+                creative: { id: "1709247247216003", effective_object_story_id: post, object_type: "SHARE", thumbnail_url: STORY, asset_feed_spec: spec(rules) },
+              },
+            ],
+          };
+        if (url.pathname.endsWith(`${ACT}/insights`)) return { data: [] };
+        return { error: { message: `Unexpected ${url.pathname}`, code: 100 } };
+      });
+    const thumb = async () => (await env.DB.prepare("SELECT thumbnail_url, thumb_hash FROM posts WHERE id = ?1").bind(post).first())!;
+
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, meta(true));
+    expect(await thumb()).toEqual({ thumbnail_url: FEED, thumb_hash: "h-feed" });
+    const again = meta(true);
+    expect((await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, again)).written).toBe(0);
+    expect(again.calls.some((u) => u.pathname.endsWith("/adimages"))).toBe(false);
+
+    // Without placement rules, the feed-shaped image (4:5, not 9:16) wins.
+    await env.DB.prepare("UPDATE posts SET thumb_hash = NULL").run();
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, meta(false));
+    expect(await thumb()).toEqual({ thumbnail_url: FEED, thumb_hash: "h-feed" });
+  });
 });
 
 describe("thumbnailNeedsRefresh", () => {

@@ -16,6 +16,15 @@ export interface GraphAd {
     object_type?: string;
     video_id?: string;
     image_hash?: string;
+    /** Ads with an image per placement (Feed vs Stories/Reels) list them here, with rules saying which goes where. */
+    asset_feed_spec?: {
+      images?: { hash: string; adlabels?: { name?: string; id?: string }[] }[];
+      asset_customization_rules?: {
+        customization_spec?: { publisher_platforms?: string[]; facebook_positions?: string[]; instagram_positions?: string[] };
+        image_label?: { name?: string; id?: string };
+        priority?: number;
+      }[];
+    };
   };
 }
 
@@ -119,6 +128,30 @@ export function mediaHidden(ad: Pick<GraphAd, "creative">): boolean {
 export function thumbnailFor(ad: Pick<GraphAd, "creative">): string | null {
   if (mediaHidden(ad)) return null;
   return ad.creative?.image_url ?? ad.creative?.thumbnail_url ?? null;
+}
+
+/**
+ * For an ad with several images (one per placement), the hash of the one shown in the Facebook feed:
+ * the image its customization rules give to facebook_positions "feed" (else Instagram "stream").
+ * Null when the ad has fewer than two images or no rule says; the caller then goes by shape.
+ */
+export function feedImageHash(ad: Pick<GraphAd, "creative">): string | null {
+  const spec = ad.creative?.asset_feed_spec;
+  const images = spec?.images ?? [];
+  if (images.length < 2) return null;
+  const rules = [...(spec?.asset_customization_rules ?? [])].sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
+  const labelFor = (test: (s: NonNullable<(typeof rules)[number]["customization_spec"]>) => boolean) =>
+    rules.find((r) => r.customization_spec && test(r.customization_spec))?.image_label;
+  const label = labelFor((s) => s.facebook_positions?.includes("feed") ?? false) ?? labelFor((s) => s.instagram_positions?.includes("stream") ?? false);
+  if (!label) return null;
+  const match = images.find((i) => i.adlabels?.some((l) => (label.id && l.id === label.id) || (label.name && l.name === label.name)));
+  return match?.hash ?? null;
+}
+
+/** The image best suited to the feed by shape: closest to 4:5 (height ÷ width 1.25), never a 9:16 one if another exists. */
+export function feedShaped(images: { hash: string; url: string; width?: number; height?: number }[]): { hash: string; url: string } | null {
+  const ratio = (i: (typeof images)[number]) => (i.width && i.height ? i.height / i.width : 1.25);
+  return [...images].sort((a, b) => Math.abs(ratio(a) - 1.25) - Math.abs(ratio(b) - 1.25))[0] ?? null;
 }
 
 /** Meta's creative thumbnails are 64×64 ("p64x64" in the URL): fine as a fallback, blurry on a card. */
