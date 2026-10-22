@@ -68,31 +68,12 @@ function ShareBar({ rows, total }: { rows: PodRow[]; total: number }) {
   );
 }
 
-/** "Outside the pods: Agency $289K · Trybe $358 (89% of all spend)": what the in-house view leaves out of the bar. */
-function OutsideLine({ rows, all }: { rows: PodRow[]; all: number }) {
-  const spent = rows.filter((r) => r.totals.spendCents > 0);
-  if (!spent.length) return null;
-  const sum = spent.reduce((n, r) => n + r.totals.spendCents, 0);
-  return (
-    <p className="mt-2 text-xs text-ink-3">
-      Outside the pods:{" "}
-      {spent.map((r, i) => (
-        <span key={r.podId ?? "none"} className="num">
-          {i > 0 && " · "}
-          <b className="text-ink-2">{r.name}</b> {money(r.totals.spendCents, { compact: true })}
-        </span>
-      ))}{" "}
-      ({all > 0 ? pct(sum / all, 0) : "—"} of all spend)
-    </p>
-  );
-}
-
 export type SpendView = "inhouse" | "all";
 
 /**
  * Spend per pod for the global date range, with the change against the period before. By default
  * only the in-house pods are in the bar and the table (the agency, partners like Trybe and uncredited
- * spend would dwarf them; one line under the bar keeps them in view); "All spend" shows everyone.
+ * spend would dwarf them); "All spend" shows everyone.
  * `compact` shows only the share bar (Dashboard).
  */
 export function PodSpend({
@@ -119,7 +100,6 @@ export function PodSpend({
   const all = rowsOf(now.data);
   const allTotal = all.reduce((n, r) => n + r.totals.spendCents, 0);
   const isInside = (r: PodRow) => r.podId != null && inhouseIds.includes(r.podId);
-  const outside = all.filter((r) => !isInside(r));
   // The share bar and "Share" column: in-house pods only, or everyone.
   const rows = view === "inhouse" ? all.filter(isInside) : all;
   const total = rows.reduce((n, r) => n + r.totals.spendCents, 0);
@@ -153,7 +133,6 @@ export function PodSpend({
         />
         {view === "inhouse" && <p className="mb-2 text-xs text-ink-3">In-house pods · {money(total, { compact: true })}</p>}
         <ShareBar rows={rows} total={total} />
-        {view === "inhouse" && <OutsideLine rows={outside} all={allTotal} />}
       </section>
     );
 
@@ -190,7 +169,6 @@ export function PodSpend({
       />
       {view === "inhouse" && <p className="mb-2 text-xs text-ink-3">In-house pods · {money(total, { compact: true })}</p>}
       <ShareBar rows={rows} total={total} />
-      {view === "inhouse" && <OutsideLine rows={outside} all={allTotal} />}
       <div className="mt-4 overflow-x-auto">
         <table className="pin-first w-full text-sm">
           <thead className="kicker text-left">
