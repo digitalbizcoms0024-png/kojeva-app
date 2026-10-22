@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { HitStatus } from "../../shared/metrics.ts";
 import { cpaBand, roasBand, type Band } from "../../shared/metrics.ts";
 import { podById } from "../../shared/taxonomy.ts";
@@ -301,6 +301,17 @@ export function Thumb({ mediaType, label, url, className = "" }: { mediaType: st
       {label && <span className="m-1 max-w-[calc(100%-8px)] truncate bg-page px-1 text-[10px] font-semibold text-ink-2">{label || (mediaType === "image" ? "Image" : "Video")}</span>}
     </div>
   );
+}
+
+/** While a side card is open, the page behind it doesn't scroll (one scrollbar, the card's). */
+export function useLockBodyScroll() {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 }
 
 /** "Nothing here" message, the same look everywhere: a dashed box with the reason. `small` inside a section. */

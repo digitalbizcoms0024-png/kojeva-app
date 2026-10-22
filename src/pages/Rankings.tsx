@@ -7,7 +7,7 @@ import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { PlayableThumb } from "../components/AdPreview.tsx";
 import { DailyCharts } from "../components/DailyCharts.tsx";
-import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb, LoadError, Pager, Skeleton } from "../components/ui.tsx";
+import { CpaValue, CsvButton, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb, LoadError, Pager, Skeleton, useLockBodyScroll } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, ratio, shortDate } from "../format.ts";
 import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
@@ -235,7 +235,7 @@ export function RankingsPage({
                   }
                 }}
               >
-                <PostDetailPanel postId={activeId} range={range} targets={meta.targets} rank={rank} sortLabel={SORTS.find((x) => x.value === sort)!.label} />
+                <PostDetailPanel postId={activeId} range={range} targets={meta.targets} />
               </AdDrawer>
             )}
           </>
@@ -411,7 +411,7 @@ const ATRIA_FIELDS = [
   ["key_message", "Key message"],
 ] as const;
 
-function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: string; range: Range; targets: Targets; rank: number; sortLabel: string }) {
+function PostDetailPanel({ postId, range, targets }: { postId: string; range: Range; targets: Targets }) {
   const { data, error } = useApi<PostDetail>(`/api/posts/${encodeURIComponent(postId)}?${qs({ range })}`);
   const attr = useApi<AttributionResponse>(`/api/attribution?${qs({ range, level: "post", post: postId })}`);
   const click7 = attr.data?.rows[0]?.click7 ?? null;
@@ -427,20 +427,12 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
   const campaigns = [...new Set(data.copyRows.map((c) => c.campaignName).filter(Boolean))];
 
   return (
-    <div className="flex flex-col gap-5 bg-surface p-4">
-      <div className="flex items-center justify-between gap-2 border-b-2 border-divider pb-2">
-        <span className="kicker">Ad details</span>
-        <span className="flex gap-1.5">
-          {rank > 0 && (
-            <Tag tone="ink">
-              #{rank} by {sortLabel}
-            </Tag>
-          )}
-          <Tag>{data.active ? "Active" : "Paused"}</Tag>
-          <FatigueTag f={data.fatigue} />
-          <HitBadge status={data.hit} />
-        </span>
-      </div>
+    <div className="flex flex-col gap-5">
+      <span className="flex flex-wrap gap-1.5">
+        <Tag>{data.active ? "Active" : "Paused"}</Tag>
+        <FatigueTag f={data.fatigue} />
+        <HitBadge status={data.hit} />
+      </span>
       {data.fatigue && (
         <p className={`px-3 py-2 text-sm ${data.fatigue.status === "fatigued" ? "bg-bad-soft text-ink" : "bg-warn-soft text-ink"}`}>
           <b>{data.fatigue.status === "fatigued" ? "✕ Fatiguing" : "! Worth watching"}</b> · {fatigueText(data.fatigue)}
@@ -454,7 +446,8 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
           mediaType={data.mediaType}
           label={a.format ? (FORMATS[a.format] ?? a.format) : ""}
           url={data.thumbnailUrl}
-          className="aspect-[9/16] w-full max-w-40 shrink-0"
+          // Images in the feed's 4:5, videos in 9:16, so neither is cropped.
+          className={`${data.mediaType === "image" ? "aspect-[4/5] max-w-48" : "aspect-[9/16] max-w-40"} w-full shrink-0`}
         />
         <div className="min-w-0 flex-1 space-y-3">
           <div className="text-xl leading-tight font-extrabold break-words text-ink">{data.name}</div>
@@ -582,6 +575,7 @@ function PostDetailPanel({ postId, range, targets, rank, sortLabel }: { postId: 
 
 /** An ad's details, sliding in from the right over the list (full screen on a phone). Esc or the backdrop closes it. */
 function AdDrawer({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useLockBodyScroll();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -597,7 +591,7 @@ function AdDrawer({ title, onClose, children }: { title: string; onClose: () => 
             ✕
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
+        <div className="drawer-scroll flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
       </div>
     </div>
   );

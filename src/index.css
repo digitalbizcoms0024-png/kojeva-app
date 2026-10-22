@@ -314,3 +314,9 @@ input[type="checkbox"] {
     animation: none;
   }
 }
+
+/* Side cards: a slim scrollbar that doesn't shift the content when it appears. */
+.drawer-scroll {
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
