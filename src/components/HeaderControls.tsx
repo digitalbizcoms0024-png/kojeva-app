@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { MetaResponse } from "../../shared/api.ts";
-import { RANGE_LABELS } from "../api.ts";
+import { apiFetch, noBodyMessage, RANGE_LABELS } from "../api.ts";
 import { dateTime, shortDate } from "../format.ts";
 
 /** "week" | "14d" | "month" | "mtd" | "all", or a custom range written as "custom:YYYY-MM-DD:YYYY-MM-DD". */
@@ -123,8 +123,68 @@ function RangeSwitch({ range, setRange, latest }: { range: Range; setRange: (r: 
   );
 }
 
+/**
+ * Pulls yesterday and today from Meta now (editors only). The server rebuilds the dashboard's numbers
+ * before answering, then the page reloads with them. Today's numbers are partial until the day ends.
+ */
+function SyncNow() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const day = (offset: number) => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + offset);
+    return d.toISOString().slice(0, 10);
+  };
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await apiFetch("/api/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ since: day(-1), until: day(0), ads: true, warm: true }),
+      });
+      const body = (await r.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!r.ok) throw new Error(body.error || body.message || noBodyMessage(r));
+      window.location.reload();
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <button
+        type="button"
+        className="btn btn-secondary py-1.5 text-[13px]"
+        onClick={run}
+        disabled={busy}
+        title="Pull yesterday and today from Meta now. Today's numbers are partial until the day ends."
+      >
+        {busy ? "Syncing… (about a minute)" : "Sync now"}
+      </button>
+      {error && (
+        <p role="alert" className="basis-full text-right text-xs text-bad">
+          Sync didn't finish: {error}
+        </p>
+      )}
+    </>
+  );
+}
+
 /** Date range switch plus the last-sync status: the controls at the top right of every data page. */
-export function HeaderControls({ meta, range, setRange }: { meta: MetaResponse; range?: Range; setRange?: (r: Range) => void }) {
+export function HeaderControls({
+  meta,
+  range,
+  setRange,
+  syncNow = false,
+}: {
+  meta: MetaResponse;
+  range?: Range;
+  setRange?: (r: Range) => void;
+  /** Shows Sync now to editors (the Dashboard). */
+  syncNow?: boolean;
+}) {
   const failed = meta.lastSync?.status === "error";
   return (
     <>
@@ -138,6 +198,7 @@ export function HeaderControls({ meta, range, setRange }: { meta: MetaResponse; 
         {failed ? "Last sync failed · " : "Last synced "}
         {dateTime(meta.lastSync?.finishedAt)} · Meta
       </a>
+      {syncNow && meta.canEdit && meta.dataMode === "live" && <SyncNow />}
     </>
   );
 }

@@ -74,6 +74,14 @@ export function accessConfigured(env: AppEnv["Bindings"]): boolean {
   return Boolean(env.ACCESS_TEAM_DOMAIN);
 }
 
+// A random key made by this isolate for its own read requests (the warm-up after a sync,
+// warmDashboard in worker/index.ts). It never leaves the isolate, so no outside request can carry it.
+let internalKey: string | null = null;
+export function internalReadHeaders(): Record<string, string> {
+  internalKey ??= crypto.randomUUID();
+  return { "X-Hub-Internal": internalKey };
+}
+
 /**
  * When Access is configured, every /api request must carry a valid Access JWT.
  * When it isn't, reads still work (sample data) but routes that touch Meta refuse.
@@ -81,6 +89,11 @@ export function accessConfigured(env: AppEnv["Bindings"]): boolean {
 export const accessMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   c.set("userEmail", null);
   if (!accessConfigured(c.env)) return next();
+  // The isolate's own warm-up reads: GET only, and as a service, so requireAccess still refuses writes.
+  if (internalKey && c.req.method === "GET" && c.req.header("X-Hub-Internal") === internalKey) {
+    c.set("userEmail", "service:warm-up");
+    return next();
+  }
   const token =
     c.req.header("Cf-Access-Jwt-Assertion") ??
     /(?:^|;\s*)CF_Authorization=([^;]+)/.exec(c.req.header("Cookie") ?? "")?.[1];

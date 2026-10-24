@@ -57,7 +57,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
   return (
     <div>
       <PageHeader title="Dashboard" subtitle="Kojeva performance on Meta">
-        <HeaderControls meta={meta} range={range} setRange={setRange} />
+        <HeaderControls meta={meta} range={range} setRange={setRange} syncNow />
       </PageHeader>
 
       <div className="flex flex-col gap-8 px-4 py-6 md:px-8">

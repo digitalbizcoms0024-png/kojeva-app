@@ -158,14 +158,24 @@ connection.post("/disconnect", async (c) => {
 export const sync = new Hono<AppEnv>();
 sync.use("*", requireAccess);
 
-/** Body: { since, until, ads }. The app calls this in ≤31-day windows for a backfill. */
+// The dashboard warm-up (warmDashboard in worker/index.ts), set from there to avoid an import cycle.
+let warmUp: ((env: Env, ctx: ExecutionContext) => Promise<unknown>) | null = null;
+export function setWarmUp(fn: typeof warmUp) {
+  warmUp = fn;
+}
+
+/**
+ * Body: { since, until, ads, warm }. The app calls this in ≤31-day windows for a backfill; `warm`
+ * (the last window, and the Dashboard's Sync now) rebuilds the dashboard's numbers before answering.
+ */
 sync.post("/", async (c) => {
-  const body = await c.req.json<{ since?: string; until?: string; ads?: boolean }>().catch(() => ({}) as Record<string, never>);
+  const body = await c.req.json<{ since?: string; until?: string; ads?: boolean; warm?: boolean }>().catch(() => ({}) as Record<string, never>);
   const { since, until } = body;
   if (!since || !until || !DAY.test(since) || !DAY.test(until) || since > until)
     return c.json({ error: "Give since and until as YYYY-MM-DD." }, 400);
   if ((Date.parse(until) - Date.parse(since)) / 86_400_000 + 1 > MAX_WINDOW_DAYS)
     return c.json({ error: `Sync at most ${MAX_WINDOW_DAYS} days per request.` }, 400);
   const result = await runSync(c.env, { since, until, ads: Boolean(body.ads) });
+  if (result.ok && body.warm && warmUp) await warmUp(c.env, c.executionCtx as unknown as ExecutionContext).catch(() => undefined);
   return c.json(result, result.ok ? 200 : 502);
 });
