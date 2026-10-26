@@ -417,6 +417,62 @@ describe("thumbnails", () => {
     await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, meta(false));
     expect(await thumb()).toEqual({ thumbnail_url: FEED, thumb_hash: "h-feed" });
   });
+
+  it("looks the feed image up again after a sync that had to fall back to Meta's pick", async () => {
+    const STORY = "https://scontent.example/story.png";
+    const FEED = "https://scontent.example/feed.png";
+    const post = "776862388850901_122147682321047339";
+    const meta = (images: boolean) =>
+      fakeMeta((url) => {
+        if (url.pathname.endsWith(`${ACT}/adimages`))
+          return images ? { data: [{ hash: "h-story", url: STORY }, { hash: "h-feed", url: FEED }] } : { error: { message: "Temporarily unavailable", code: 2 } };
+        if (url.pathname.endsWith(`${ACT}/ads`))
+          return {
+            data: [
+              {
+                id: "120250303598690075",
+                name: "1",
+                adset: { id: "as9", name: "Shameer | Static 3 | Negative Marketing #2" },
+                creative: {
+                  id: "1709247247216003",
+                  effective_object_story_id: post,
+                  object_type: "SHARE",
+                  thumbnail_url: STORY,
+                  asset_feed_spec: {
+                    images: [
+                      { hash: "h-story", adlabels: [{ name: "story" }] },
+                      { hash: "h-feed", adlabels: [{ name: "feed" }] },
+                    ],
+                    asset_customization_rules: [
+                      { customization_spec: { facebook_positions: ["story"] }, image_label: { name: "story" }, priority: 1 },
+                      { customization_spec: { facebook_positions: ["feed"] }, image_label: { name: "feed" }, priority: 2 },
+                    ],
+                  },
+                },
+              },
+            ],
+          };
+        if (url.pathname.endsWith(`${ACT}/insights`)) return { data: [] };
+        return { error: { message: `Unexpected ${url.pathname}`, code: 100 } };
+      });
+    const thumb = async () => (await env.DB.prepare("SELECT thumbnail_url, thumb_hash FROM posts WHERE id = ?1").bind(post).first())!;
+    const range = { since: "2026-10-08", until: "2026-10-14", ads: true };
+
+    // The stored feed URL is about to expire, but still works: a failed lookup keeps it.
+    const soon = `${FEED}?oe=${Math.floor((Date.now() + 86_400_000) / 1000).toString(16)}`;
+    await runSync(env, range, meta(true));
+    await env.DB.prepare("UPDATE posts SET thumbnail_url = ?1").bind(soon).run();
+    await runSync(env, range, meta(false));
+    expect(await thumb()).toEqual({ thumbnail_url: soon, thumb_hash: "h-feed" });
+
+    // Once it has expired, Meta's pick stands in, and the hash is forgotten so the next sync retries.
+    const gone = `${FEED}?oe=${Math.floor((Date.now() - 86_400_000) / 1000).toString(16)}`;
+    await env.DB.prepare("UPDATE posts SET thumbnail_url = ?1").bind(gone).run();
+    await runSync(env, range, meta(false));
+    expect(await thumb()).toEqual({ thumbnail_url: STORY, thumb_hash: null });
+    await runSync(env, range, meta(true));
+    expect(await thumb()).toEqual({ thumbnail_url: FEED, thumb_hash: "h-feed" });
+  });
 });
 
 describe("thumbnailNeedsRefresh", () => {

@@ -258,8 +258,22 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
     const created = old?.created_time && p.created_time ? (old.created_time < p.created_time ? old.created_time : p.created_time) : (old?.created_time ?? p.created_time);
     const video = videoOf.get(p.id);
     const feed = feedThumb.get(p.id);
-    const thumb = feed ? feed.url : chooseThumbnail(old?.thumbnail_url, (video && covers.get(video)) ?? p.thumbnail_url, hidden.has(p.id));
-    const next = { ...p, thumbnail_url: thumb, created_time: created, thumb_hash: feed ? feed.hash : (old?.thumb_hash ?? null) };
+    let thumb: string | null;
+    let hash: string | null;
+    if (feed) {
+      thumb = feed.url;
+      hash = feed.hash;
+    } else if (placements.has(p.id) && old?.thumb_hash && old.thumbnail_url && !thumbnailNeedsRefresh(old.thumbnail_url, Date.now() - 3 * 86_400_000)) {
+      // The feed image couldn't be looked up again: keep the stored one until it actually expires.
+      thumb = old.thumbnail_url;
+      hash = old.thumb_hash;
+    } else {
+      thumb = chooseThumbnail(old?.thumbnail_url, (video && covers.get(video)) ?? p.thumbnail_url, hidden.has(p.id));
+      // Meta's own pick (often Stories) stands in: forget the feed hash so the next sync looks it up again,
+      // rather than taking the stored image for the feed one (ad "1" stuck on its Stories image, Oct 26).
+      hash = placements.has(p.id) ? null : (old?.thumb_hash ?? null);
+    }
+    const next = { ...p, thumbnail_url: thumb, created_time: created, thumb_hash: hash };
     if (old && same(old, next, ["media_type", "thumbnail_url", "created_time", "thumb_hash"])) continue;
     postStmts.push(
       db
