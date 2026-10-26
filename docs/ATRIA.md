@@ -4,7 +4,7 @@ Atria tags Kojeva's creatives (videos and images) on ten dimensions: theme, core
 emotions, visual hook, offer type, media format, production quality, key message, USP. It works
 down the spend ranking, so the big spenders are tagged first (97% of 30-day spend in Oct 2026).
 
-There is no Atria API key: Atria is reachable only through its Claude connector. So a **nightly
+There is no Atria API key: Atria is reachable only through its Claude connector. So a **weekly
 scheduled Claude task** reads tags with the connector and pushes them to the hub:
 
 ```
@@ -33,8 +33,13 @@ people can't call them, and the token can't call anything else.
    - Network secrets → Add secret: Allowed websites `kojeva-hub.digitalbizcoms0024.workers.dev`, Path
      prefix `/api/ingest`, custom headers `CF-Access-Client-Id` and `CF-Access-Client-Secret`
      (no prefix). Sessions get the headers added automatically and never see the values.
-5. **Schedule the task**: "Kojeva Hub · Atria tag sync", daily 10:07 UTC (after the 09:17 Meta sync),
+5. **Schedule the task**: "Kojeva Hub · Atria tag sync", Mondays 10:07 UTC (after the 09:17 Meta sync),
    fresh session per run. Add the **Atria connector** to it in claude.ai's scheduled tasks.
+   Weekly, not daily, to save Atria credits (owner, Oct 26).
+
+**What it asks Atria about** (`/api/ingest/atria/pending`): creatives with spend in the last 30 days
+that Atria hasn't been asked about, plus, a week after the last ask, ones Atria hadn't tagged yet or
+sent no preview for. A tagged creative with its preview is final and never asked about again.
 
 ## Awareness level and belief (labelled by the same task)
 Atria has no awareness or belief tag, so after syncing tags the task labels each tagged creative itself
@@ -53,7 +58,7 @@ whose tags changed), with their tags, ad names and the **belief groups already i
 The coverage map (`worker/coverage.ts`, Coverage Map page) places every running ad by persona ×
 awareness level. Personas are a short list of specific people (table `personas`):
 
-1. **Draft.** With no personas yet, the nightly task reads `GET /api/ingest/atria/personas` (Atria's
+1. **Draft.** With no personas yet, the weekly task reads `GET /api/ingest/atria/personas` (Atria's
    persona tags by spend) and posts 5–8 drafts to `POST /api/ingest/atria/personas`.
 2. **Confirm.** People rename, merge, delete or add them in Settings → Personas and press Confirm.
    Until then Claude doesn't assign personas and the map shows an empty state.
@@ -89,7 +94,7 @@ demonstration-led discovery. `/unlabeled` returns assets without a motivation de
 Tagging wins until "Use Claude's label". Concepts carry the union of their ads' lists, and Insights
 has a "By motivation" panel.
 
-## Nightly task prompt
+## Weekly task prompt
 The live prompt is stored on the scheduled task "Kojeva Hub · Atria tag sync". Part 1 is the tag sync
 below; part 2 keeps the persona list going (drafts when empty); part 3 runs `/unlabeled` → label →
 `/labels` in up to 3 rounds of 40 with the level definitions, belief format, offer and persona above,
@@ -116,7 +121,7 @@ assets sent, how many were tagged. If a hub call fails, report the status and bo
 
 ## Copies of a creative
 A duplicated or re-uploaded ad gets a new Meta video id or image hash, and Atria tags each id on
-its own (following spend), so copies often stay `not_tagged_yet`. The nightly task sends Atria's
+its own (following spend), so copies often stay `not_tagged_yet`. The weekly task sends Atria's
 `preview_image_url` with every asset; its file name is the same for copies of one creative and is
 stored as `atria_assets.preview_key`. An untagged asset whose preview matches a tagged one takes
 that asset's tags and Claude's labels (`twin_of`, migration 0024). Claude labels only the original;
@@ -128,11 +133,11 @@ posts that spent in the last 7 days still have no tags.
 Atria tags following spend, so new and small creatives can wait a long time, and some ads (Meta
 hides the media of "Post ID" ads from `ads_read`) can't be sent to Atria at all; those stand in
 with `p:<post id>` as their asset id. `/api/ingest/atria/unlabeled` lists them too with
-`atriaTagged: false`, and the nightly task labels them by looking at the ad itself (frames, copy,
+`atriaTagged: false`, and the weekly task labels them by looking at the ad itself (frames, copy,
 names). When Atria tags one later its tags change, so it's labelled again with them.
 
 ## Looking at an ad without Atria credits
-Every Atria connector call uses Atria credits, so the nightly task fetches only tags from Atria.
+Every Atria connector call uses Atria credits, so the weekly task fetches only tags from Atria.
 To look at an ad (format, and labels for creatives Atria hasn't tagged) it calls
 `GET /api/ingest/atria/media/<ad id>`, which reads the ad's copy and a video or image link through
 the hub's own Meta connection (`worker/meta/media.ts`, read-only). When Meta hides a video from

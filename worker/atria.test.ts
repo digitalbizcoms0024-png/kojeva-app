@@ -100,9 +100,12 @@ describe("Atria ingest", () => {
     );
     expect(await res.json()).toEqual({ ok: true, received: 3, tagged: 2, twins: 0 });
 
-    // Tagged and recently-checked assets aren't requested again, unless their preview is missing.
-    const pending = (await (await call("/api/ingest/atria/pending", service)).json()) as { assets: { assetId: string }[] };
-    expect(pending.assets.map((a) => a.assetId)).toEqual(["i:b1679ce60dbda9e125c26e84d9f82e94"]);
+    // Each Atria call costs credits: nothing just answered is asked about again.
+    const pendingIds = async () => ((await (await call("/api/ingest/atria/pending", service)).json()) as { assets: { assetId: string }[] }).assets.map((a) => a.assetId);
+    expect(await pendingIds()).toEqual([]);
+    // A week later: the untagged one and the one Atria sent no preview for, never the tagged one with its preview.
+    await env.DB.prepare("UPDATE atria_assets SET fetched_at = ?1").bind(new Date(Date.now() - 8 * 86_400_000).toISOString()).run();
+    expect((await pendingIds()).sort()).toEqual(["i:b1679ce60dbda9e125c26e84d9f82e94", "v:999"]);
 
     const rankings = (await (await call("/api/rankings?range=all", person)).json()) as { items: { postId: string; atria: Record<string, string[]> | null }[] };
     expect(rankings.items.find((p) => p.postId === "p1")!.atria).toMatchObject({ theme: VIDEO_TAGS.theme, media_format: ["UGC Video"] });
@@ -305,7 +308,8 @@ describe("Atria ingest", () => {
         (p) => p.postId === "p3",
       )!;
       expect(p3).toMatchObject({ atria: null, labels: { awareness: "solution" } });
-      // Still asked for Atria's tags, and a re-send writes nothing.
+      // Still asked for Atria's tags (a week after the last ask), and a re-send writes nothing.
+      await env.DB.prepare("UPDATE atria_assets SET fetched_at = ?1").bind(new Date(Date.now() - 8 * 86_400_000).toISOString()).run();
       expect(((await (await call("/api/ingest/atria/pending", service)).json()) as { assets: { assetId: string }[] }).assets.map((a) => a.assetId)).toContain("v:999");
       expect(await (await call("/api/ingest/atria/labels", service, post({ labels: [label] }))).json()).toMatchObject({ written: 0 });
     });
