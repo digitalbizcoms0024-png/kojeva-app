@@ -26,13 +26,17 @@ const STATUSES = ["tagged", "not_tagged_yet", "incomplete_tags", "not_in_account
 
 export type AtriaTags = Partial<Record<(typeof ATRIA_CATEGORIES)[number], string[]>>;
 
+/** Days before an untagged (or preview-less) asset is asked about again. */
+export const ASK_AGAIN_DAYS = 7;
+
 export const atria = new Hono<AppEnv>();
 atria.use("*", requireService("ATRIA_CLIENT_ID"));
 
 /**
- * Assets that need tags, highest recent spend first: never fetched, untagged and last
- * tried over 3 days ago (Atria tags down the spend ranking over time), tagged over 30 days ago, or
- * with no preview stored yet (needed to match copies, see copyTwins).
+ * Assets that need tags, highest recent spend first. Every Atria call costs credits, so an asset is
+ * asked about once, then again only after a week if Atria hadn't tagged it yet (it tags down the
+ * spend ranking over time) or sent no preview (needed to match copies, see copyTwins). A tagged
+ * asset with its preview is final: never asked again (owner, Oct 26). The task runs weekly.
  */
 atria.get("/pending", async (c) => {
   const db = c.env.DB;
@@ -46,14 +50,12 @@ atria.get("/pending", async (c) => {
        LEFT JOIN atria_assets t ON t.asset_id = a.asset_id
        WHERE a.asset_id IS NOT NULL AND a.asset_id NOT LIKE 'p:%' AND d.date >= ?1
          AND (t.asset_id IS NULL
-              OR (t.status <> 'tagged' AND t.fetched_at < ?2)
-              OR t.fetched_at < ?3
-              OR t.preview_key IS NULL)
+              OR ((t.status <> 'tagged' OR t.preview_key IS NULL) AND t.fetched_at < ?2))
        GROUP BY a.asset_id
        ORDER BY spend DESC
-       LIMIT ?4`,
+       LIMIT ?3`,
     )
-    .bind(shiftDay(latest, -29), new Date(now - 3 * 86_400_000).toISOString(), new Date(now - 30 * 86_400_000).toISOString(), limit)
+    .bind(shiftDay(latest, -29), new Date(now - ASK_AGAIN_DAYS * 86_400_000).toISOString(), limit)
     .all<{ asset_id: string; spend: number }>();
   return c.json({
     assets: results.map((r) => ({
