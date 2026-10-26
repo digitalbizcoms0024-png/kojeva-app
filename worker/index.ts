@@ -23,7 +23,7 @@ import type {
 import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, isHit, roas, type Totals } from "../shared/metrics.ts";
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { GROUPS } from "../shared/taxonomy.ts";
-import { accessConfigured, accessMiddleware } from "./access.ts";
+import { accessConfigured, accessMiddleware, internalReadHeaders } from "./access.ts";
 import { bumpVersion, setDeployedVersion, cachedResponse, cacheResponse, dataVersion, memoize, readSnapshot, writeSnapshot } from "./cache.ts";
 import type { AppEnv, Env } from "./env.ts";
 import { loadAlerts, loadSuggestions } from "./alerts.ts";
@@ -31,7 +31,7 @@ import { atria } from "./atria.ts";
 import { report, reports } from "./report.ts";
 import { calls, isMediaBuyer } from "./calls.ts";
 import { editing } from "./editing.ts";
-import { connection, sync } from "./meta/routes.ts";
+import { connection, setWarmUp, sync } from "./meta/routes.ts";
 import { adPreview, PREVIEW_FORMATS, type PreviewFormat } from "./meta/preview.ts";
 import { runSync, utcDay } from "./meta/sync.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
@@ -700,6 +700,36 @@ app.onError((err, c) => {
   );
 });
 
+/**
+ * The dashboard's first reads, made one at a time right after a sync. A sync changes the ad numbers,
+ * and the dashboard's eight panels would otherwise each rebuild them in parallel in one isolate on the
+ * next visit; together they ran out of Worker resources and every panel answered 503 (Oct 23–24).
+ * Done here, the results are stored (snapshots), and visits read them. A failure only skips the warm-up.
+ */
+export const WARM_PATHS = [
+  "/api/rankings?range=month&sort=spend&limit=5",
+  "/api/pods?range=month",
+  "/api/launches?weeks=1",
+  "/api/coverage?range=month",
+  "/api/alerts?v=0",
+  "/api/trends?range=month",
+];
+export async function warmDashboard(env: Env, ctx: ExecutionContext): Promise<number> {
+  let warmed = 0;
+  for (const path of WARM_PATHS) {
+    try {
+      const res = await app.fetch(new Request(`https://warm-up.internal${path}`, { headers: internalReadHeaders() }), env, ctx);
+      if (res.ok) warmed++;
+      await res.body?.cancel();
+    } catch (e) {
+      console.error(`warm-up ${path}`, e);
+    }
+  }
+  return warmed;
+}
+
+setWarmUp(warmDashboard);
+
 /** The live hub's address: kojeva-hub.<account>.workers.dev. */
 const LIVE_HOST = /^kojeva-hub\./;
 
@@ -716,7 +746,7 @@ export default {
   },
   /** Nightly: refresh ads and re-pull the last 7 days (Meta keeps revising recent days). */
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runSync(env, { since: utcDay(-6), until: utcDay(0), ads: true }));
+    ctx.waitUntil(runSync(env, { since: utcDay(-6), until: utcDay(0), ads: true }).then(() => warmDashboard(env, ctx)));
   },
 } satisfies ExportedHandler<Env>;
 

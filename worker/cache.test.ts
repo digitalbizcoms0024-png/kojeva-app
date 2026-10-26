@@ -1,9 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import app from "./index.ts";
+import app, { WARM_PATHS, warmDashboard } from "./index.ts";
 import type { Env } from "./env.ts";
-import { forgetMemory, readSnapshot, writeSnapshot } from "./cache.ts";
+import { bumpStats, forgetMemory, readSnapshot, writeSnapshot } from "./cache.ts";
 import { attribute } from "./meta/sync.ts";
 import { accessFixture, TEST_TEAM } from "./testing/access.ts";
+import { internalReadHeaders } from "./access.ts";
 import { testDb } from "./testing/db.ts";
 
 const CLIENT_ID = "abc123.access";
@@ -138,5 +139,29 @@ describe("large snapshots", () => {
     // Small ones stay plain.
     await writeSnapshot(db, "memo:small", "v1", '{"a":1}');
     expect(await readSnapshot(db, "memo:small", "v1")).toBe('{"a":1}');
+  });
+});
+
+describe("warm-up after a sync", () => {
+  it("stores the dashboard's first reads one at a time, so visits read them instead of rebuilding them together", async () => {
+    await bumpStats(env.DB);
+    forgetMemory();
+    expect(await warmDashboard(env, {} as ExecutionContext)).toBe(WARM_PATHS.length);
+    // A fresh isolate (the next visitor) reads the stored result: no rebuild.
+    forgetMemory();
+    const res = await call("/api/rankings?range=month&sort=spend&limit=5", person);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("X-Cache")).toBe("stored");
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM snapshots WHERE key = 'stats:concept-numbers'").first<{ n: number }>()).toEqual({ n: 1 });
+  });
+
+  it("keeps its internal key to itself: a made-up one needs a sign-in, and it never writes", async () => {
+    expect((await call("/api/rankings?range=month", { "X-Hub-Internal": "guess" })).status).toBe(401);
+    // Even after the warm-up made its key, the header alone gets nowhere.
+    await warmDashboard(env, {} as ExecutionContext);
+    expect((await call("/api/rankings?range=month", { "X-Hub-Internal": "guess" })).status).toBe(401);
+    expect((await call("/api/sync", { "X-Hub-Internal": "guess" }, { method: "POST", body: "{}" })).status).toBe(401);
+    // The real key reads only.
+    expect((await call("/api/sync", internalReadHeaders(), { method: "POST", body: "{}" })).status).toBe(401);
   });
 });

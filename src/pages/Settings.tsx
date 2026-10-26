@@ -133,7 +133,7 @@ function MetaPanel({ onSynced, canEdit }: { onSynced: () => void; canEdit: boole
     try {
       for (const [i, w] of windows.entries()) {
         setProgress({ done: i, total: windows.length, label: `${shortDate(w.since)} – ${shortDate(w.until)}` });
-        const r = await post<{ rows: number; ads?: number }>("/api/sync", { ...w, ads: i === 0 });
+        const r = await post<{ rows: number; ads?: number }>("/api/sync", { ...w, ads: i === 0, warm: i === windows.length - 1 });
         rows += r.rows;
       }
       setNotice({ kind: "good", text: `Synced ${total} days: ${rows.toLocaleString()} ad-day rows.` });

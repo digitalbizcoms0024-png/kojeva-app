@@ -23,6 +23,16 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   return r;
 }
 
+/**
+ * An error the hub's own code didn't write (it always sends a JSON message): Cloudflare stopped the
+ * request first, e.g. when the Worker ran out of resources.
+ */
+export function noBodyMessage(r: Response): string {
+  if (r.status === 502 || r.status === 503 || r.status === 504)
+    return `Cloudflare stopped this request (HTTP ${r.status}), usually because the hub was busy rebuilding its numbers. Try again in a minute.`;
+  return r.statusText || `HTTP ${r.status}`;
+}
+
 /** How long a request may take before the panel says so and offers a retry. */
 const SLOW_MS = 45_000;
 
@@ -43,7 +53,7 @@ export function useApi<T>(path: string | null) {
     apiFetch(path, { signal: abort.signal })
       .then(async (r) => {
         const body = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error((body as { error?: string }).error || r.statusText || `HTTP ${r.status}`);
+        if (!r.ok) throw new Error((body as { error?: string }).error || noBodyMessage(r));
         return body as T;
       })
       .then((d) => alive && setData(d))
