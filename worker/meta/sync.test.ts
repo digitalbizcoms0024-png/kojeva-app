@@ -473,6 +473,27 @@ describe("thumbnails", () => {
     await runSync(env, range, meta(true));
     expect(await thumb()).toEqual({ thumbnail_url: FEED, thumb_hash: "h-feed" });
   });
+
+  it("takes the post's picture from the ad that made it, not a newer copy reusing the post", async () => {
+    const post = "776862388850901_122147682321047339";
+    const ad = (id: string, created: string, image: string) => ({
+      id,
+      name: "1",
+      created_time: created,
+      adset: { id: "as9", name: "Shameer | Static 3 | Negative Marketing #2" },
+      creative: { id: `c${id}`, effective_object_story_id: post, object_type: "SHARE", image_url: image },
+    });
+    const meta = fakeMeta((url) => {
+      if (url.pathname.endsWith(`${ACT}/ads`))
+        // Meta lists the newest ad first; the Bid Cap copy carries an unrelated product photo.
+        return { data: [ad("120250463394620075", "2026-10-24T10:00:00-0400", "https://scontent.example/product.png"), ad("120250303598690075", "2026-10-15T10:00:00-0400", "https://scontent.example/original.png")] };
+      if (url.pathname.endsWith(`${ACT}/insights`)) return { data: [] };
+      return { error: { message: `Unexpected ${url.pathname}`, code: 100 } };
+    });
+    await runSync(env, { since: "2026-10-08", until: "2026-10-14", ads: true }, meta);
+    const row = await env.DB.prepare("SELECT thumbnail_url FROM posts WHERE id = ?1").bind(post).first<{ thumbnail_url: string }>();
+    expect(row?.thumbnail_url).toBe("https://scontent.example/original.png");
+  });
 });
 
 describe("thumbnailNeedsRefresh", () => {
