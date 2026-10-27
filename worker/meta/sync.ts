@@ -210,7 +210,9 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
       posts.set(postId, {
         id: postId,
         media_type: mediaTypeFor(ad),
-        thumbnail_url: prev?.thumbnail_url ?? thumbnailFor(ad),
+        // The oldest ad made the post; later copies reusing it can carry an unrelated image
+        // (ad "1"'s Bid Cap copy: a plain product photo), and Meta lists the newest first.
+        thumbnail_url: prev && !(created && prev.created_time && created < prev.created_time) ? (prev.thumbnail_url ?? thumbnailFor(ad)) : (thumbnailFor(ad) ?? prev?.thumbnail_url ?? null),
         created_time: prev?.created_time && created ? (prev.created_time < created ? prev.created_time : created) : (prev?.created_time ?? created),
       });
       ads.push({
