@@ -208,13 +208,14 @@ app.get("/rankings", async (c) => {
   const limit = Math.min(Number(c.req.query("limit") ?? 500) || 500, 2000);
 
   // ?launched=2w: posts first launched since Monday of last week (as the Dashboard's "New in the last
-  // 2 weeks"), with their numbers from then on.
-  if (c.req.query("launched") === "2w") {
+  // 2 weeks"); ?launched=1w: in the last 7 days. Their numbers from then on.
+  const launched = c.req.query("launched");
+  if (launched === "2w") {
     const day = new Date(`${range.to}T00:00:00Z`).getUTCDay();
     range.from = shiftDay(range.to, -((day + 6) % 7) - 7);
-  }
+  } else if (launched === "1w") range.from = shiftDay(range.to, -6);
   let items = await loadPosts(c.env.DB, range.from, range.to);
-  if (c.req.query("launched") === "2w") items = items.filter((p) => p.firstSpend != null && p.firstSpend >= range.from);
+  if (launched === "1w" || launched === "2w") items = items.filter((p) => p.firstSpend != null && p.firstSpend >= range.from);
   // All time starts at the first day anything spent, not 2000-01-01.
   const firstDay = items.reduce((min, p) => (p.firstSpend && p.firstSpend < min ? p.firstSpend : min), range.to);
   const minDays = daysBetween(firstDay > range.from ? firstDay : range.from, range.to) + 1;
@@ -240,6 +241,8 @@ app.get("/rankings", async (c) => {
   if (status === "active") items = items.filter((p) => p.active);
   if (status === "paused") items = items.filter((p) => !p.active);
   if (status === "fatigued") items = items.filter((p) => p.fatigue);
+  if (status === "hits") items = items.filter((p) => isHit(p.hit));
+  if (status === "scaling") items = items.filter((p) => p.scaling);
   if (search)
     items = items.filter((p) => [p.name, p.assignment.editorName, p.assignment.angle, p.assignment.format].some((s) => s?.toLowerCase().includes(search)));
 

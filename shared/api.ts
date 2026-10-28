@@ -129,6 +129,8 @@ export interface PostSummary {
   daysLive: number | null;
   copies: number;
   active: boolean;
+  /** A copy is running outside testing ad sets (a scaling or other campaign). */
+  scaling: boolean;
   assignment: Assignment;
   totals: Totals;
   hit: HitStatus | null;
