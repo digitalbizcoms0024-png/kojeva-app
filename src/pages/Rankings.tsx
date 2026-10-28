@@ -13,7 +13,7 @@ import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
 
 type Tab = "ads" | "pods" | "editors";
-type Preset = "all" | "new";
+type Preset = "all" | "1w" | "2w";
 /** Whose ads and pods the page shows: Kojeva's own pods (default), or everyone incl. Agency and partners like Trybe. */
 type View = "inhouse" | "all";
 
@@ -21,9 +21,25 @@ const STATUSES = [
   { value: "all", label: "All" },
   { value: "active", label: "Active" },
   { value: "paused", label: "Paused" },
+  { value: "hits", label: "Hits" },
+  { value: "scaling", label: "Scaling" },
   { value: "fatigued", label: "Fatigued or watch" },
   { value: "hits_off", label: "Hits turned off" },
 ];
+
+/** One-click filters beside the presets (owner, Oct 28); each is a Status value, also in Filters. */
+const QUICK: { value: string; label: string; title: string }[] = [
+  { value: "all", label: "Any", title: "No quick filter" },
+  { value: "hits", label: "Hits", title: "Ads from concepts that hit (on target, late hit or called a winner)" },
+  { value: "scaling", label: "Scaling", title: "A copy is running outside testing ad sets" },
+  { value: "fatigued", label: "Watch", title: "Fatiguing, or flagged to watch" },
+  { value: "hits_off", label: "Turned off", title: "Hits that no longer run anywhere" },
+];
+
+type Layout = "cards" | "table";
+/** Rows per page in the table view (the cards show PAGE). */
+const TABLE_PAGE = 50;
+const LAYOUT_KEY = "kojeva.rankings.layout";
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: "spend", label: "Spend" },
@@ -57,13 +73,15 @@ export function RankingsPage({
   initialStatus?: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("ads");
-  const [sort, setSort] = useState<SortKey>("spend");
+  // ROAS first (owner, Oct 28); ads under the daily spend minimum are left out of it.
+  const [sort, setSort] = useState<SortKey>("roas");
   const [view, setView] = useState<View>("inhouse");
   // A pod picked in Filters; "" means every pod in the view.
   const [pod, setPod] = useState("");
   const [status, setStatus] = useState(initialStatus ?? "all");
-  // Preset: only ads launched in the last 2 weeks (their numbers from Monday of last week on).
-  const [launched, setLaunched] = useState(false);
+  // Preset: only ads launched in the last 7 days, or since Monday of last week (numbers from then on).
+  const [preset, setPreset] = useState<Preset>("all");
+  const launched = preset !== "all";
   const [format, setFormat] = useState("");
   const [angle, setAngle] = useState("");
   const [search, setSearch] = useState("");
@@ -82,11 +100,28 @@ export function RankingsPage({
   }, [initialStatus]);
 
   const [showAll, setShowAll] = useState(false);
+  // Cards or a compact table, remembered per browser.
+  const [layout, setLayoutState] = useState<Layout>(() => {
+    try {
+      return localStorage.getItem(LAYOUT_KEY) === "table" ? "table" : "cards";
+    } catch {
+      return "cards";
+    }
+  });
+  const setLayout = (l: Layout) => {
+    setLayoutState(l);
+    try {
+      localStorage.setItem(LAYOUT_KEY, l);
+    } catch {
+      // Private window: the choice lasts for this visit only.
+    }
+  };
+  const size = layout === "table" ? TABLE_PAGE : PAGE;
   // New (2 weeks) is in-house pods only, whatever the view (owner, Oct 28).
   const podParam = pod || (view === "inhouse" || launched ? "inhouse" : "all");
   const inhouseIds = meta.pods.filter((p) => p.inhouse).map((p) => p.id);
   const rankings = useApi<RankingsResponse>(
-    tab === "ads" ? `/api/rankings?${qs({ range, sort, pod: podParam, status, q, format, angle, launched: launched ? "2w" : undefined, all: showAll && sort !== "spend" ? "1" : undefined })}` : null,
+    tab === "ads" ? `/api/rankings?${qs({ range, sort, pod: podParam, status, q, format, angle, launched: launched ? preset : undefined, all: showAll && sort !== "spend" ? "1" : undefined })}` : null,
   );
   const podsAll = useApi<PodsResponse>(tab !== "ads" ? `/api/pods?${qs({ range })}` : null);
   // The Pods and Editors tabs follow the view: in-house pods only, or every group.
@@ -99,10 +134,10 @@ export function RankingsPage({
   // The ad whose details slide in from the right; none until one is clicked (or linked with ?post=).
   const activeId = selected;
   // 10 a page (the full list ran to hundreds of cards); a new filter goes back to page 1.
-  const query = `${range}|${sort}|${podParam}|${status}|${q}|${format}|${angle}|${launched}`;
+  const query = `${range}|${sort}|${podParam}|${status}|${q}|${format}|${angle}|${preset}|${layout}`;
   const [page, setPage] = useState({ query, n: 0 });
-  const pageNo = page.query === query ? Math.min(page.n, Math.max(0, Math.ceil(items.length / PAGE) - 1)) : 0;
-  const start = pageNo * PAGE;
+  const pageNo = page.query === query ? Math.min(page.n, Math.max(0, Math.ceil(items.length / size) - 1)) : 0;
+  const start = pageNo * size;
   // On a phone the ad's details open over the list instead of below all of it.
   const rank = items.findIndex((p) => p.postId === activeId) + 1;
 
@@ -145,12 +180,19 @@ export function RankingsPage({
               <div className="flex flex-wrap items-center gap-3">
                 <Segmented
                   label="Preset"
-                  value={launched ? "new" : ("all" as Preset)}
-                  onChange={(v: Preset) => setLaunched(v === "new")}
+                  value={preset}
+                  onChange={setPreset}
                   options={[
                     { value: "all", label: "All ads" },
-                    { value: "new", label: "New (2 weeks)" },
+                    { value: "1w", label: "New: past week", title: "Ads launched in the last 7 days (in-house pods)" },
+                    { value: "2w", label: "New: past 2 weeks", title: "Ads launched since Monday of last week (in-house pods)" },
                   ]}
+                />
+                <Segmented
+                  label="Quick filter"
+                  value={QUICK.some((x) => x.value === status) ? status : ""}
+                  onChange={setStatus}
+                  options={QUICK.map((x) => ({ value: x.value, label: x.label, title: x.title }))}
                 />
                 <SearchBox value={search} onChange={setSearch} placeholder="Search ads, editors, angles…" />
                 <Select label="Sort" value={sort} onChange={(v) => setSort(v as SortKey)} options={SORTS} />
@@ -178,6 +220,15 @@ export function RankingsPage({
                   <Select stacked label="Format" value={format} onChange={setFormat} options={vocab(FORMATS, "All formats")} />
                   <Select stacked label="Angle" value={angle} onChange={setAngle} options={vocab(ANGLES, "All angles")} />
                 </FiltersButton>
+                <Segmented
+                  label="Layout"
+                  value={layout}
+                  onChange={setLayout}
+                  options={[
+                    { value: "cards", label: "Cards" },
+                    { value: "table", label: "Table" },
+                  ]}
+                />
                 <button
                   type="button"
                   className="btn btn-secondary px-2.5"
@@ -192,14 +243,18 @@ export function RankingsPage({
 
               {/* Row 2: what's applied (removable) and the totals. */}
               <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs">
-                {launched && <span className="text-ink-2">Launched since Monday of last week ·</span>}
+                {launched && rankings.data && (
+                  <span className="text-ink-2">
+                    Ads launched {shortDate(rankings.data.from)} – {shortDate(rankings.data.to)} ·
+                  </span>
+                )}
                 {podParam === "inhouse" && (
                   <span className="text-ink-2">
+                    In-house pods:{" "}
                     {meta.pods
                       .filter((p) => p.kind === "pod" && p.inhouse)
                       .map((p) => p.name)
-                      .join(", ")}{" "}
-                    only ·
+                      .join(", ")}
                   </span>
                 )}
                 {[
@@ -232,8 +287,9 @@ export function RankingsPage({
                   ))}
                 {rankings.data && (
                   <span className="num ml-auto text-ink-3">
-                    {int(rankings.data.count)} ads · {shortDate(rankings.data.from === "2000-01-01" ? null : rankings.data.from)} – {shortDate(rankings.data.to)} · spend{" "}
-                    <b className="text-ink">{money(rankings.data.totals.spendCents, { compact: true })}</b> · CPA{" "}
+                    {int(rankings.data.count)} {rankings.data.count === 1 ? "ad" : "ads"} ·{" "}
+                    {rankings.data.from === "2000-01-01" ? "All time" : `${shortDate(rankings.data.from)} – ${shortDate(rankings.data.to)}`} ·{" "}
+                    <b className="text-ink">{money(rankings.data.totals.spendCents, { compact: true })}</b> spent · CPA{" "}
                     <b className="text-ink">{dollars(cpa(rankings.data.totals))}</b> · ROAS <b className="text-ink">{roas(rankings.data.totals)?.toFixed(2) ?? "—"}</b>
                   </span>
                 )}
@@ -249,18 +305,23 @@ export function RankingsPage({
                 <p className="text-xs text-ink-2">
                   {rankings.data.minSpendCents != null ? (
                     <>
-                      <Info id="rankMin" /> Only ads with <b className="text-ink">{money(rankings.data.minSpendCents, { compact: true })}+</b> spend ($
-                      {meta.targets.rankMinSpendPerDay}/day × {rankings.data.minDays} days) are ranked
-                      {rankings.data.belowMin > 0 && ` · ${int(rankings.data.belowMin)} below that left out`} ·{" "}
-                      <button type="button" className="link" onClick={() => setShowAll(true)}>
-                        Include them
-                      </button>
+                      <Info id="rankMin" /> Ranked among ads that spent at least <b className="text-ink">{money(rankings.data.minSpendCents, { compact: true })}</b> ($
+                      {meta.targets.rankMinSpendPerDay} a day × {rankings.data.minDays} days), so a small lucky ad doesn't top the list
+                      {rankings.data.belowMin > 0 && (
+                        <>
+                          {" "}
+                          · {int(rankings.data.belowMin)} smaller {rankings.data.belowMin === 1 ? "ad is" : "ads are"} hidden ·{" "}
+                          <button type="button" className="link" onClick={() => setShowAll(true)}>
+                            Show them
+                          </button>
+                        </>
+                      )}
                     </>
                   ) : (
                     <>
-                      Every ad is ranked, however little it spent ·{" "}
+                      Showing every ad, however little it spent ·{" "}
                       <button type="button" className="link" onClick={() => setShowAll(false)}>
-                        Apply the ${meta.targets.rankMinSpendPerDay}/day minimum
+                        Hide ads under ${meta.targets.rankMinSpendPerDay} a day
                       </button>
                     </>
                   )}{" "}
@@ -278,21 +339,35 @@ export function RankingsPage({
                 {rankings.data && items.length === 0 && (
                   <Empty>{status === "hits_off" ? "No hits are turned off: every winner still has a copy running." : "No ads with spend match these filters."}</Empty>
                 )}
-                <ol className="flex flex-col gap-2">
-                  {items.slice(start, start + PAGE).map((p, i) => (
-                    <RankCard
-                      key={p.postId}
-                      post={p}
-                      rank={start + i + 1}
+                {layout === "table" ? (
+                  items.length > 0 && (
+                    <RankTable
+                      items={items.slice(start, start + size)}
+                      start={start}
                       targets={meta.targets}
-                      active={p.postId === activeId}
-                      onSelect={() => setSelected(p.postId)}
+                      activeId={activeId}
+                      onSelect={setSelected}
+                      sort={sort}
+                      onSort={setSort}
                     />
-                  ))}
-                </ol>
+                  )
+                ) : (
+                  <ol className="flex flex-col gap-2">
+                    {items.slice(start, start + size).map((p, i) => (
+                      <RankCard
+                        key={p.postId}
+                        post={p}
+                        rank={start + i + 1}
+                        targets={meta.targets}
+                        active={p.postId === activeId}
+                        onSelect={() => setSelected(p.postId)}
+                      />
+                    ))}
+                  </ol>
+                )}
                 <Pager
                   page={pageNo}
-                  size={PAGE}
+                  size={size}
                   total={items.length}
                   onPage={(n) => {
                     setPage({ query, n });
@@ -469,6 +544,97 @@ function RankCard({ post, rank, targets, active, onSelect }: { post: PostSummary
         </div>
       </button>
     </li>
+  );
+}
+
+/**
+ * The compact view: one row per ad (about five times as many on screen as the cards), columns that
+ * re-sort the list on click, and a row opens the ad's side card like a card does.
+ */
+function RankTable({
+  items,
+  start,
+  targets,
+  activeId,
+  onSelect,
+  sort,
+  onSort,
+}: {
+  items: PostSummary[];
+  start: number;
+  targets: Targets;
+  activeId: string | null;
+  onSelect: (postId: string) => void;
+  sort: SortKey;
+  onSort: (s: SortKey) => void;
+}) {
+  const head = (label: string, key: SortKey | null, cls = "") =>
+    key ? (
+      <th className={`py-2 pr-3 text-right font-normal ${cls}`} aria-sort={sort === key ? "descending" : undefined}>
+        <button type="button" onClick={() => onSort(key)} className={`kicker hover:text-ink ${sort === key ? "text-ink" : ""}`} title={`Rank by ${label.toLowerCase()}`}>
+          {label}
+          {sort === key ? " ▼" : ""}
+        </button>
+      </th>
+    ) : (
+      <th className={`py-2 pr-3 text-right font-normal ${cls}`}>{label}</th>
+    );
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] table-fixed text-sm">
+        <thead className="kicker text-left">
+          <tr className="border-b-2 border-divider">
+            <th className="w-9 py-2 font-normal">#</th>
+            <th className="w-[44%] py-2 pr-3 font-normal">Ad</th>
+            {head("Spend", "spend")}
+            {head("Purchases", "purchases", "hidden sm:table-cell")}
+            {head("CPA", "cpa")}
+            {head("ROAS", "roas")}
+            {head("CTR", "ctr", "hidden md:table-cell")}
+            <th className="hidden py-2 pr-3 text-right font-normal lg:table-cell">
+              Days live <Info id="daysLive" />
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((p, i) => (
+            <tr
+              key={p.postId}
+              onClick={() => onSelect(p.postId)}
+              className={`cursor-pointer border-b border-divider hover:bg-surface ${p.postId === activeId ? "bg-surface" : ""}`}
+            >
+              <td className="num py-2 align-middle font-bold text-ink-3">{start + i + 1}</td>
+              <td className="max-w-0 py-2 pr-3">
+                <button type="button" className="flex w-full min-w-0 items-center gap-2.5 text-left" onClick={() => onSelect(p.postId)}>
+                  <Thumb mediaType={p.mediaType} label="" url={p.thumbnailUrl} className="h-10 w-7 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold text-ink" title={p.name}>
+                      {p.name}
+                    </span>
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-3">
+                      <PodChip podId={p.assignment.podId} source={p.assignment.podSource} />
+                      {!p.active && <Tag tone="outline">Paused</Tag>}
+                      <FatigueTag f={p.fatigue} />
+                      <HitBadge status={p.hit} />
+                    </span>
+                  </span>
+                </button>
+              </td>
+              <td className="num py-2 pr-3 text-right text-ink">{money(p.totals.spendCents, { compact: true })}</td>
+              <td className="num hidden py-2 pr-3 text-right text-ink sm:table-cell">{int(p.totals.purchases)}</td>
+              <td className="py-2 pr-3 text-right">
+                <CpaValue value={cpa(p.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
+              </td>
+              <td className="py-2 pr-3 text-right">
+                <RoasValue value={roas(p.totals)} target={targets.targetRoas} />
+              </td>
+              <td className="num hidden py-2 pr-3 text-right text-ink md:table-cell">{pct(ctr(p.totals))}</td>
+              <td className="num hidden py-2 pr-3 text-right text-ink-3 lg:table-cell">{p.daysLive ?? "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

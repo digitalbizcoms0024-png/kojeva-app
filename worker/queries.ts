@@ -110,6 +110,8 @@ async function loadPostBase(db: D1Database, postId?: string): Promise<Row[]> {
       name: first?.name ?? null,
       copies: list.length,
       active: list.some((ad) => ad.status === "ACTIVE") ? 1 : 0,
+      // Running outside testing ad sets (scaling and other campaigns).
+      scaling: list.some((ad) => ad.status === "ACTIVE" && ad.concept_id == null) ? 1 : 0,
       launched: list.find((ad) => ad.created_time != null)?.created_time ?? null,
       concept_id: first?.concept_id ?? null,
       adset_name: first?.adset_name ?? null,
@@ -488,9 +490,15 @@ export async function loadPosts(db: D1Database, from: string, to: string, opts: 
       thumbnailUrl: r.thumbnail_url == null ? null : String(r.thumbnail_url),
       launched,
       firstSpend: w?.firstDate ?? null,
-      daysLive: w && latest ? daysBetween(w.firstDate, latest) + 1 : null,
+      // From launch (or first spend, if earlier): first spend alone stops at the start of the synced
+      // history, so every older ad read "101 days live" (owner, Oct 28).
+      daysLive: (() => {
+        const from = [launched, w?.firstDate].filter((d): d is string => d != null).sort()[0];
+        return from && latest ? daysBetween(from, latest) + 1 : null;
+      })(),
       copies: Number(r.copies),
       active: Number(r.active) === 1,
+      scaling: Number(r.scaling) === 1,
       assignment: toAssignment(r),
       totals: totalsByPost.get(postId) ?? toTotals(undefined),
       hit,

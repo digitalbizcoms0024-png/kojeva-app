@@ -213,7 +213,8 @@ export function Segmented<T extends string>({
   label,
 }: {
   value: T;
-  options: { value: T; label: string }[];
+  /** `title`: a hover hint saying what the option shows. */
+  options: { value: T; label: string; title?: string }[];
   onChange: (v: T) => void;
   label?: string;
 }) {
@@ -224,6 +225,7 @@ export function Segmented<T extends string>({
           key={o.value}
           role="tab"
           aria-selected={o.value === value}
+          title={o.title}
           onClick={() => onChange(o.value)}
           className={`-ml-px border px-3 py-1.5 text-sm transition first:ml-0 ${
             o.value === value

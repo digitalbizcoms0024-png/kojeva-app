@@ -45,7 +45,8 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   (`worker/rules.ts`), so a deploy that changes it recomputes without a sync.
 - **Hit rate** = hits ÷ (hits + misses).
 - **Pod score** (Dashboard leaderboard order; `podScores` in `shared/metrics.ts`, owner, Oct 28), out of 100:
-  hit rate (`scoreWeightHitRate`, 40: pod's hit rate ÷ best pod's) + spend (`scoreWeightSpend`, 40: pod's
+  hit rate (`scoreWeightHitRate`: pod's hit rate ÷ `scoreFullHitRate` 20%, capped at 1, so every pod at
+  20% or above gets full points and a pod's points don't depend on the others) + spend (`scoreWeightSpend`, 40: pod's
   spend in the period ÷ biggest pod's) + ROAS (`scoreWeightRoas`, 20: pod's ROAS ÷ target ROAS, capped at
   1, × min(1, spend ÷ `scoreRoasMinSpend` $300)). In-house pods only (never Agency or partners like Trybe), on the Dashboard and the top of the Pods page; ties go to spend. Weights in
   Settings → Targets (must add up to 100).
@@ -94,7 +95,17 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   for ranges over ~2 months.
 
 ## Ad Rankings minimum spend (`/api/rankings`)
-Ranking by purchases, ROAS, CTR or CPA only includes posts that spent at least `rankMinSpendPerDay` (Settings → Targets, default $50) × the days in the range; All time counts from the first day anything spent. Ranking by spend, and the turned-off-hits list, show every post. `?all=1` (the page's "Include them") lifts the minimum. Changing it doesn't recompute the summaries (it's applied per request).
+Ranking by purchases, ROAS, CTR or CPA only includes posts that spent at least `rankMinSpendPerDay` (Settings → Targets, default $50) × the days in the range; All time counts from the first day anything spent. Ranking by spend, and the turned-off-hits list, show every post. `?all=1` (the page's "Show them") lifts the minimum. Changing it doesn't recompute the summaries (it's applied per request).
+
+## Ad Rankings page (owner, Oct 28)
+- Sorted by ROAS by default (so the minimum above applies); Cards or a Table view (50 a page, columns re-sort).
+- Show: in-house pods (default) or all with agency & partners, for the Ads, Pods and Editors tabs.
+- Presets: All ads · New: past week (`?launched=1w`, first spend in the last 7 days) · New: past 2 weeks
+  (`?launched=2w`, since Monday of last week). New is always in-house pods only.
+- Quick filters (`?status=`): `hits` (the concept it was tested in is a hit, late hit or called winner),
+  `scaling` (an active copy outside testing ad sets), `fatigued` (Watch), `hits_off` (Turned off).
+- **Days live** = latest synced day − (launch, or first spend if earlier) + 1. First spend alone stopped
+  at the start of the synced history, so older ads all read "101 days live".
 
 ## CSV export
 - Rankings (current filters), Concepts and the Pods table. Money in plain dollars, every value labelled with its source;

@@ -194,26 +194,33 @@ describe("attribution comparison", () => {
 });
 
 describe("podScores", () => {
-  // The leaderboard on Oct 27 (hit rate, spend, ROAS from Meta).
+  // The leaderboard on Oct 27 (hit rate, spend, ROAS from Meta), with the owner's weights 50 / 20 / 30.
+  const t = { ...DEFAULT_TARGETS, scoreWeightHitRate: 50, scoreWeightSpend: 20, scoreWeightRoas: 30 };
   const pod = (hitRate: number | null, spend: number, roasX: number) => ({
     hitRate,
     totals: { ...ZERO_TOTALS, spendCents: spend * 100, revenueCents: Math.round(spend * 100 * roasX) },
   });
   const rows = [pod(0.5, 8400, 1.45), pod(3 / 48, 27000, 0.94), pod(2 / 24, 12200, 0.9), pod(0, 540, 1.2), pod(null, 27, 0.92)];
 
-  it("weights hit rate 40, spend 40 and ROAS 20, against the best pod and the target", () => {
-    const [shameer, harris, dhia, ali, caicos] = podScores(rows, DEFAULT_TARGETS);
-    expect(shameer!.hitRate).toBeCloseTo(40);
-    expect(shameer!.spend).toBeCloseTo((8400 / 27000) * 40);
-    expect(shameer!.roas).toBeCloseTo((1.45 / 1.7) * 20); // 17.1
-    expect(harris!.spend).toBeCloseTo(40);
-    expect(Math.round(shameer!.score)).toBe(70);
-    expect(Math.round(harris!.score)).toBe(56);
-    expect(Math.round(dhia!.score)).toBe(35);
-    // Ali: ROAS 1.2 at $540 (above the $300 guard); Caicos: nothing decided, $27 of $300.
-    expect(ali!.roas).toBeCloseTo((1.2 / 1.7) * 20);
+  it("gives full hit-rate points from 20%, spend against the biggest pod, ROAS against the target", () => {
+    const [shameer, harris, dhia, ali, caicos] = podScores(rows, t);
+    expect(shameer!.hitRate).toBe(50); // 50% is past 20%: capped at full points
+    expect(harris!.hitRate).toBeCloseTo((3 / 48 / 0.2) * 50); // 15.6
+    expect(dhia!.hitRate).toBeCloseTo((2 / 24 / 0.2) * 50); // 20.8
+    expect(shameer!.spend).toBeCloseTo((8400 / 27000) * 20);
+    expect(harris!.spend).toBeCloseTo(20);
+    expect(shameer!.roas).toBeCloseTo((1.45 / 1.7) * 30);
+    expect([shameer, harris, dhia, ali].map((s) => Math.round(s!.score))).toEqual([82, 52, 46, 22]);
+    // Caicos: nothing decided, $27 of the $300 ROAS minimum.
     expect(caicos!.hitRate).toBe(0);
-    expect(caicos!.roas).toBeCloseTo((0.92 / 1.7) * (27 / 300) * 20);
+    expect(caicos!.roas).toBeCloseTo((0.92 / 1.7) * (27 / 300) * 30);
+  });
+
+  it("doesn't move a pod's hit-rate points when another pod does better", () => {
+    const alone = podScores([pod(0.1, 1000, 1)], t)[0]!.hitRate;
+    const beside = podScores([pod(0.1, 1000, 1), pod(0.9, 1000, 1)], t)[0]!.hitRate;
+    expect(alone).toBeCloseTo(25);
+    expect(beside).toBeCloseTo(25);
   });
 
   it("caps ROAS at the target and gives nothing for missing numbers", () => {

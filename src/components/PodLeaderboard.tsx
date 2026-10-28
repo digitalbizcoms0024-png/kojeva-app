@@ -159,7 +159,8 @@ function Leaderboard({
         {SCORE_PARTS.map((p) => (
           <span key={p.key} className="inline-flex items-center gap-1.5">
             <span className="h-1.5 w-3" style={{ background: p.color }} aria-hidden />
-            {p.label} (up to {targets[p.weight]})
+            {p.label} (up to {targets[p.weight]}
+            {p.key === "hitRate" ? `, full at ${targets.scoreFullHitRate}%+` : p.key === "roas" ? `, full at ${targets.targetRoas}+` : ", vs the top spender"})
           </span>
         ))}
       </p>

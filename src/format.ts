@@ -34,11 +34,14 @@ export function int(v: number | null | undefined): string {
   return v == null ? DASH : v.toLocaleString("en-US");
 }
 
+/** "Oct 15"; a date in an earlier year carries it ("Oct 31, 2025"), so old launches don't read as recent. */
 export function shortDate(iso: string | null | undefined): string {
   if (!iso) return DASH;
-  return new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    ...(d.getUTCFullYear() !== new Date().getUTCFullYear() ? { year: "numeric" } : {}),
     timeZone: "UTC",
   });
 }
