@@ -181,7 +181,7 @@ export default function App() {
   return (
     <div className={`min-h-screen md:grid ${collapsed ? "md:grid-cols-[76px_minmax(0,1fr)]" : "md:grid-cols-[232px_minmax(0,1fr)]"}`}>
       <aside
-        className={`border-b-2 border-divider bg-page md:sticky md:top-0 md:flex md:h-screen md:flex-col md:border-r-2 md:border-b-0 md:py-6 ${collapsed ? "md:gap-5 md:overflow-y-auto md:px-2" : "md:gap-8 md:px-4"}`}
+        className={`border-b-2 border-divider bg-page md:sticky md:top-0 md:z-40 md:flex md:h-screen md:flex-col md:border-r-2 md:border-b-0 md:py-6 ${collapsed ? "md:gap-5 md:overflow-y-auto md:px-2" : "md:gap-8 md:px-4"}`}
       >
         <div className={`flex items-center justify-between px-4 py-3 md:px-2 md:py-0 ${collapsed ? "md:flex-col md:gap-3 md:px-0" : "md:items-start md:gap-2"}`}>
           <a href="#/dashboard" className="block" title="Kojeva Hub">
