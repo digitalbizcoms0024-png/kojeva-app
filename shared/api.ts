@@ -216,6 +216,8 @@ export interface ConceptResult {
   candidate: "winner" | "super_winner" | null;
   /** The first rolling window that hit target, for late hits. */
   lateWindow: { from: string; to: string; totals: Totals } | null;
+  /** Every ad was turned off before the usual verdict, so it was judged then on all its spend (windowEnd = last spend). */
+  turnedOff: boolean;
   /** Last day with spend. */
   lastSpend: string | null;
   /** Spent in the last 3 synced days. */

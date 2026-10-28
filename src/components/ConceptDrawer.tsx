@@ -132,7 +132,9 @@ export function ConceptDrawer({
             <section>
               <h3 className="mb-1 font-extrabold text-ink">Test · {range(k.firstSpend, k.windowEnd)}</h3>
               <p className="mb-2 text-xs text-ink-3">
-                {k.qualifiedOn
+                {k.turnedOff
+                  ? `Every ad is turned off (last spend ${shortDate(k.windowEnd)}), so the test ended there and was judged on everything it spent.`
+                  : k.qualifiedOn
                   ? `Judged from first spend to day ${t.testWindowDays}${k.windowEnd === k.qualifiedOn && k.qualifiedOn > k.firstSpend ? `, extended to ${shortDate(k.qualifiedOn)} when an ad reached $${t.minTestSpend}` : ""}.`
                   : `No single ad has spent $${t.minTestSpend} yet, so it isn't judged.`}{" "}
                 Hit = CPA ≤ ${t.targetCpa} {t.hitRule === "both" ? "and" : "or"} ROAS ≥ {t.targetRoas}.

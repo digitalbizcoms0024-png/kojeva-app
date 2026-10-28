@@ -251,12 +251,8 @@ function Leaderboard({
           </div>
         </td>
         <td className="py-3 pr-3 text-right">
-          <span title={`Hit rate ${s.hitRate.toFixed(1)} + spend ${s.spend.toFixed(1)} + ROAS ${s.roas.toFixed(1)}`}>
-            <div className="num text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</div>
-            <div className="num text-xs whitespace-nowrap text-ink-3">
-              {Math.round(s.hitRate)} · {Math.round(s.spend)} · {Math.round(s.roas)}
-            </div>
-          </span>
+          <div className="num text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</div>
+          <ScoreBar score={s} targets={targets} />
         </td>
         <td className="py-3 pr-3 text-right">
           <div className="num text-lg leading-none font-bold text-ink">{pct(r.hitRate, 0)}</div>
@@ -277,27 +273,57 @@ function Leaderboard({
   };
   if (!rows.length) return null;
   return (
-    <table className="w-full text-sm">
-      <thead className="kicker text-left">
-        <tr className="border-b border-divider">
-          <th className="py-2 font-normal">#</th>
-          <th className="py-2 font-normal">Pod</th>
-          <th className="py-2 pr-3 text-right font-normal">
-            Score <Info id="podScore" />
-          </th>
-          <th className="py-2 pr-3 text-right font-normal">
-            Hit rate <Info id="hitRate" />
-          </th>
-          <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
-          <th className="py-2 pr-3 text-right font-normal">Spend</th>
-          <th className="hidden py-2 pr-3 text-right font-normal sm:table-cell">CPA</th>
-          <th className="hidden py-2 text-right font-normal sm:table-cell">ROAS</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, i) => line(r, i + 1))}
-      </tbody>
-    </table>
+    <>
+      <table className="w-full text-sm">
+        <thead className="kicker text-left">
+          <tr className="border-b border-divider">
+            <th className="py-2 font-normal">#</th>
+            <th className="py-2 font-normal">Pod</th>
+            <th className="py-2 pr-3 text-right font-normal">
+              Score <Info id="podScore" />
+            </th>
+            <th className="py-2 pr-3 text-right font-normal">
+              Hit rate <Info id="hitRate" />
+            </th>
+            <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
+            <th className="py-2 pr-3 text-right font-normal">Spend</th>
+            <th className="hidden py-2 pr-3 text-right font-normal sm:table-cell">CPA</th>
+            <th className="hidden py-2 text-right font-normal sm:table-cell">ROAS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => line(r, i + 1))}
+        </tbody>
+      </table>
+      <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-3">
+        <span>Score out of 100, made of:</span>
+        {SCORE_PARTS.map((p) => (
+          <span key={p.key} className="inline-flex items-center gap-1.5">
+            <span className="h-1.5 w-3" style={{ background: p.color }} aria-hidden />
+            {p.label} (up to {targets[p.weight]})
+          </span>
+        ))}
+      </p>
+    </>
+  );
+}
+
+/** The score's three parts, in the bar's order, in neutral shades (pod and status colors are reserved). */
+const SCORE_PARTS = [
+  { key: "hitRate", label: "Hit rate", weight: "scoreWeightHitRate", color: "var(--ink)" },
+  { key: "spend", label: "Spend", weight: "scoreWeightSpend", color: "var(--ink-3)" },
+  { key: "roas", label: "ROAS", weight: "scoreWeightRoas", color: "var(--chart-bar)" },
+] as const;
+
+/** A 100-point bar under the score: each part's points as a segment, the rest left empty. */
+function ScoreBar({ score, targets }: { score: PodScore; targets: Targets }) {
+  const tip = SCORE_PARTS.map((p) => `${p.label} ${Math.round(score[p.key])} of ${targets[p.weight]}`).join(" · ");
+  return (
+    <div className="mt-1.5 ml-auto flex h-1.5 w-24 bg-surface-2" title={tip} role="img" aria-label={tip}>
+      {SCORE_PARTS.map((p) => (
+        <span key={p.key} className="h-full" style={{ width: `${score[p.key]}%`, background: p.color }} />
+      ))}
+    </div>
   );
 }
 

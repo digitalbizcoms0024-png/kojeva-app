@@ -7,6 +7,8 @@ import {
   DEFAULT_TARGETS,
   hitStatus,
   judgingWindowEnd,
+  judgeTurnedOff,
+  OFF_STATUSES,
   lateHitWindow,
   winnerCandidate,
   type HitStatus,
@@ -182,6 +184,8 @@ interface ConceptNumbers {
   /** Before the late-hit look. */
   status: HitStatus;
   lateWindow: { from: string; to: string; totals: Totals } | null;
+  /** Every ad was off and the test ended early because of it (judged on all its spend). */
+  turnedOff: boolean;
 }
 
 /**
@@ -193,8 +197,20 @@ function loadConceptNumbers(db: D1Database): Promise<Record<string, ConceptNumbe
 }
 
 async function computeConceptNumbers(db: D1Database): Promise<Record<string, ConceptNumbers>> {
-  const [targets, latest] = await Promise.all([getTargets(db), getLatestDate(db)]);
+  const [targets, latest, adStatuses] = await Promise.all([
+    getTargets(db),
+    getLatestDate(db),
+    db.prepare("SELECT concept_id, status FROM ads WHERE concept_id IS NOT NULL").raw<[string, string]>(),
+  ]);
   const minSpend = targets.minTestSpend * 100;
+  // Concepts whose ads are all off (paused at any level, archived or deleted).
+  const anyOn = new Set<string>();
+  const seen = new Set<string>();
+  for (const [conceptId, status] of adStatuses) {
+    seen.add(conceptId);
+    if (!OFF_STATUSES.includes(status)) anyOn.add(conceptId);
+  }
+  const allOff = (id: string) => seen.has(id) && !anyOn.has(id);
   // Every day of every ad in a concept, read once (ads first, then each ad's days by key; a window
   // function or GROUP BY here costs D1 several reads per row). Everything below is computed from it.
   const rows = await db
@@ -240,12 +256,19 @@ async function computeConceptNumbers(db: D1Database): Promise<Record<string, Con
     const firstSpend = spent[0]!.date;
     const lastSpend = spent[spent.length - 1]!.date;
     const qualifiedOn = qualified.get(id) ?? null;
-    const windowEnd = judgingWindowEnd(firstSpend, qualifiedOn, targets);
-    const window = sum(series, firstSpend, windowEnd);
-    const status = hitStatus(window, { qualified: qualifiedOn != null, complete: latest != null && latest >= windowEnd }, targets);
+    let windowEnd = judgingWindowEnd(firstSpend, qualifiedOn, targets);
+    let window = sum(series, firstSpend, windowEnd);
+    let status = hitStatus(window, { qualified: qualifiedOn != null, complete: latest != null && latest >= windowEnd }, targets);
+    // Every ad turned off: the test is over, judged now on everything it spent.
+    const turnedOff = allOff(id) && (status === "testing" || status === "ineligible");
+    if (turnedOff) {
+      windowEnd = lastSpend;
+      window = sum(series);
+      status = judgeTurnedOff(status, window, targets);
+    }
     // Second look for day-3 misses that kept spending after their judging window.
     const lateWindow = latest && status === "miss" && lastSpend > windowEnd ? lateHitWindow(series, firstSpend, windowEnd, latest, targets) : null;
-    out[id] = { firstSpend, lastSpend, qualifiedOn, windowEnd, window, allTime: sum(series), status, lateWindow };
+    out[id] = { firstSpend, lastSpend, qualifiedOn, windowEnd, window, allTime: sum(series), status, lateWindow, turnedOff };
   }
   return out;
 }
@@ -313,7 +336,7 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
     return [{ r, ...n }];
   });
 
-  return base.map(({ r, firstSpend, qualifiedOn, windowEnd, window, allTime, status: own, lateWindow }) => {
+  return base.map(({ r, firstSpend, qualifiedOn, windowEnd, window, allTime, status: own, lateWindow, turnedOff }) => {
     // The media buyer's call (on a miss) wins over the measured result.
     const call = calls.get(String(r.id)) ?? null;
     const measured: HitStatus = lateWindow ? "late_hit" : own;
@@ -355,6 +378,7 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
       call: status === measured ? null : call,
       candidate: status === "miss" ? winnerCandidate({ status, allTime, firstSpend, lastSpend }, targets) : null,
       lateWindow,
+      turnedOff,
       lastSpend,
       // Spent in the last 3 synced days.
       stillRunning: lastSpend != null && latest != null && lastSpend >= shiftDay(latest, -2),
