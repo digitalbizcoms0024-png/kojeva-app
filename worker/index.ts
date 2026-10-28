@@ -20,7 +20,7 @@ import type {
   TrendGrain,
   TrendsResponse,
 } from "../shared/api.ts";
-import { ZERO_TOTALS, addTotals, cpa, ctr, hitRate, isHit, roas, type Totals } from "../shared/metrics.ts";
+import { OFF_STATUSES, ZERO_TOTALS, addTotals, cpa, ctr, hitRate, isHit, roas, type Totals } from "../shared/metrics.ts";
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware, internalReadHeaders } from "./access.ts";
@@ -377,10 +377,22 @@ app.get("/pods", async (c) => {
 
   // Concepts count toward the period in which they first spent.
   const inRange = concepts.filter((k) => k.firstSpend >= range.from && k.firstSpend <= range.to);
-  // Testing right now: undecided and still spending (on the latest synced day or the day before).
-  const liveSince = latest ? shiftDay(latest, -1) : null;
-  const live = concepts.filter(
-    (k) => liveSince != null && (k.status === "testing" || k.status === "ineligible") && k.lastSpend != null && k.lastSpend >= liveSince,
+  // Testing now (owner, Oct 28): every concept with an ad switched on in Meta, spending or not, whatever
+  // its result so far. Read from the ads' status (per sync), so a new ad set with no spend counts too.
+  const onByPod = await memoize(
+    db,
+    "concepts-on",
+    async () => {
+      const { results } = await db
+        .prepare("SELECT a.concept_id, c.pod_id, a.status FROM ads a JOIN concepts c ON c.id = a.concept_id WHERE a.concept_id IS NOT NULL")
+        .all<{ concept_id: string; pod_id: string | null; status: string }>();
+      const on = new Map<string, string>();
+      for (const r of results) if (!OFF_STATUSES.includes(r.status) && r.status !== "DISAPPROVED") on.set(r.concept_id, r.pod_id ?? "");
+      const counts: Record<string, number> = {};
+      for (const pod of on.values()) counts[pod] = (counts[pod] ?? 0) + 1;
+      return counts;
+    },
+    { durable: true, scope: "stats" },
   );
 
   const rows: PodRow[] = groups.map((g) => {
@@ -408,7 +420,7 @@ app.get("/pods", async (c) => {
       lateHits: statuses.filter((s) => s === "late_hit").length,
       misses: statuses.filter((s) => s === "miss").length,
       testing: statuses.filter((s) => s === "testing").length,
-      live: live.filter((k) => k.podId === g.podId).length,
+      live: onByPod[g.podId ?? ""] ?? 0,
       hitRate: hitRate(statuses),
       editors: [...editors.values()].sort((a, b) => b.totals.spendCents - a.totals.spendCents),
       spark: sparkDays.map((d) => spendOn.get(`${g.podId ?? ""}|${d}`) ?? 0),

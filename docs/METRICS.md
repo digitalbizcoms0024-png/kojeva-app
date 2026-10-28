@@ -51,9 +51,10 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   spend in the period ÷ biggest pod's) + ROAS (`scoreWeightRoas`, 20: pod's ROAS ÷ target ROAS, capped at
   1, × min(1, spend ÷ `scoreRoasMinSpend` $300)). In-house pods only (never Agency or partners like Trybe), on the Dashboard and the top of the Pods page; ties go to spend. Weights in
   Settings → Targets (must add up to 100).
-- **Testing now** (pod leaderboard, Pods page): concepts with no result yet (testing, or no ad at $100
-  yet) that spent on the latest synced day or the day before, whenever they launched. It counts
-  concepts, not ads. "Testing" alone is narrower: still inside the judging window (owner, Oct 28).
+- **Testing now** (pod leaderboard, Pods page; owner, Oct 28): every concept with an ad switched on in
+  Meta (not paused at any level, archived, deleted or disapproved), spending or not, whatever its result
+  so far, as of the last sync. It counts concepts, not ads. "Testing" alone is narrower: still inside
+  the judging window.
 - A concept counts toward the period in which it **first spent**.
 - An ad's "Hit" badge in Rankings shows the result of the concept it was tested in.
 

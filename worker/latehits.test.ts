@@ -61,7 +61,7 @@ describe("late hits", () => {
     expect(harris.hitRate).toBeCloseTo(2 / 3);
   });
 
-  it("counts concepts testing now: undecided and still spending, past day 3 included", async () => {
+  it("counts concepts testing now: every concept with an ad switched on", async () => {
     // A slow test: $5 a day since Oct 1, no ad at $100 by the latest day (Oct 12), still spending.
     await env.DB.batch([
       env.DB.prepare("INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES ('k_slow', 'k_slow', 'IH | shameer | slow', 'slow', 'shameer')"),
@@ -74,11 +74,13 @@ describe("late hits", () => {
         env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents) VALUES ('a_slow', ?1, 500)").bind(`2026-10-${String(i + 1).padStart(2, "0")}`),
       ),
     ]);
+    // Dhia's concept is switched off in Meta.
+    await env.DB.prepare("UPDATE ads SET status = 'ADSET_PAUSED' WHERE id = 'a_k_stop'").run();
     const { rows } = await get<PodsResponse>("/api/pods?range=all");
     const by = Object.fromEntries(rows.map((r) => [r.podId, r]));
     expect(by.shameer).toMatchObject({ live: 1, testing: 0 });
-    // Harris's running concepts are decided (a late hit and a miss); Dhia's stopped on day 3.
-    expect(by.harris!.live).toBe(0);
+    // Testing now = switched on, whatever the result: Harris's hit, late hit and miss all still have an ad on.
+    expect(by.harris!.live).toBe(3);
     expect(by.dhia!.live).toBe(0);
   });
 });
