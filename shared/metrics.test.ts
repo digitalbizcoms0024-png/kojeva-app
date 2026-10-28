@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_TARGETS,
   podScores,
+  judgeTurnedOff,
   ZERO_TOTALS,
   cpa,
   cpaBand,
@@ -219,5 +220,15 @@ describe("podScores", () => {
     const [top, none] = podScores([pod(0, 1000, 3), { hitRate: null, totals: ZERO_TOTALS }], DEFAULT_TARGETS);
     expect(top).toMatchObject({ hitRate: 0, spend: 40, roas: 20, score: 60 });
     expect(none).toMatchObject({ hitRate: 0, spend: 0, roas: 0, score: 0 });
+  });
+});
+
+describe("judgeTurnedOff", () => {
+  const t = (spend: number, purchases: number) => ({ ...ZERO_TOTALS, spendCents: spend * 100, purchases, revenueCents: purchases * 2500 });
+  it("judges a concept still testing or never qualified on all its spend, and leaves decided ones", () => {
+    expect(judgeTurnedOff("testing", t(110, 10), DEFAULT_TARGETS)).toBe("hit");
+    expect(judgeTurnedOff("ineligible", t(90, 1), DEFAULT_TARGETS)).toBe("miss");
+    expect(judgeTurnedOff("miss", t(110, 10), DEFAULT_TARGETS)).toBe("miss");
+    expect(judgeTurnedOff("hit", t(500, 1), DEFAULT_TARGETS)).toBe("hit");
   });
 });

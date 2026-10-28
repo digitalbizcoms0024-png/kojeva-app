@@ -83,6 +83,50 @@ describe("late hits", () => {
   });
 });
 
+describe("turned off", () => {
+  /** A concept with the given ads: [status, [spend $, purchases] per day from `start`]. */
+  async function conceptWith(id: string, start: number, ads: [string, [number, number][]][]) {
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES (?1, ?1, ?2, ?1, 'shameer')").bind(id, `Shameer | ${id}`),
+      env.DB.prepare("INSERT INTO posts (id, media_type) VALUES (?1, 'image')").bind(`p_${id}`),
+      env.DB.prepare("INSERT INTO assignments (post_id, pod_id, pod_source) VALUES (?1, 'shameer', 'adset')").bind(`p_${id}`),
+      ...ads.flatMap(([status, days], n) => [
+        env.DB.prepare(
+          "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time, concept_id) VALUES (?1, ?2, ?1, ?3, ?4, ?5, '2026-10-01T00:00:00Z', ?3)",
+        ).bind(`a_${id}_${n}`, `p_${id}`, id, `Shameer | ${id}`, status),
+        ...days.map(([spend, purchases], i) =>
+          env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES (?1, ?2, ?3, ?4, ?5)").bind(
+            `a_${id}_${n}`,
+            `2026-10-${String(start + i).padStart(2, "0")}`,
+            spend * 100,
+            purchases,
+            purchases * 2500,
+          ),
+        ),
+      ]),
+    ]);
+  }
+
+  it("judges a concept at once when every ad is off: before day 3, or with no ad at $100", async () => {
+    // Launched Oct 11 (latest synced day Oct 12), ad set paused at $110: $11 CPA, a hit on day 2.
+    await conceptWith("k_off_early", 11, [["ADSET_PAUSED", [[60, 5], [50, 5]]]]);
+    // Two ads at $45 each (none at $100), both paused after a day: $90 for one sale, a miss.
+    await conceptWith("k_off_small", 1, [["PAUSED", [[45, 1]]], ["CAMPAIGN_PAUSED", [[45, 0]]]]);
+    // One ad paused, one still on: still testing, as before.
+    await conceptWith("k_half_on", 11, [["PAUSED", [[30, 1]]], ["ACTIVE", [[30, 1]]]]);
+    const { rows } = await get<ConceptsResponse>("/api/concepts?range=all");
+    const by = Object.fromEntries(rows.map((k) => [k.conceptId, k]));
+    expect(by.k_off_early).toMatchObject({ status: "hit", turnedOff: true, windowEnd: "2026-10-12" });
+    expect(by.k_off_early!.window.spendCents).toBe(11000);
+    expect(by.k_off_small).toMatchObject({ status: "miss", turnedOff: true, qualifiedOn: null });
+    expect(by.k_half_on).toMatchObject({ status: "testing", turnedOff: false });
+    // Results decided the usual way stay as they were.
+    expect(by.k_fast).toMatchObject({ status: "hit", turnedOff: false });
+    const pods = await get<PodsResponse>("/api/pods?range=all");
+    expect(pods.rows.find((r) => r.podId === "shameer")).toMatchObject({ hits: 1, misses: 1, live: 1 });
+  });
+});
+
 describe("launches per week", () => {
   it("counts concepts by the Monday–Sunday week of their first spend", async () => {
     // All four started Thu Oct 1 (week of Mon Sep 28); latest synced day is Mon Oct 12.

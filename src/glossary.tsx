@@ -60,7 +60,11 @@ export function terms(t: Targets): Record<TermId, Term> {
       term: "Judging window",
       text: `A concept is judged on all its ads together, from its first day of spend to day ${t.testWindowDays} or the day it qualified, whichever is later.`,
     },
-    testing: { group: "Testing", term: "Testing", text: "The judging window hasn't finished yet, so there's no result." },
+    testing: {
+      group: "Testing",
+      term: "Testing",
+      text: "The judging window hasn't finished yet, so there's no result. Turning every ad in the ad set off ends the test: it's judged at once on everything it spent.",
+    },
     podScore: {
       group: "Testing",
       term: "Pod score",

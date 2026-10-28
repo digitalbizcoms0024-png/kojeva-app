@@ -169,6 +169,19 @@ export function hitStatus(windowTotals: Totals, state: { qualified: boolean; com
   return meetsTargets(windowTotals, t) ? "hit" : "miss";
 }
 
+/** Meta effective statuses of an ad switched off (itself, its ad set or its campaign) or archived/deleted. */
+export const OFF_STATUSES: readonly string[] = ["PAUSED", "ADSET_PAUSED", "CAMPAIGN_PAUSED", "ARCHIVED", "DELETED"];
+
+/**
+ * Turning a concept off ends its test (owner, Oct 28): once every ad in it is off, a concept still
+ * testing, or with no ad at `minTestSpend`, is judged at once on everything it spent, whatever it
+ * spent. A result already decided (hit, miss) stays as it is.
+ */
+export function judgeTurnedOff(status: HitStatus, allTime: Totals, t: Targets): HitStatus {
+  if (status !== "testing" && status !== "ineligible") return status;
+  return meetsTargets(allTime, t) ? "hit" : "miss";
+}
+
 const addDays = (day: string, n: number) => {
   const d = new Date(`${day}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);

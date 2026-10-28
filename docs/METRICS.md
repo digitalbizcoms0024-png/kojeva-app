@@ -37,6 +37,12 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   - **No ad at $100** (`ineligible`): window passed and no ad has reached $100; not counted
   - **hit**: window CPA ≤ $14 **or** window ROAS ≥ 1.7 (Kojeva's rule, `hitRule: "either"`; Settings can switch to "both")
   - **miss**: otherwise (including zero purchases)
+- **Turned off** (owner, Oct 28): once every ad in a concept is off (paused itself, by its ad set or
+  campaign, archived or deleted; `OFF_STATUSES`), a concept still testing or with no ad at $100 is
+  judged at once on everything it spent, whatever it spent, from first spend to its last day of
+  spend (`judgeTurnedOff`, `turnedOff` in the API). Results already decided stay as they were. The
+  on/off status is Meta's at the last sync. The judging code is in the rules fingerprint
+  (`worker/rules.ts`), so a deploy that changes it recomputes without a sync.
 - **Hit rate** = hits ÷ (hits + misses).
 - **Pod score** (Dashboard leaderboard order; `podScores` in `shared/metrics.ts`, owner, Oct 28), out of 100:
   hit rate (`scoreWeightHitRate`, 40: pod's hit rate ÷ best pod's) + spend (`scoreWeightSpend`, 40: pod's

@@ -5,14 +5,19 @@
 import { attributePod, DEFAULT_ATTRIBUTION, podFromAdSetName } from "../shared/attribution.ts";
 import { classify } from "../shared/classify.ts";
 import { buildConcepts, ONE_CONCEPT_PER_AD, staticTitle } from "../shared/concepts.ts";
+import { hitStatus, judgeTurnedOff, judgingWindowEnd, OFF_STATUSES } from "../shared/metrics.ts";
 import { parseAdName } from "../shared/naming.ts";
 import { PODS } from "../shared/taxonomy.ts";
 import { bumpStats, memoize } from "./cache.ts";
 import { attribute } from "./meta/sync.ts";
 import { loadAddedPods } from "./pods.ts";
 
-const CODE = [attributePod, podFromAdSetName, buildConcepts, staticTitle, classify, parseAdName].map((f) => f.toString()).join("\n");
-const CONSTANTS = JSON.stringify([PODS, DEFAULT_ATTRIBUTION, [...ONE_CONCEPT_PER_AD]]);
+// The judging rules too (hitStatus, judgeTurnedOff): their results are cached per sync, so a deploy
+// that changes them must recompute (bumpStats below) without waiting for a sync.
+const CODE = [attributePod, podFromAdSetName, buildConcepts, staticTitle, classify, parseAdName, hitStatus, judgeTurnedOff, judgingWindowEnd]
+  .map((f) => f.toString())
+  .join("\n");
+const CONSTANTS = JSON.stringify([PODS, DEFAULT_ATTRIBUTION, [...ONE_CONCEPT_PER_AD], OFF_STATUSES]);
 
 /** FNV-1a, enough to tell two rule sets apart. */
 function hash(s: string): string {
