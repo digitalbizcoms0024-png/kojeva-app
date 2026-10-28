@@ -31,7 +31,10 @@ export function PodLeaderboard({
   const sparkDays = meta.latestDate ? Array.from({ length: 7 }, (_, i) => shiftDay(meta.latestDate!, i - 6)) : [];
   const inhouse = new Set(meta.pods.filter((p) => p.inhouse).map((p) => p.id));
   const podRows = (data?.rows ?? []).filter((r) => r.kind === "pod" && r.podId != null && inhouse.has(r.podId));
-  const scores = podScores(podRows, tg);
+  const scores = podScores(
+    podRows.map((r) => ({ ...r, decided: r.hits + r.misses })),
+    tg,
+  );
   const ranked = podRows
     .map((r, i) => ({ ...r, score: scores[i]! }))
     .sort((a, b) => b.score.score - a.score.score || b.totals.spendCents - a.totals.spendCents);
@@ -160,7 +163,7 @@ function Leaderboard({
           <span key={p.key} className="inline-flex items-center gap-1.5">
             <span className="h-1.5 w-3" style={{ background: p.color }} aria-hidden />
             {p.label} (up to {targets[p.weight]}
-            {p.key === "hitRate" ? `, full at ${targets.scoreFullHitRate}%+` : p.key === "roas" ? `, full at ${targets.targetRoas}+` : ", vs the top spender"})
+            {p.key === "hitRate" ? `, full at ${targets.scoreFullHitRate}%+ on ${targets.scoreMinDecided}+ decided` : p.key === "roas" ? `, full at ${targets.targetRoas}+` : ", vs the top spender"})
           </span>
         ))}
       </p>

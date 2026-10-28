@@ -69,6 +69,8 @@ export interface Targets {
   scoreRoasMinSpend: number;
   /** A pod at this hit rate (%) or above gets the full hit-rate points. */
   scoreFullHitRate: number;
+  /** …once it has this many decided concepts; fewer earn a share (2 of 5 → 2/5). */
+  scoreMinDecided: number;
 }
 
 export const DEFAULT_TARGETS: Targets = {
@@ -89,6 +91,7 @@ export const DEFAULT_TARGETS: Targets = {
   scoreWeightRoas: 20,
   scoreRoasMinSpend: 300,
   scoreFullHitRate: 20,
+  scoreMinDecided: 5,
 };
 
 export interface PodScore {
@@ -103,17 +106,19 @@ export interface PodScore {
  * The pod leaderboard's score (owner, Oct 28), out of 100:
  * - hit rate: the pod's hit rate ÷ `scoreFullHitRate` (20%), capped at 1, × `scoreWeightHitRate`
  *   (no decided concepts: 0). Measured against that standard, not the best pod (owner, Oct 28), so a
- *   pod's points don't move with another pod's lucky run;
+ *   pod's points don't move with another pod's lucky run. Scaled down by decided ÷ `scoreMinDecided`
+ *   (5) below that many decided concepts, so 1 hit in 2 can't earn as much as 10 in 50;
  * - spend: the pod's spend in the period ÷ the biggest pod's, × `scoreWeightSpend` (whose ads take budget);
  * - ROAS: the pod's ROAS ÷ target ROAS, capped at 1, × `scoreWeightRoas`, scaled down by
  *   spend ÷ `scoreRoasMinSpend` below that spend, so a few lucky dollars can't earn full marks.
  * Compared among the rows passed in (the pods, never Agency).
  */
-export function podScores(rows: { hitRate: number | null; totals: Totals }[], t: Targets): PodScore[] {
+export function podScores(rows: { hitRate: number | null; decided: number; totals: Totals }[], t: Targets): PodScore[] {
   const fullRate = t.scoreFullHitRate / 100;
   const maxSpend = Math.max(0, ...rows.map((r) => r.totals.spendCents));
   return rows.map((r) => {
-    const hitRate = fullRate > 0 ? Math.min(1, (r.hitRate ?? 0) / fullRate) * t.scoreWeightHitRate : 0;
+    const evidence = t.scoreMinDecided > 0 ? Math.min(1, r.decided / t.scoreMinDecided) : 1;
+    const hitRate = fullRate > 0 ? Math.min(1, (r.hitRate ?? 0) / fullRate) * evidence * t.scoreWeightHitRate : 0;
     const spend = maxSpend > 0 ? (r.totals.spendCents / maxSpend) * t.scoreWeightSpend : 0;
     const x = roas(r.totals);
     const guard = t.scoreRoasMinSpend > 0 ? Math.min(1, r.totals.spendCents / 100 / t.scoreRoasMinSpend) : 1;

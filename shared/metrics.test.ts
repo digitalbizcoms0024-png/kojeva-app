@@ -196,11 +196,12 @@ describe("attribution comparison", () => {
 describe("podScores", () => {
   // The leaderboard on Oct 27 (hit rate, spend, ROAS from Meta), with the owner's weights 50 / 20 / 30.
   const t = { ...DEFAULT_TARGETS, scoreWeightHitRate: 50, scoreWeightSpend: 20, scoreWeightRoas: 30 };
-  const pod = (hitRate: number | null, spend: number, roasX: number) => ({
+  const pod = (hitRate: number | null, spend: number, roasX: number, decided = 10) => ({
     hitRate,
+    decided,
     totals: { ...ZERO_TOTALS, spendCents: spend * 100, revenueCents: Math.round(spend * 100 * roasX) },
   });
-  const rows = [pod(0.5, 8400, 1.45), pod(3 / 48, 27000, 0.94), pod(2 / 24, 12200, 0.9), pod(0, 540, 1.2), pod(null, 27, 0.92)];
+  const rows = [pod(0.5, 8400, 1.45, 4 + 2), pod(3 / 48, 27000, 0.94, 48), pod(2 / 24, 12200, 0.9, 24), pod(0, 540, 1.2, 1), pod(null, 27, 0.92, 0)];
 
   it("gives full hit-rate points from 20%, spend against the biggest pod, ROAS against the target", () => {
     const [shameer, harris, dhia, ali, caicos] = podScores(rows, t);
@@ -216,6 +217,17 @@ describe("podScores", () => {
     expect(caicos!.roas).toBeCloseTo((0.92 / 1.7) * (27 / 300) * 30);
   });
 
+  it("scales hit-rate points down below 5 decided concepts (the leaderboard on Oct 28)", () => {
+    // Ali: 1 hit in 2 decided, 50%: past the 20% standard, but only 2 of the 5 concepts needed.
+    const [ali, harris] = podScores([pod(0.5, 653, 1.41, 2), pod(0.1, 27200, 0.95, 50)], { ...t, scoreRoasMinSpend: 1000 });
+    expect(ali!.hitRate).toBeCloseTo(50 * (2 / 5));
+    expect(harris!.hitRate).toBeCloseTo(25);
+    expect(Math.round(ali!.score)).toBe(37);
+    expect(Math.round(harris!.score)).toBe(62);
+    // 0 turns the guard off.
+    expect(podScores([pod(0.5, 653, 1.41, 2)], { ...t, scoreMinDecided: 0 })[0]!.hitRate).toBe(50);
+  });
+
   it("doesn't move a pod's hit-rate points when another pod does better", () => {
     const alone = podScores([pod(0.1, 1000, 1)], t)[0]!.hitRate;
     const beside = podScores([pod(0.1, 1000, 1), pod(0.9, 1000, 1)], t)[0]!.hitRate;
@@ -224,7 +236,7 @@ describe("podScores", () => {
   });
 
   it("caps ROAS at the target and gives nothing for missing numbers", () => {
-    const [top, none] = podScores([pod(0, 1000, 3), { hitRate: null, totals: ZERO_TOTALS }], DEFAULT_TARGETS);
+    const [top, none] = podScores([pod(0, 1000, 3), { hitRate: null, decided: 0, totals: ZERO_TOTALS }], DEFAULT_TARGETS);
     expect(top).toMatchObject({ hitRate: 0, spend: 40, roas: 20, score: 60 });
     expect(none).toMatchObject({ hitRate: 0, spend: 0, roas: 0, score: 0 });
   });
