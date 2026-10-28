@@ -94,7 +94,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
         <PodSpend range={range} latest={meta.latestDate} targets={tg} inhouseIds={meta.pods.filter((p) => p.inhouse).map((p) => p.id)} compact />
 
         <section>
-          <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by hit rate · ${shortDate(pods.data.from === "2000-01-01" ? null : pods.data.from)} – ${shortDate(pods.data.to)} · Meta`} />
+          <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by hit rate, then spend · ${pods.data.from === "2000-01-01" ? "All time" : `${shortDate(pods.data.from)} – ${shortDate(pods.data.to)}`} · Meta`} />
           <LoadError error={pods.error} retry={pods.retry} what="the pods" loading={!pods.data} rows={6} />
           <Leaderboard rows={ranked} agency={agency} targets={tg} sparkDays={sparkDays} launches={launches.data} />
         </section>
@@ -223,14 +223,26 @@ function Leaderboard({
   const line = (r: PodRow, rank: number | null) => {
     const decided = r.hits + r.misses;
     const week = launches?.rows.find((l) => l.podId === r.podId)?.counts[0] ?? null;
+    // The leader: first place with a hit rate to its name (a pod with nothing decided isn't top).
+    const top = rank === 1 && r.hitRate != null;
     return (
-      <tr key={r.podId} className={`border-b border-divider ${rank == null ? "text-ink-3" : ""}`}>
-        <td className="num w-8 py-3 align-middle font-bold text-ink-3">{rank ?? ""}</td>
+      <tr key={r.podId} className={`border-b border-divider ${rank == null ? "text-ink-3" : ""} ${top ? "bg-accent-soft" : ""}`}>
+        <td className={`num w-8 py-3 align-middle font-bold ${top ? "pl-1 text-accent-ink" : "text-ink-3"}`}>
+          {top ? (
+            <span className="inline-flex items-center gap-0.5" title="Top pod by hit rate">
+              <Icon name="trophy" size={15} />
+              <span className="sr-only">1</span>
+            </span>
+          ) : (
+            (rank ?? "")
+          )}
+        </td>
         <td className="py-3 pr-3">
           <a href="#/pods" className="inline-flex items-center gap-2 font-bold text-ink hover:underline">
             <span className="size-2.5 shrink-0" style={{ background: `var(--pod-${r.podId})` }} aria-hidden />
             {r.name}
           </a>
+          {top && <span className="kicker ml-2 text-accent-ink">Top pod</span>}
           <div className="text-xs text-ink-3">
             {rank == null
               ? "Shown beside the pods, never counted in them"
