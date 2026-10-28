@@ -47,7 +47,7 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
 - **Pod score** (Dashboard leaderboard order; `podScores` in `shared/metrics.ts`, owner, Oct 28), out of 100:
   hit rate (`scoreWeightHitRate`, 40: pod's hit rate ÷ best pod's) + spend (`scoreWeightSpend`, 40: pod's
   spend in the period ÷ biggest pod's) + ROAS (`scoreWeightRoas`, 20: pod's ROAS ÷ target ROAS, capped at
-  1, × min(1, spend ÷ `scoreRoasMinSpend` $300)). Pods only, never Agency; ties go to spend. Weights in
+  1, × min(1, spend ÷ `scoreRoasMinSpend` $300)). In-house pods only (never Agency or partners like Trybe), on the Dashboard and the top of the Pods page; ties go to spend. Weights in
   Settings → Targets (must add up to 100).
 - **Testing now** (pod leaderboard, Pods page): concepts with no result yet (testing, or no ad at $100
   yet) that spent on the latest synced day or the day before, whenever they launched. It counts
