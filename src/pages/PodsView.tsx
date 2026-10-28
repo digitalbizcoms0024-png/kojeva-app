@@ -58,6 +58,7 @@ function PodsCompare({
   editorsOf,
   topRate,
   onOpen,
+  onOpenHits,
 }: {
   columns: PodRow[];
   concepts: ConceptResult[];
@@ -65,6 +66,8 @@ function PodsCompare({
   editorsOf: (podId: string | null) => string[];
   topRate: number;
   onOpen: (podId: string) => void;
+  /** The pod's hits in a side card (from the Hits row). */
+  onOpenHits: (podId: string) => void;
 }) {
   const data = columns.map((r) => {
     const mine = concepts.filter((k) => k.podId === r.podId);
@@ -73,7 +76,20 @@ function PodsCompare({
   const rows: [string, (d: (typeof data)[number]) => React.ReactNode, TermId?][] = [
     ["Concepts launched", (d) => int(d.r.concepts), "concept"],
     ["Concepts decided", (d) => int(d.decided), "hitRate"],
-    ["Hits", (d) => (d.r.lateHits ? `${int(d.r.hits)} (${d.r.lateHits} late)` : int(d.r.hits)), "hit"],
+    [
+      "Hits",
+      (d) => {
+        const text = d.r.lateHits ? `${int(d.r.hits)} (${d.r.lateHits} late)` : int(d.r.hits);
+        return d.r.hits > 0 && d.r.podId ? (
+          <button type="button" className="link" title={`See ${d.r.name}'s hits`} onClick={() => onOpenHits(d.r.podId!)}>
+            {text}
+          </button>
+        ) : (
+          text
+        );
+      },
+      "hit",
+    ],
     ["Testing now", (d) => int(d.r.live), "testingNow"],
     ["Test spend", (d) => money(d.testSpend, { compact: true }), "testSpend"],
     ["Spend", (d) => money(d.r.totals.spendCents, { compact: true })],
@@ -214,6 +230,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
             topRate={topRate}
             // A pod's concepts slide in from the right (src/drill.ts), like everywhere else.
             onOpen={(podId) => openDrill({ title: `${podById(podId)?.name ?? "Agency"} concepts`, range, filter: { pod: podId } })}
+            onOpenHits={(podId) => openDrill({ title: `${podById(podId)?.name ?? "Agency"} · hits`, range, filter: { pod: podId, result: "hits" } })}
           />
         )}
         {meta.pods
