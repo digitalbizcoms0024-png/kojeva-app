@@ -13,7 +13,9 @@ import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
 
 type Tab = "ads" | "pods" | "editors";
-type Preset = "all" | "new" | "inhouse";
+type Preset = "all" | "new";
+/** Whose ads and pods the page shows: Kojeva's own pods (default), or everyone incl. Agency and partners like Trybe. */
+type View = "inhouse" | "all";
 
 const STATUSES = [
   { value: "all", label: "All" },
@@ -56,7 +58,9 @@ export function RankingsPage({
 }) {
   const [tab, setTab] = useState<Tab>("ads");
   const [sort, setSort] = useState<SortKey>("spend");
-  const [pod, setPod] = useState("all");
+  const [view, setView] = useState<View>("inhouse");
+  // A pod picked in Filters; "" means every pod in the view.
+  const [pod, setPod] = useState("");
   const [status, setStatus] = useState(initialStatus ?? "all");
   // Preset: only ads launched in the last 2 weeks (their numbers from Monday of last week on).
   const [launched, setLaunched] = useState(false);
@@ -78,16 +82,24 @@ export function RankingsPage({
   }, [initialStatus]);
 
   const [showAll, setShowAll] = useState(false);
+  // New (2 weeks) is in-house pods only, whatever the view (owner, Oct 28).
+  const podParam = pod || (view === "inhouse" || launched ? "inhouse" : "all");
+  const inhouseIds = meta.pods.filter((p) => p.inhouse).map((p) => p.id);
   const rankings = useApi<RankingsResponse>(
-    tab === "ads" ? `/api/rankings?${qs({ range, sort, pod, status, q, format, angle, launched: launched ? "2w" : undefined, all: showAll && sort !== "spend" ? "1" : undefined })}` : null,
+    tab === "ads" ? `/api/rankings?${qs({ range, sort, pod: podParam, status, q, format, angle, launched: launched ? "2w" : undefined, all: showAll && sort !== "spend" ? "1" : undefined })}` : null,
   );
-  const pods = useApi<PodsResponse>(tab !== "ads" ? `/api/pods?${qs({ range })}` : null);
+  const podsAll = useApi<PodsResponse>(tab !== "ads" ? `/api/pods?${qs({ range })}` : null);
+  // The Pods and Editors tabs follow the view: in-house pods only, or every group.
+  const pods = {
+    ...podsAll,
+    data: podsAll.data && view === "inhouse" ? { ...podsAll.data, rows: podsAll.data.rows.filter((r) => r.podId != null && inhouseIds.includes(r.podId)) } : podsAll.data,
+  };
 
   const items = rankings.data?.items ?? [];
   // The ad whose details slide in from the right; none until one is clicked (or linked with ?post=).
   const activeId = selected;
   // 10 a page (the full list ran to hundreds of cards); a new filter goes back to page 1.
-  const query = `${range}|${sort}|${pod}|${status}|${q}|${format}|${angle}|${launched}`;
+  const query = `${range}|${sort}|${podParam}|${status}|${q}|${format}|${angle}|${launched}`;
   const [page, setPage] = useState({ query, n: 0 });
   const pageNo = page.query === query ? Math.min(page.n, Math.max(0, Math.ceil(items.length / PAGE) - 1)) : 0;
   const start = pageNo * PAGE;
@@ -110,6 +122,21 @@ export function RankingsPage({
             { value: "editors", label: "Editors" },
           ]}
         />
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span className="text-ink-2">Show</span>
+          <Segmented
+            label="Pods shown"
+            value={view}
+            onChange={(v: View) => {
+              setView(v);
+              setPod("");
+            }}
+            options={[
+              { value: "inhouse", label: "In-house pods" },
+              { value: "all", label: "All, with agency & partners" },
+            ]}
+          />
+        </div>
 
         {tab === "ads" && (
           <>
@@ -118,21 +145,17 @@ export function RankingsPage({
               <div className="flex flex-wrap items-center gap-3">
                 <Segmented
                   label="Preset"
-                  value={launched ? "new" : pod === "inhouse" ? "inhouse" : pod === "all" ? "all" : ("" as Preset)}
-                  onChange={(v: Preset) => {
-                    setLaunched(v === "new");
-                    setPod(v === "inhouse" ? "inhouse" : "all");
-                  }}
+                  value={launched ? "new" : ("all" as Preset)}
+                  onChange={(v: Preset) => setLaunched(v === "new")}
                   options={[
                     { value: "all", label: "All ads" },
                     { value: "new", label: "New (2 weeks)" },
-                    { value: "inhouse", label: "In-house pods" },
                   ]}
                 />
                 <SearchBox value={search} onChange={setSearch} placeholder="Search ads, editors, angles…" />
                 <Select label="Sort" value={sort} onChange={(v) => setSort(v as SortKey)} options={SORTS} />
                 <FiltersButton
-                  count={[pod !== "all" && pod !== "inhouse", status !== "all", format !== "", angle !== ""].filter(Boolean).length}
+                  count={[pod !== "", status !== "all", format !== "", angle !== ""].filter(Boolean).length}
                 >
                   <Select
                     stacked
@@ -140,10 +163,9 @@ export function RankingsPage({
                     value={pod}
                     onChange={setPod}
                     options={[
-                      { value: "all", label: "All pods" },
-                      { value: "inhouse", label: "In-house pods" },
-                      ...meta.pods.map((p) => ({ value: p.id, label: p.name })),
-                      { value: "unassigned", label: "Unassigned" },
+                      { value: "", label: view === "inhouse" ? "All in-house pods" : "All pods" },
+                      ...meta.pods.filter((p) => view === "all" || p.inhouse).map((p) => ({ value: p.id, label: p.name })),
+                      ...(view === "all" ? [{ value: "unassigned", label: "Unassigned" }] : []),
                     ]}
                   />
                   <Select
@@ -171,7 +193,7 @@ export function RankingsPage({
               {/* Row 2: what's applied (removable) and the totals. */}
               <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs">
                 {launched && <span className="text-ink-2">Launched since Monday of last week ·</span>}
-                {pod === "inhouse" && (
+                {podParam === "inhouse" && (
                   <span className="text-ink-2">
                     {meta.pods
                       .filter((p) => p.kind === "pod" && p.inhouse)
@@ -181,7 +203,7 @@ export function RankingsPage({
                   </span>
                 )}
                 {[
-                  pod !== "all" && pod !== "inhouse" && { key: "pod", text: `Pod: ${pod === "unassigned" ? "Unassigned" : (meta.pods.find((x) => x.id === pod)?.name ?? pod)}`, clear: () => setPod("all") },
+                  pod !== "" && { key: "pod", text: `Pod: ${pod === "unassigned" ? "Unassigned" : (meta.pods.find((x) => x.id === pod)?.name ?? pod)}`, clear: () => setPod("") },
                   status !== "all" && { key: "status", text: `Status: ${STATUSES.find((x) => x.value === status)?.label ?? status}`, clear: () => setStatus("all") },
                   format !== "" && { key: "format", text: `Format: ${FORMATS[format] ?? format}`, clear: () => setFormat("") },
                   angle !== "" && { key: "angle", text: `Angle: ${ANGLES[angle] ?? angle}`, clear: () => setAngle("") },
@@ -197,7 +219,7 @@ export function RankingsPage({
                           type="button"
                           className="link"
                           onClick={() => {
-                            setPod(pod === "inhouse" ? "inhouse" : "all");
+                            setPod("");
                             setStatus("all");
                             setFormat("");
                             setAngle("");
