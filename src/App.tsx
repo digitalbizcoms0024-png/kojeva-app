@@ -26,8 +26,8 @@ import { GlossaryPage, setGlossaryTargets } from "./glossary.tsx";
 type NavGroup = "analyse" | "do" | "settings";
 const NAV: { path: string; label: string; icon: IconName; group: NavGroup }[] = [
   { path: "dashboard", label: "Dashboard", icon: "dashboard", group: "analyse" },
-  { path: "rankings", label: "Ad Rankings", icon: "rankings", group: "analyse" },
   { path: "pods", label: "Pods", icon: "pods", group: "analyse" },
+  { path: "rankings", label: "Ad Rankings", icon: "rankings", group: "analyse" },
   { path: "insights", label: "Creative Insights", icon: "insights", group: "analyse" },
   { path: "coverage", label: "Coverage Map", icon: "grid", group: "analyse" },
   { path: "tagging", label: "To review", icon: "tagging", group: "do" },

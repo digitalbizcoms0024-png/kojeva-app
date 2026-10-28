@@ -1,13 +1,13 @@
 import { useState, type ReactNode } from "react";
 import { Info, type TermId } from "../glossary.tsx";
-import type { CoverageResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
-import { cpa, podScores, roas, type PodScore, type Targets } from "../../shared/metrics.ts";
+import type { CoverageResponse, MetaResponse, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
+import { cpa, roas } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, previousPeriod, rangeLabel, shiftDay, type Range } from "../components/HeaderControls.tsx";
+import { PodLeaderboard } from "../components/PodLeaderboard.tsx";
 import { PodSpend } from "../components/PodSpend.tsx";
 import { AWARENESS } from "../../shared/taxonomy.ts";
 import { openDrill } from "../drill.ts";
-import { Sparkline } from "../components/Sparkline.tsx";
 import { TrendCharts } from "../components/TrendCharts.tsx";
 import { CpaValue, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, Tag, Thumb, LoadError, Empty } from "../components/ui.tsx";
 import { int, money, pct, shortDate } from "../format.ts";
@@ -41,19 +41,11 @@ function Kpi({ label, source, value, sub, term }: { label: string; source: strin
 export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; range: Range; setRange: (r: Range) => void }) {
   const top = useApi<RankingsResponse>(`/api/rankings?${qs({ range, sort: "spend", limit: 5 })}`);
   const pods = useApi<PodsResponse>(`/api/pods?${qs({ range })}`);
-  const launches = useApi<LaunchesResponse>("/api/launches?weeks=1");
   const prev = previousPeriod(range, meta.latestDate);
   const before = useApi<RankingsResponse>(prev ? `/api/rankings?${qs({ range: "custom", from: prev.from, to: prev.to, limit: 1 })}` : null);
   const t = top.data?.totals;
   const b = prev ? before.data?.totals : undefined;
   const tg = meta.targets;
-  const sparkDays = meta.latestDate ? Array.from({ length: 7 }, (_, i) => shiftDay(meta.latestDate!, i - 6)) : [];
-  // Ranked by pod score (hit rate, spend, ROAS; weights in Settings → Targets), then spend.
-  const podRows = (pods.data?.rows ?? []).filter((r) => r.kind === "pod");
-  const scores = podScores(podRows, tg);
-  const ranked = podRows
-    .map((r, i) => ({ ...r, score: scores[i]! }))
-    .sort((a, b) => b.score.score - a.score.score || b.totals.spendCents - a.totals.spendCents);
   const pctFmt = (d: number) => pct(Math.abs(d), 1);
   // While the totals load the cards show a grey bar; "—" is kept for numbers that really are missing.
   const kpi = (v: ReactNode) => (t ? v : top.loading ? <span className="skeleton mt-1 h-7 w-28" aria-label="Loading" /> : "—");
@@ -97,11 +89,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
 
         <PodSpend range={range} latest={meta.latestDate} targets={tg} inhouseIds={meta.pods.filter((p) => p.inhouse).map((p) => p.id)} compact />
 
-        <section>
-          <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by pod score (hit rate ${tg.scoreWeightHitRate} · spend ${tg.scoreWeightSpend} · ROAS ${tg.scoreWeightRoas}) · ${pods.data.from === "2000-01-01" ? "All time" : `${shortDate(pods.data.from)} – ${shortDate(pods.data.to)}`} · Meta`} />
-          <LoadError error={pods.error} retry={pods.retry} what="the pods" loading={!pods.data} rows={6} />
-          <Leaderboard rows={ranked} targets={tg} sparkDays={sparkDays} launches={launches.data} />
-        </section>
+        <PodLeaderboard data={pods.data} error={pods.error} retry={pods.retry} meta={meta} />
 
         <div className="grid gap-10 lg:grid-cols-2">
           <NewLaunches meta={meta} />
@@ -206,126 +194,6 @@ function TrendsSection({ meta, range }: { meta: MetaResponse; range: Range }) {
 }
 
 
-
-/**
- * The pods ranked by pod score as one compact table (it replaced a card per pod, which made an empty
- * pod as tall as a busy one). Pods only: Agency isn't shown here (owner, Oct 28).
- */
-function Leaderboard({
-  rows,
-  targets,
-  sparkDays,
-  launches,
-}: {
-  rows: (PodRow & { score: PodScore })[];
-  targets: Targets;
-  sparkDays: string[];
-  launches: LaunchesResponse | null;
-}) {
-  const line = (r: PodRow & { score: PodScore }, rank: number) => {
-    const decided = r.hits + r.misses;
-    const week = launches?.rows.find((l) => l.podId === r.podId)?.counts[0] ?? null;
-    // The leader: first place with a score above 0.
-    const top = rank === 1 && r.score.score > 0;
-    const s = r.score;
-    return (
-      <tr key={r.podId} className={`border-b border-divider ${top ? "bg-accent-soft" : ""}`}>
-        <td className={`num w-8 py-3 align-middle font-bold ${top ? "pl-1 text-accent-ink" : "text-ink-3"}`}>
-          {top ? (
-            <span className="inline-flex items-center gap-0.5" title="Top pod by score">
-              <Icon name="trophy" size={15} />
-              <span className="sr-only">1</span>
-            </span>
-          ) : (
-            rank
-          )}
-        </td>
-        <td className="py-3 pr-3">
-          <a href="#/pods" className="inline-flex items-center gap-2 font-bold text-ink hover:underline">
-            <span className="size-2.5 shrink-0" style={{ background: `var(--pod-${r.podId})` }} aria-hidden />
-            {r.name}
-          </a>
-          {top && <span className="kicker ml-2 text-accent-ink">Top pod</span>}
-          <div className="text-xs text-ink-3">
-            {`${week ?? 0} ${week === 1 ? "concept" : "concepts"} this week${r.live ? ` · ${r.live} testing now` : ""}`}
-          </div>
-        </td>
-        <td className="py-3 pr-3 text-right">
-          <div className="num text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</div>
-          <ScoreBar score={s} targets={targets} />
-        </td>
-        <td className="py-3 pr-3 text-right">
-          <div className="num text-lg leading-none font-bold text-ink">{pct(r.hitRate, 0)}</div>
-          <div className="num text-xs text-ink-3">{decided ? `${r.hits}/${decided}${r.lateHits ? ` · ${r.lateHits} late` : ""}` : "none decided"}</div>
-        </td>
-        <td className="hidden w-36 py-3 pr-3 md:table-cell">
-          <Sparkline values={r.spark} days={sparkDays} color={`var(--pod-${r.podId})`} label={r.name} />
-        </td>
-        <td className="num py-3 pr-3 text-right text-ink">{money(r.totals.spendCents, { compact: true })}</td>
-        <td className="hidden py-3 pr-3 text-right sm:table-cell">
-          <CpaValue value={cpa(r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
-        </td>
-        <td className="hidden py-3 text-right sm:table-cell">
-          <RoasValue value={roas(r.totals)} target={targets.targetRoas} />
-        </td>
-      </tr>
-    );
-  };
-  if (!rows.length) return null;
-  return (
-    <>
-      <table className="w-full text-sm">
-        <thead className="kicker text-left">
-          <tr className="border-b border-divider">
-            <th className="py-2 font-normal">#</th>
-            <th className="py-2 font-normal">Pod</th>
-            <th className="py-2 pr-3 text-right font-normal">
-              Score <Info id="podScore" />
-            </th>
-            <th className="py-2 pr-3 text-right font-normal">
-              Hit rate <Info id="hitRate" />
-            </th>
-            <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
-            <th className="py-2 pr-3 text-right font-normal">Spend</th>
-            <th className="hidden py-2 pr-3 text-right font-normal sm:table-cell">CPA</th>
-            <th className="hidden py-2 text-right font-normal sm:table-cell">ROAS</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => line(r, i + 1))}
-        </tbody>
-      </table>
-      <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-3">
-        <span>Score out of 100, made of:</span>
-        {SCORE_PARTS.map((p) => (
-          <span key={p.key} className="inline-flex items-center gap-1.5">
-            <span className="h-1.5 w-3" style={{ background: p.color }} aria-hidden />
-            {p.label} (up to {targets[p.weight]})
-          </span>
-        ))}
-      </p>
-    </>
-  );
-}
-
-/** The score's three parts, in the bar's order, in neutral shades (pod and status colors are reserved). */
-const SCORE_PARTS = [
-  { key: "hitRate", label: "Hit rate", weight: "scoreWeightHitRate", color: "var(--ink)" },
-  { key: "spend", label: "Spend", weight: "scoreWeightSpend", color: "var(--ink-3)" },
-  { key: "roas", label: "ROAS", weight: "scoreWeightRoas", color: "var(--chart-bar)" },
-] as const;
-
-/** A 100-point bar under the score: each part's points as a segment, the rest left empty. */
-function ScoreBar({ score, targets }: { score: PodScore; targets: Targets }) {
-  const tip = SCORE_PARTS.map((p) => `${p.label} ${Math.round(score[p.key])} of ${targets[p.weight]}`).join(" · ");
-  return (
-    <div className="mt-1.5 ml-auto flex h-1.5 w-24 bg-surface-2" title={tip} role="img" aria-label={tip}>
-      {SCORE_PARTS.map((p) => (
-        <span key={p.key} className="h-full" style={{ width: `${score[p.key]}%`, background: p.color }} />
-      ))}
-    </div>
-  );
-}
 
 /**
  * Ads (posts) whose first spend was in the last two weeks (Monday of last week to the latest synced
