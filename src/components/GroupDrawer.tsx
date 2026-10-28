@@ -17,7 +17,7 @@ const DECIDED = new Set(["hit", "late_hit", "winner", "super_winner", "miss"]);
  */
 export function GroupDrawer({ spec, meta, onClose }: { spec: DrillSpec; meta: MetaResponse; onClose: () => void }) {
   const t = meta.targets;
-  const { data } = useApi<ConceptsResponse>(`/api/concepts?${qs({ ...spec.filter, range: spec.range })}`);
+  const { data } = useApi<ConceptsResponse>(`/api/concepts?${qs({ ...spec.filter, result: undefined, range: spec.range })}`);
   const cov = spec.coverage;
   const { data: coverage } = useApi<CoverageResponse>(cov ? `/api/coverage?${qs({ range: cov.range, pod: cov.pod })}` : null);
   const panel = useRef<HTMLDivElement>(null);

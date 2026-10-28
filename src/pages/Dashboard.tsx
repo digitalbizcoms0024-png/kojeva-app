@@ -89,7 +89,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
 
         <PodSpend range={range} latest={meta.latestDate} targets={tg} inhouseIds={meta.pods.filter((p) => p.inhouse).map((p) => p.id)} compact />
 
-        <PodLeaderboard data={pods.data} error={pods.error} retry={pods.retry} meta={meta} />
+        <PodLeaderboard data={pods.data} error={pods.error} retry={pods.retry} meta={meta} range={range} />
 
         <div className="grid gap-10 lg:grid-cols-2">
           <NewLaunches meta={meta} />

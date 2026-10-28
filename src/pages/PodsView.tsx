@@ -189,7 +189,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
           />
         </div>
         {/* Leaderboard, spend by pod, hit rate by pod, strategists, launches (owner, Oct 28). */}
-        <PodLeaderboard data={pods.data} error={pods.error} retry={pods.retry} meta={meta} />
+        <PodLeaderboard data={pods.data} error={pods.error} retry={pods.retry} meta={meta} range={range} />
         <PodSpend range={range} latest={meta.latestDate} targets={t} inhouseIds={inhouseIds} view={view} />
         <SectionTitle
           title="Hit rate by pod"
@@ -258,15 +258,18 @@ export function ConceptsTable({
   range: string;
   targets: Targets;
   pods: { podId: string | null; name: string }[];
-  /** Any /api/concepts filter: pod, angle, format, awareness, atria_theme, atria_desire, atria_hook, atria_persona, belief. */
+  /**
+   * Any /api/concepts filter: pod, angle, format, awareness, atria_theme, atria_desire, atria_hook, atria_persona, belief;
+   * plus `result` (hits, miss, testing, ineligible), the Result picker's starting value.
+   */
   filter?: Record<string, string | undefined>;
   title?: string;
   /** Inside a side card: no height cap (the card scrolls) and no "Judged on" column (narrower). */
   inPanel?: boolean;
 }) {
   const [pod, setPod] = useState(filter.pod ?? "");
-  const [result, setResult] = useState("");
-  const { data: all, error, retry } = useApi<ConceptsResponse>(`/api/concepts?${qs({ ...filter, range, pod })}`);
+  const [result, setResult] = useState(filter.result ?? "");
+  const { data: all, error, retry } = useApi<ConceptsResponse>(`/api/concepts?${qs({ ...filter, result: undefined, range, pod })}`);
   const keep = (s: ConceptsResponse["rows"][number]["status"]) =>
     !result || (result === "hits" ? isHit(s) : result === "ineligible" ? s === "ineligible" : s === result);
   const data = all && { ...all, rows: all.rows.filter((k) => keep(k.status)) };

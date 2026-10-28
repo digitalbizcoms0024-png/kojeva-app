@@ -6,6 +6,7 @@ import { shiftDay } from "./HeaderControls.tsx";
 import { Sparkline } from "./Sparkline.tsx";
 import { CpaValue, Icon, LoadError, RoasValue, SectionTitle } from "./ui.tsx";
 import { money, pct, shortDate } from "../format.ts";
+import { openDrill } from "../drill.ts";
 
 /**
  * The pod leaderboard, on the Dashboard and at the top of the Pods page: the pods ranked by pod score
@@ -17,11 +18,13 @@ export function PodLeaderboard({
   error,
   retry,
   meta,
+  range,
 }: {
   data: PodsResponse | null;
   error: Error | null;
   retry: () => void;
   meta: MetaResponse;
+  range: string;
 }) {
   const launches = useApi<LaunchesResponse>("/api/launches?weeks=1");
   const tg = meta.targets;
@@ -42,7 +45,7 @@ export function PodLeaderboard({
         }
       />
       <LoadError error={error} retry={retry} what="the pods" loading={!data} rows={6} />
-      <Leaderboard rows={ranked} targets={tg} sparkDays={sparkDays} launches={launches.data} />
+      <Leaderboard rows={ranked} targets={tg} sparkDays={sparkDays} launches={launches.data} range={range} />
     </section>
   );
 }
@@ -56,11 +59,13 @@ function Leaderboard({
   targets,
   sparkDays,
   launches,
+  range,
 }: {
   rows: (PodRow & { score: PodScore })[];
   targets: Targets;
   sparkDays: string[];
   launches: LaunchesResponse | null;
+  range: string;
 }) {
   const line = (r: PodRow & { score: PodScore }, rank: number) => {
     const decided = r.hits + r.misses;
@@ -96,7 +101,21 @@ function Leaderboard({
         </td>
         <td className="py-3 pr-3 text-right">
           <div className="num text-lg leading-none font-bold text-ink">{pct(r.hitRate, 0)}</div>
-          <div className="num text-xs text-ink-3">{decided ? `${r.hits}/${decided}${r.lateHits ? ` · ${r.lateHits} late` : ""}` : "none decided"}</div>
+          <div className="num text-xs text-ink-3">
+            {decided ? (
+              // The pod's hits in a side card, like a concept group (switch to misses there).
+              <button
+                type="button"
+                className="hover:text-ink hover:underline"
+                title={`See ${r.name}'s ${r.hits} ${r.hits === 1 ? "hit" : "hits"}`}
+                onClick={() => openDrill({ title: `${r.name} · hits`, range, filter: { pod: r.podId!, result: "hits" } })}
+              >
+                {`${r.hits}/${decided}${r.lateHits ? ` · ${r.lateHits} late` : ""}`}
+              </button>
+            ) : (
+              "none decided"
+            )}
+          </div>
         </td>
         <td className="hidden w-36 py-3 pr-3 md:table-cell">
           <Sparkline values={r.spark} days={sparkDays} color={`var(--pod-${r.podId})`} label={r.name} />
