@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Info, type TermId } from "../glossary.tsx";
 import type { CoverageResponse, LaunchesResponse, MetaResponse, PodRow, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
-import { cpa, roas, type Targets } from "../../shared/metrics.ts";
+import { cpa, podScores, roas, type PodScore, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, previousPeriod, rangeLabel, shiftDay, type Range } from "../components/HeaderControls.tsx";
 import { PodSpend } from "../components/PodSpend.tsx";
@@ -48,7 +48,12 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
   const b = prev ? before.data?.totals : undefined;
   const tg = meta.targets;
   const sparkDays = meta.latestDate ? Array.from({ length: 7 }, (_, i) => shiftDay(meta.latestDate!, i - 6)) : [];
-  const ranked = (pods.data?.rows ?? []).filter((r) => r.kind === "pod").sort((a, b) => (b.hitRate ?? -1) - (a.hitRate ?? -1) || b.totals.spendCents - a.totals.spendCents);
+  // Ranked by pod score (hit rate, spend, ROAS; weights in Settings → Targets), then spend.
+  const podRows = (pods.data?.rows ?? []).filter((r) => r.kind === "pod");
+  const scores = podScores(podRows, tg);
+  const ranked = podRows
+    .map((r, i) => ({ ...r, score: scores[i]! }))
+    .sort((a, b) => b.score.score - a.score.score || b.totals.spendCents - a.totals.spendCents);
   const agency = pods.data?.rows.find((r) => r.kind === "agency");
   const pctFmt = (d: number) => pct(Math.abs(d), 1);
   // While the totals load the cards show a grey bar; "—" is kept for numbers that really are missing.
@@ -94,7 +99,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
         <PodSpend range={range} latest={meta.latestDate} targets={tg} inhouseIds={meta.pods.filter((p) => p.inhouse).map((p) => p.id)} compact />
 
         <section>
-          <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by hit rate, then spend · ${pods.data.from === "2000-01-01" ? "All time" : `${shortDate(pods.data.from)} – ${shortDate(pods.data.to)}`} · Meta`} />
+          <SectionTitle title="Pod leaderboard" right={pods.data && `Ranked by pod score (hit rate ${tg.scoreWeightHitRate} · spend ${tg.scoreWeightSpend} · ROAS ${tg.scoreWeightRoas}) · ${pods.data.from === "2000-01-01" ? "All time" : `${shortDate(pods.data.from)} – ${shortDate(pods.data.to)}`} · Meta`} />
           <LoadError error={pods.error} retry={pods.retry} what="the pods" loading={!pods.data} rows={6} />
           <Leaderboard rows={ranked} agency={agency} targets={tg} sparkDays={sparkDays} launches={launches.data} />
         </section>
@@ -214,17 +219,18 @@ function Leaderboard({
   sparkDays,
   launches,
 }: {
-  rows: PodRow[];
+  rows: (PodRow & { score: PodScore })[];
   agency: PodRow | undefined;
   targets: Targets;
   sparkDays: string[];
   launches: LaunchesResponse | null;
 }) {
-  const line = (r: PodRow, rank: number | null) => {
+  const line = (r: PodRow & { score?: PodScore }, rank: number | null) => {
     const decided = r.hits + r.misses;
     const week = launches?.rows.find((l) => l.podId === r.podId)?.counts[0] ?? null;
-    // The leader: first place with a hit rate to its name (a pod with nothing decided isn't top).
-    const top = rank === 1 && r.hitRate != null;
+    // The leader: first place with a score above 0.
+    const top = rank === 1 && (r.score?.score ?? 0) > 0;
+    const s = r.score;
     return (
       <tr key={r.podId} className={`border-b border-divider ${rank == null ? "text-ink-3" : ""} ${top ? "bg-accent-soft" : ""}`}>
         <td className={`num w-8 py-3 align-middle font-bold ${top ? "pl-1 text-accent-ink" : "text-ink-3"}`}>
@@ -250,7 +256,17 @@ function Leaderboard({
           </div>
         </td>
         <td className="py-3 pr-3 text-right">
-          <div className="num text-xl leading-none font-extrabold text-ink">{pct(r.hitRate, 0)}</div>
+          {s && (
+            <span title={`Hit rate ${s.hitRate.toFixed(1)} + spend ${s.spend.toFixed(1)} + ROAS ${s.roas.toFixed(1)}`}>
+              <div className="num text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</div>
+              <div className="num text-xs whitespace-nowrap text-ink-3">
+                {Math.round(s.hitRate)} · {Math.round(s.spend)} · {Math.round(s.roas)}
+              </div>
+            </span>
+          )}
+        </td>
+        <td className="py-3 pr-3 text-right">
+          <div className="num text-lg leading-none font-bold text-ink">{pct(r.hitRate, 0)}</div>
           <div className="num text-xs text-ink-3">{decided ? `${r.hits}/${decided}${r.lateHits ? ` · ${r.lateHits} late` : ""}` : "none decided"}</div>
         </td>
         <td className="hidden w-36 py-3 pr-3 md:table-cell">
@@ -273,6 +289,9 @@ function Leaderboard({
         <tr className="border-b border-divider">
           <th className="py-2 font-normal">#</th>
           <th className="py-2 font-normal">Pod</th>
+          <th className="py-2 pr-3 text-right font-normal">
+            Score <Info id="podScore" />
+          </th>
           <th className="py-2 pr-3 text-right font-normal">
             Hit rate <Info id="hitRate" />
           </th>

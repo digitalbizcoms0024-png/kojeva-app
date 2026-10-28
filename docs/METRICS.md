@@ -38,6 +38,11 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   - **hit**: window CPA ≤ $14 **or** window ROAS ≥ 1.7 (Kojeva's rule, `hitRule: "either"`; Settings can switch to "both")
   - **miss**: otherwise (including zero purchases)
 - **Hit rate** = hits ÷ (hits + misses).
+- **Pod score** (Dashboard leaderboard order; `podScores` in `shared/metrics.ts`, owner, Oct 28), out of 100:
+  hit rate (`scoreWeightHitRate`, 40: pod's hit rate ÷ best pod's) + spend (`scoreWeightSpend`, 40: pod's
+  spend in the period ÷ biggest pod's) + ROAS (`scoreWeightRoas`, 20: pod's ROAS ÷ target ROAS, capped at
+  1, × min(1, spend ÷ `scoreRoasMinSpend` $300)). Pods only, never Agency; ties go to spend. Weights in
+  Settings → Targets (must add up to 100).
 - **Testing now** (pod leaderboard, Pods page): concepts with no result yet (testing, or no ad at $100
   yet) that spent on the latest synced day or the day before, whenever they launched. It counts
   concepts, not ads. "Testing" alone is narrower: still inside the judging window (owner, Oct 28).

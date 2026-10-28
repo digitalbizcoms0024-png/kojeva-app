@@ -330,6 +330,11 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
   const [wDays, setWDays] = useState(String(t.winnerMinDays));
   const [swSpend, setSwSpend] = useState(String(t.superWinnerMinSpend));
   const [rankMin, setRankMin] = useState(String(t.rankMinSpendPerDay));
+  const [wHit, setWHit] = useState(String(t.scoreWeightHitRate));
+  const [wSpendS, setWSpendS] = useState(String(t.scoreWeightSpend));
+  const [wRoasS, setWRoasS] = useState(String(t.scoreWeightRoas));
+  const [roasMin, setRoasMin] = useState(String(t.scoreRoasMinSpend));
+  const weightSum = (Number(wHit) || 0) + (Number(wSpendS) || 0) + (Number(wRoasS) || 0);
   const buyer = meta.isMediaBuyer;
   const { busy, run, note } = useSave(onSaved);
   const amberShown = amber ? Number(amber) : Number(cpa) * 1.25;
@@ -347,6 +352,10 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           hitRule: rule,
           lateWindowDays: Number(late),
           rankMinSpendPerDay: Number(rankMin),
+          scoreWeightHitRate: Number(wHit),
+          scoreWeightSpend: Number(wSpendS),
+          scoreWeightRoas: Number(wRoasS),
+          scoreRoasMinSpend: Number(roasMin),
           // Only the media buyer sets these (the server refuses them from anyone else).
           ...(buyer
             ? { winnerMinRoas: Number(wRoas), winnerMinSpend: Number(wSpend), winnerMinDays: Number(wDays), superWinnerMinSpend: Number(swSpend) }
@@ -457,6 +466,26 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
       <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-7">
         <Labeled label="Minimum spend ($ per day)">
           <input id="t-rankmin" type="number" min="0" step="5" value={rankMin} onChange={(e) => setRankMin(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+      </div>
+      <h3 className="mt-6 mb-1 font-extrabold text-ink">Pod leaderboard score</h3>
+      <p className="mb-3 max-w-[90ch] text-sm text-ink-3">
+        The Dashboard ranks pods by a score out of 100. Hit rate and spend are measured against the best pod; ROAS against the target ROAS
+        (full points at or above it), scaled down for pods that spent under the minimum below. The three weights must add up to 100
+        {weightSum !== 100 && <strong className="text-ink"> (now {weightSum})</strong>}.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-7">
+        <Labeled label="Hit rate (points)">
+          <input id="s-hit" type="number" min="0" max="100" step="5" value={wHit} onChange={(e) => setWHit(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+        <Labeled label="Spend (points)">
+          <input id="s-spend" type="number" min="0" max="100" step="5" value={wSpendS} onChange={(e) => setWSpendS(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+        <Labeled label="ROAS (points)">
+          <input id="s-roas" type="number" min="0" max="100" step="5" value={wRoasS} onChange={(e) => setWRoasS(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+        <Labeled label="Full ROAS points from ($ spend)">
+          <input id="s-roasmin" type="number" min="0" step="50" value={roasMin} onChange={(e) => setRoasMin(e.target.value)} className={field} disabled={!meta.canEdit} />
         </Labeled>
       </div>
       <h3 className="mt-6 mb-1 font-extrabold text-ink">Hit (call)</h3>
