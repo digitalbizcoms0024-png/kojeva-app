@@ -75,7 +75,7 @@ export function terms(t: Targets): Record<TermId, Term> {
     testingNow: {
       group: "Testing",
       term: "Testing now",
-      text: `Concepts still spending (yesterday or the latest synced day) that have no result yet: in their judging window, or no ad at $${t.minTestSpend} yet. Counts concepts (testing ad sets), not ads, whenever they launched.`,
+      text: "Testing ad sets that are switched on in Meta, whether or not they're getting spend right now and whatever their result so far. Counts concepts (testing ad sets), not ads. Turning every ad in one off removes it.",
     },
     hit: {
       group: "Testing",
