@@ -621,7 +621,8 @@ function StrategistSplit({ podId, members, concepts, targets }: { podId: string;
               <th className="py-2 pr-3 text-right font-normal">Hits / decided</th>
               <th className="py-2 pr-3 text-right font-normal">Launched</th>
               <th className="py-2 pr-3 text-right font-normal">Test spend</th>
-              <th className="py-2 text-right font-normal">Test CPA</th>
+              <th className="py-2 pr-3 text-right font-normal">Test CPA</th>
+              <th className="py-2 text-right font-normal">Test ROAS</th>
             </tr>
           </thead>
           <tbody>
@@ -634,8 +635,11 @@ function StrategistSplit({ podId, members, concepts, targets }: { podId: string;
                 </td>
                 <td className="num py-2.5 pr-3 text-right text-ink-2">{r.launched}</td>
                 <td className="num py-2.5 pr-3 text-right text-ink-2">{money(r.test.spendCents, { compact: true })}</td>
-                <td className="py-2.5 text-right">
+                <td className="py-2.5 pr-3 text-right">
                   <CpaValue value={cpa(r.test)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
+                </td>
+                <td className="py-2.5 text-right">
+                  <RoasValue value={roas(r.test)} target={targets.targetRoas} />
                 </td>
               </tr>
             ))}
