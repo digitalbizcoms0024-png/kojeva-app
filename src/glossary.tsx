@@ -70,7 +70,7 @@ export function terms(t: Targets): Record<TermId, Term> {
     podScore: {
       group: "Testing",
       term: "Pod score",
-      text: `Out of 100: how the pod leaderboard ranks the in-house pods. Hit rate, up to ${t.scoreWeightHitRate} points: full points at ${t.scoreFullHitRate}% or above, a share below (${t.scoreFullHitRate / 2}% earns half). Spend, up to ${t.scoreWeightSpend}: the pod's spend as a share of the biggest pod's. ROAS, up to ${t.scoreWeightRoas}: full points at the ${t.targetRoas} target or above, a share below, and less for pods that spent under $${t.scoreRoasMinSpend}. The bar under the score shows the three parts. Change them in Settings → Targets.`,
+      text: `Out of 100: how the pod leaderboard ranks the in-house pods. Hit rate, up to ${t.scoreWeightHitRate} points: full points at ${t.scoreFullHitRate}% or above, a share below (${t.scoreFullHitRate / 2}% earns half)${t.scoreMinDecided > 0 ? `, and less for pods with fewer than ${t.scoreMinDecided} decided concepts (2 decided earns 2/${t.scoreMinDecided}), so a lucky hit on a few tests can't top the board` : ""}. Spend, up to ${t.scoreWeightSpend}: the pod's spend as a share of the biggest pod's. ROAS, up to ${t.scoreWeightRoas}: full points at the ${t.targetRoas} target or above, a share below, and less for pods that spent under $${t.scoreRoasMinSpend}. The bar under the score shows the three parts. Change them in Settings → Targets.`,
     },
     testingNow: {
       group: "Testing",
