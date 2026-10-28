@@ -246,7 +246,7 @@ function Leaderboard({
           <div className="text-xs text-ink-3">
             {rank == null
               ? "Shown beside the pods, never counted in them"
-              : `${week ?? 0} ${week === 1 ? "concept" : "concepts"} this week${r.testing ? ` · ${r.testing} testing` : ""}`}
+              : `${week ?? 0} ${week === 1 ? "concept" : "concepts"} this week${r.live ? ` · ${r.live} testing now` : ""}`}
           </div>
         </td>
         <td className="py-3 pr-3 text-right">

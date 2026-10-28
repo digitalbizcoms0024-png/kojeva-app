@@ -38,6 +38,9 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   - **hit**: window CPA ≤ $14 **or** window ROAS ≥ 1.7 (Kojeva's rule, `hitRule: "either"`; Settings can switch to "both")
   - **miss**: otherwise (including zero purchases)
 - **Hit rate** = hits ÷ (hits + misses).
+- **Testing now** (pod leaderboard, Pods page): concepts with no result yet (testing, or no ad at $100
+  yet) that spent on the latest synced day or the day before, whenever they launched. It counts
+  concepts, not ads. "Testing" alone is narrower: still inside the judging window (owner, Oct 28).
 - A concept counts toward the period in which it **first spent**.
 - An ad's "Hit" badge in Rankings shows the result of the concept it was tested in.
 

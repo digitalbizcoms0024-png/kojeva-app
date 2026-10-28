@@ -181,7 +181,13 @@ export interface PodRow {
   hits: number;
   lateHits: number;
   misses: number;
+  /** Concepts launched in the period whose judging window is still open (about their first 3 days). */
   testing: number;
+  /**
+   * Concepts testing right now, whenever they launched: not decided yet (in their judging window, or
+   * no ad at $100 yet) and spent on the latest synced day or the day before.
+   */
+  live: number;
   hitRate: number | null;
   editors: { editorId: string | null; name: string; totals: Totals; concepts: number }[];
   /** Daily spend in cents for the last 7 synced days, oldest first (0 on days without spend). */
