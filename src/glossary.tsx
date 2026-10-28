@@ -68,7 +68,7 @@ export function terms(t: Targets): Record<TermId, Term> {
     podScore: {
       group: "Testing",
       term: "Pod score",
-      text: `Out of 100, how the Dashboard ranks pods. Hit rate (${t.scoreWeightHitRate} points: pod's hit rate ÷ best pod's) + spend (${t.scoreWeightSpend}: pod's spend ÷ biggest pod's) + ROAS (${t.scoreWeightRoas}: pod's ROAS ÷ target ${t.targetRoas}, full points at target, scaled down under $${t.scoreRoasMinSpend} spend). Small numbers under it: the three parts. Weights in Settings → Targets.`,
+      text: `Out of 100, how the Dashboard ranks pods. Hit rate (${t.scoreWeightHitRate} points: pod's hit rate ÷ ${t.scoreFullHitRate}%, full points at ${t.scoreFullHitRate}% or above) + spend (${t.scoreWeightSpend}: pod's spend ÷ biggest pod's) + ROAS (${t.scoreWeightRoas}: pod's ROAS ÷ target ${t.targetRoas}, full points at target, scaled down under $${t.scoreRoasMinSpend} spend). Small numbers under it: the three parts. Weights in Settings → Targets.`,
     },
     testingNow: {
       group: "Testing",

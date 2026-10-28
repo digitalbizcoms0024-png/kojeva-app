@@ -334,6 +334,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
   const [wSpendS, setWSpendS] = useState(String(t.scoreWeightSpend));
   const [wRoasS, setWRoasS] = useState(String(t.scoreWeightRoas));
   const [roasMin, setRoasMin] = useState(String(t.scoreRoasMinSpend));
+  const [fullHit, setFullHit] = useState(String(t.scoreFullHitRate));
   const weightSum = (Number(wHit) || 0) + (Number(wSpendS) || 0) + (Number(wRoasS) || 0);
   const buyer = meta.isMediaBuyer;
   const { busy, run, note } = useSave(onSaved);
@@ -356,6 +357,7 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           scoreWeightSpend: Number(wSpendS),
           scoreWeightRoas: Number(wRoasS),
           scoreRoasMinSpend: Number(roasMin),
+          scoreFullHitRate: Number(fullHit),
           // Only the media buyer sets these (the server refuses them from anyone else).
           ...(buyer
             ? { winnerMinRoas: Number(wRoas), winnerMinSpend: Number(wSpend), winnerMinDays: Number(wDays), superWinnerMinSpend: Number(swSpend) }
@@ -470,8 +472,9 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
       </div>
       <h3 className="mt-6 mb-1 font-extrabold text-ink">Pod leaderboard score</h3>
       <p className="mb-3 max-w-[90ch] text-sm text-ink-3">
-        The Dashboard ranks pods by a score out of 100. Hit rate and spend are measured against the best pod; ROAS against the target ROAS
-        (full points at or above it), scaled down for pods that spent under the minimum below. The three weights must add up to 100
+        The Dashboard ranks pods by a score out of 100. Hit rate is measured against the standard below (full points at or above it);
+        spend against the pod that spent most; ROAS against the target ROAS (full points at or above it), scaled down for pods that
+        spent under the minimum below. The three weights must add up to 100
         {weightSum !== 100 && <strong className="text-ink"> (now {weightSum})</strong>}.
       </p>
       <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-7">
@@ -483,6 +486,9 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
         </Labeled>
         <Labeled label="ROAS (points)">
           <input id="s-roas" type="number" min="0" max="100" step="5" value={wRoasS} onChange={(e) => setWRoasS(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+        <Labeled label="Full hit-rate points from (%)">
+          <input id="s-fullhit" type="number" min="1" max="100" step="1" value={fullHit} onChange={(e) => setFullHit(e.target.value)} className={field} disabled={!meta.canEdit} />
         </Labeled>
         <Labeled label="Full ROAS points from ($ spend)">
           <input id="s-roasmin" type="number" min="0" step="50" value={roasMin} onChange={(e) => setRoasMin(e.target.value)} className={field} disabled={!meta.canEdit} />

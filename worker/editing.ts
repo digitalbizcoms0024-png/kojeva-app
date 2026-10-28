@@ -162,6 +162,7 @@ function checkTargets(t: Partial<Targets>): Problem {
     if (weights.reduce<number>((a, w) => a + (w ?? 0), 0) !== 100) return "The score weights must add up to 100.";
   }
   if (t.scoreRoasMinSpend !== undefined && !num(t.scoreRoasMinSpend, 0, 1_000_000)) return "The score's ROAS minimum spend must be 0 or more.";
+  if (t.scoreFullHitRate !== undefined && !num(t.scoreFullHitRate, 1, 100)) return "Full hit-rate points must start at a hit rate from 1% to 100%.";
   return null;
 }
 
@@ -203,7 +204,7 @@ editing.put("/settings", requireAccess, async (c) => {
     await mergeSetting(db, "targets", body.targets, by);
     // Hit results and fatigue depend on the targets; the ranking minimum and the pod score are applied
     // per request (score in the app), so they alone need no recompute.
-    const perRequest = ["rankMinSpendPerDay", "scoreWeightHitRate", "scoreWeightSpend", "scoreWeightRoas", "scoreRoasMinSpend"];
+    const perRequest = ["rankMinSpendPerDay", "scoreWeightHitRate", "scoreWeightSpend", "scoreWeightRoas", "scoreRoasMinSpend", "scoreFullHitRate"];
     if (Object.keys(body.targets).some((k) => !perRequest.includes(k))) await bumpStats(db);
   }
   if (body.attribution) {
