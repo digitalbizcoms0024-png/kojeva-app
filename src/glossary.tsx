@@ -17,6 +17,8 @@ export type TermId =
   | "qualifies"
   | "judged"
   | "testing"
+  | "testingNow"
+  | "podScore"
   | "hit"
   | "miss"
   | "lateHit"
@@ -59,6 +61,16 @@ export function terms(t: Targets): Record<TermId, Term> {
       text: `A concept is judged on all its ads together, from its first day of spend to day ${t.testWindowDays} or the day it qualified, whichever is later.`,
     },
     testing: { group: "Testing", term: "Testing", text: "The judging window hasn't finished yet, so there's no result." },
+    podScore: {
+      group: "Testing",
+      term: "Pod score",
+      text: `Out of 100, how the Dashboard ranks pods. Hit rate (${t.scoreWeightHitRate} points: pod's hit rate ÷ best pod's) + spend (${t.scoreWeightSpend}: pod's spend ÷ biggest pod's) + ROAS (${t.scoreWeightRoas}: pod's ROAS ÷ target ${t.targetRoas}, full points at target, scaled down under $${t.scoreRoasMinSpend} spend). Small numbers under it: the three parts. Weights in Settings → Targets.`,
+    },
+    testingNow: {
+      group: "Testing",
+      term: "Testing now",
+      text: `Concepts still spending (yesterday or the latest synced day) that have no result yet: in their judging window, or no ad at $${t.minTestSpend} yet. Counts concepts (testing ad sets), not ads, whenever they launched.`,
+    },
     hit: {
       group: "Testing",
       term: "Hit",

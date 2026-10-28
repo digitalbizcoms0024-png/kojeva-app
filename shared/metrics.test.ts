@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_TARGETS,
+  podScores,
   ZERO_TOTALS,
   cpa,
   cpaBand,
@@ -188,5 +189,35 @@ describe("attribution comparison", () => {
     expect(incrementalShare(inc, { purchases: 0, revenueCents: 0 })).toBeNull();
     expect(attributedCpa({ purchases: 0, revenueCents: 0 }, 1000)).toBeNull();
     expect(attributedRoas(null, 1000)).toBeNull();
+  });
+});
+
+describe("podScores", () => {
+  // The leaderboard on Oct 27 (hit rate, spend, ROAS from Meta).
+  const pod = (hitRate: number | null, spend: number, roasX: number) => ({
+    hitRate,
+    totals: { ...ZERO_TOTALS, spendCents: spend * 100, revenueCents: Math.round(spend * 100 * roasX) },
+  });
+  const rows = [pod(0.5, 8400, 1.45), pod(3 / 48, 27000, 0.94), pod(2 / 24, 12200, 0.9), pod(0, 540, 1.2), pod(null, 27, 0.92)];
+
+  it("weights hit rate 40, spend 40 and ROAS 20, against the best pod and the target", () => {
+    const [shameer, harris, dhia, ali, caicos] = podScores(rows, DEFAULT_TARGETS);
+    expect(shameer!.hitRate).toBeCloseTo(40);
+    expect(shameer!.spend).toBeCloseTo((8400 / 27000) * 40);
+    expect(shameer!.roas).toBeCloseTo((1.45 / 1.7) * 20); // 17.1
+    expect(harris!.spend).toBeCloseTo(40);
+    expect(Math.round(shameer!.score)).toBe(70);
+    expect(Math.round(harris!.score)).toBe(56);
+    expect(Math.round(dhia!.score)).toBe(35);
+    // Ali: ROAS 1.2 at $540 (above the $300 guard); Caicos: nothing decided, $27 of $300.
+    expect(ali!.roas).toBeCloseTo((1.2 / 1.7) * 20);
+    expect(caicos!.hitRate).toBe(0);
+    expect(caicos!.roas).toBeCloseTo((0.92 / 1.7) * (27 / 300) * 20);
+  });
+
+  it("caps ROAS at the target and gives nothing for missing numbers", () => {
+    const [top, none] = podScores([pod(0, 1000, 3), { hitRate: null, totals: ZERO_TOTALS }], DEFAULT_TARGETS);
+    expect(top).toMatchObject({ hitRate: 0, spend: 40, roas: 20, score: 60 });
+    expect(none).toMatchObject({ hitRate: 0, spend: 0, roas: 0, score: 0 });
   });
 });

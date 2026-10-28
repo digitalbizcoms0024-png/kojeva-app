@@ -156,6 +156,12 @@ function checkTargets(t: Partial<Targets>): Problem {
   if (t.winnerMinDays !== undefined && !(Number.isInteger(t.winnerMinDays) && num(t.winnerMinDays, 1, 90))) return "Winner days must be a whole number from 1 to 90.";
   if (t.superWinnerMinSpend !== undefined && !num(t.superWinnerMinSpend, 0, 10_000_000)) return "Super winner spend must be a positive amount.";
   if (t.rankMinSpendPerDay !== undefined && !num(t.rankMinSpendPerDay, 0, 100_000)) return "The ranking minimum must be 0 or more per day.";
+  const weights = [t.scoreWeightHitRate, t.scoreWeightSpend, t.scoreWeightRoas];
+  if (weights.some((w) => w !== undefined)) {
+    if (weights.some((w) => !(Number.isInteger(w) && num(w, 0, 100)))) return "Send all three score weights, whole numbers from 0 to 100.";
+    if (weights.reduce<number>((a, w) => a + (w ?? 0), 0) !== 100) return "The score weights must add up to 100.";
+  }
+  if (t.scoreRoasMinSpend !== undefined && !num(t.scoreRoasMinSpend, 0, 1_000_000)) return "The score's ROAS minimum spend must be 0 or more.";
   return null;
 }
 
@@ -195,8 +201,10 @@ editing.put("/settings", requireAccess, async (c) => {
   const by = c.get("userEmail");
   if (body.targets) {
     await mergeSetting(db, "targets", body.targets, by);
-    // Hit results and fatigue depend on the targets; the ranking minimum is applied per request, so it alone needs no recompute.
-    if (Object.keys(body.targets).some((k) => k !== "rankMinSpendPerDay")) await bumpStats(db);
+    // Hit results and fatigue depend on the targets; the ranking minimum and the pod score are applied
+    // per request (score in the app), so they alone need no recompute.
+    const perRequest = ["rankMinSpendPerDay", "scoreWeightHitRate", "scoreWeightSpend", "scoreWeightRoas", "scoreRoasMinSpend"];
+    if (Object.keys(body.targets).some((k) => !perRequest.includes(k))) await bumpStats(db);
   }
   if (body.attribution) {
     const a = { ...body.attribution };

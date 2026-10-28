@@ -374,6 +374,11 @@ app.get("/pods", async (c) => {
 
   // Concepts count toward the period in which they first spent.
   const inRange = concepts.filter((k) => k.firstSpend >= range.from && k.firstSpend <= range.to);
+  // Testing right now: undecided and still spending (on the latest synced day or the day before).
+  const liveSince = latest ? shiftDay(latest, -1) : null;
+  const live = concepts.filter(
+    (k) => liveSince != null && (k.status === "testing" || k.status === "ineligible") && k.lastSpend != null && k.lastSpend >= liveSince,
+  );
 
   const rows: PodRow[] = groups.map((g) => {
     const mine = posts.filter((p) => p.assignment.podId === g.podId);
@@ -400,6 +405,7 @@ app.get("/pods", async (c) => {
       lateHits: statuses.filter((s) => s === "late_hit").length,
       misses: statuses.filter((s) => s === "miss").length,
       testing: statuses.filter((s) => s === "testing").length,
+      live: live.filter((k) => k.podId === g.podId).length,
       hitRate: hitRate(statuses),
       editors: [...editors.values()].sort((a, b) => b.totals.spendCents - a.totals.spendCents),
       spark: sparkDays.map((d) => spendOn.get(`${g.podId ?? ""}|${d}`) ?? 0),

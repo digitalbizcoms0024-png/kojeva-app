@@ -60,6 +60,27 @@ describe("late hits", () => {
     expect(harris).toMatchObject({ hits: 2, lateHits: 1, misses: 1 });
     expect(harris.hitRate).toBeCloseTo(2 / 3);
   });
+
+  it("counts concepts testing now: undecided and still spending, past day 3 included", async () => {
+    // A slow test: $5 a day since Oct 1, no ad at $100 by the latest day (Oct 12), still spending.
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES ('k_slow', 'k_slow', 'IH | shameer | slow', 'slow', 'shameer')"),
+      env.DB.prepare("INSERT INTO posts (id, media_type) VALUES ('p_slow', 'image')"),
+      env.DB.prepare(
+        "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time, concept_id) VALUES ('a_slow', 'p_slow', 'slow', 'k_slow', 'IH | shameer | slow', 'ACTIVE', '2026-10-01T00:00:00Z', 'k_slow')",
+      ),
+      env.DB.prepare("INSERT INTO assignments (post_id, pod_id, pod_source) VALUES ('p_slow', 'shameer', 'adset')"),
+      ...Array.from({ length: 12 }, (_, i) =>
+        env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents) VALUES ('a_slow', ?1, 500)").bind(`2026-10-${String(i + 1).padStart(2, "0")}`),
+      ),
+    ]);
+    const { rows } = await get<PodsResponse>("/api/pods?range=all");
+    const by = Object.fromEntries(rows.map((r) => [r.podId, r]));
+    expect(by.shameer).toMatchObject({ live: 1, testing: 0 });
+    // Harris's running concepts are decided (a late hit and a miss); Dhia's stopped on day 3.
+    expect(by.harris!.live).toBe(0);
+    expect(by.dhia!.live).toBe(0);
+  });
 });
 
 describe("launches per week", () => {

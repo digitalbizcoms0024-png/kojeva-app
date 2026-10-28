@@ -61,6 +61,12 @@ export interface Targets {
   superWinnerMinSpend: number;
   /** Ad Rankings by purchases, ROAS, CTR or CPA only rank posts that spent this much ($) per day of the range. */
   rankMinSpendPerDay: number;
+  /** Pod score weights (points out of 100, summing to 100): hit rate, spend, ROAS. See `podScores`. */
+  scoreWeightHitRate: number;
+  scoreWeightSpend: number;
+  scoreWeightRoas: number;
+  /** A pod's ROAS part is scaled down below this much spend ($) in the period. */
+  scoreRoasMinSpend: number;
 }
 
 export const DEFAULT_TARGETS: Targets = {
@@ -76,7 +82,40 @@ export const DEFAULT_TARGETS: Targets = {
   winnerMinDays: 5,
   superWinnerMinSpend: 5000,
   rankMinSpendPerDay: 50,
+  scoreWeightHitRate: 40,
+  scoreWeightSpend: 40,
+  scoreWeightRoas: 20,
+  scoreRoasMinSpend: 300,
 };
+
+export interface PodScore {
+  /** 0–100: the three parts added up. */
+  score: number;
+  hitRate: number;
+  spend: number;
+  roas: number;
+}
+
+/**
+ * The pod leaderboard's score (owner, Oct 28), out of 100:
+ * - hit rate: the pod's hit rate ÷ the best pod's, × `scoreWeightHitRate` (no decided concepts: 0);
+ * - spend: the pod's spend in the period ÷ the biggest pod's, × `scoreWeightSpend` (whose ads take budget);
+ * - ROAS: the pod's ROAS ÷ target ROAS, capped at 1, × `scoreWeightRoas`, scaled down by
+ *   spend ÷ `scoreRoasMinSpend` below that spend, so a few lucky dollars can't earn full marks.
+ * Compared among the rows passed in (the pods, never Agency).
+ */
+export function podScores(rows: { hitRate: number | null; totals: Totals }[], t: Targets): PodScore[] {
+  const bestRate = Math.max(0, ...rows.map((r) => r.hitRate ?? 0));
+  const maxSpend = Math.max(0, ...rows.map((r) => r.totals.spendCents));
+  return rows.map((r) => {
+    const hitRate = bestRate > 0 ? ((r.hitRate ?? 0) / bestRate) * t.scoreWeightHitRate : 0;
+    const spend = maxSpend > 0 ? (r.totals.spendCents / maxSpend) * t.scoreWeightSpend : 0;
+    const x = roas(r.totals);
+    const guard = t.scoreRoasMinSpend > 0 ? Math.min(1, r.totals.spendCents / 100 / t.scoreRoasMinSpend) : 1;
+    const roasPart = x != null && t.targetRoas > 0 ? Math.min(1, x / t.targetRoas) * guard * t.scoreWeightRoas : 0;
+    return { score: hitRate + spend + roasPart, hitRate, spend, roas: roasPart };
+  });
+}
 
 export type Band = "good" | "warn" | "bad" | "none";
 

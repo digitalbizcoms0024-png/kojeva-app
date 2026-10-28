@@ -73,7 +73,7 @@ function PodsCompare({
     ["Concepts launched", (d) => int(d.r.concepts), "concept"],
     ["Concepts decided", (d) => int(d.decided), "hitRate"],
     ["Hits", (d) => (d.r.lateHits ? `${int(d.r.hits)} (${d.r.lateHits} late)` : int(d.r.hits)), "hit"],
-    ["Testing now", (d) => int(d.r.testing), "testing"],
+    ["Testing now", (d) => int(d.r.live), "testingNow"],
     ["Test spend", (d) => money(d.testSpend, { compact: true }), "testSpend"],
     ["Spend", (d) => money(d.r.totals.spendCents, { compact: true })],
     ["CPA · Meta", (d) => <CpaValue value={cpa(d.r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />, "cpa"],
