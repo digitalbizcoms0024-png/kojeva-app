@@ -40,7 +40,9 @@ export type TermId =
   | "awareness"
   | "coverage"
   | "unplaced"
-  | "rankMin";
+  | "rankMin"
+  | "daysLive"
+  | "scaling";
 
 export function terms(t: Targets): Record<TermId, Term> {
   const amber = t.cpaWarnMax ?? t.targetCpa * 1.25;
@@ -68,7 +70,7 @@ export function terms(t: Targets): Record<TermId, Term> {
     podScore: {
       group: "Testing",
       term: "Pod score",
-      text: `Out of 100, how the Dashboard ranks pods. Hit rate (${t.scoreWeightHitRate} points: pod's hit rate ÷ ${t.scoreFullHitRate}%, full points at ${t.scoreFullHitRate}% or above) + spend (${t.scoreWeightSpend}: pod's spend ÷ biggest pod's) + ROAS (${t.scoreWeightRoas}: pod's ROAS ÷ target ${t.targetRoas}, full points at target, scaled down under $${t.scoreRoasMinSpend} spend). Small numbers under it: the three parts. Weights in Settings → Targets.`,
+      text: `Out of 100: how the pod leaderboard ranks the in-house pods. Hit rate, up to ${t.scoreWeightHitRate} points: full points at ${t.scoreFullHitRate}% or above, a share below (${t.scoreFullHitRate / 2}% earns half). Spend, up to ${t.scoreWeightSpend}: the pod's spend as a share of the biggest pod's. ROAS, up to ${t.scoreWeightRoas}: full points at the ${t.targetRoas} target or above, a share below, and less for pods that spent under $${t.scoreRoasMinSpend}. The bar under the score shows the three parts. Change them in Settings → Targets.`,
     },
     testingNow: {
       group: "Testing",
@@ -134,7 +136,17 @@ export function terms(t: Targets): Record<TermId, Term> {
     rankMin: {
       group: "Pages",
       term: "Ranking minimum",
-      text: `Ranking by purchases, ROAS, CTR or CPA only includes ads that spent $${t.rankMinSpendPerDay} per day of the selected dates, so a lucky ad on a few dollars doesn't top the list.`,
+      text: `Ranking by purchases, ROAS, CTR or CPA only includes ads that spent at least $${t.rankMinSpendPerDay} a day over the selected dates, so a lucky ad on a few dollars doesn't top the list. "Show them" adds the smaller ads back; ranking by spend shows every ad.`,
+    },
+    daysLive: {
+      group: "Pages",
+      term: "Days live",
+      text: "Days from the ad's launch (or its first spend, if earlier) to the latest synced day, whether or not it's still running.",
+    },
+    scaling: {
+      group: "Pages",
+      term: "Scaling",
+      text: "A copy of the ad is running outside testing ad sets: in a scaling or other campaign the media buyer moved it into.",
     },
   };
 }

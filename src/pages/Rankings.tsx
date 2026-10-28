@@ -591,7 +591,9 @@ function RankTable({
             {head("CPA", "cpa")}
             {head("ROAS", "roas")}
             {head("CTR", "ctr", "hidden md:table-cell")}
-            {head("Days live", null, "hidden lg:table-cell")}
+            <th className="hidden py-2 pr-3 text-right font-normal lg:table-cell">
+              Days live <Info id="daysLive" />
+            </th>
           </tr>
         </thead>
         <tbody>
