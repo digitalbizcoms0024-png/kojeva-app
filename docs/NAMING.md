@@ -17,6 +17,13 @@ re-credits every ad except hand-set ones.
   "Pod 0 | Andrei | …" and `CAICOS` matches "Caicos Pod | …".
 - **In-house** (a tick per pod, migration 0027): Kojeva's own teams. The four built-in pods, Caicos (Pod 5)
   and Pod 0 are in-house; Trybe, a partner, isn't. The Ad Rankings "In-house pods" view follows the tick.
+- **A pod and a partner in one ad set** (owner, Oct 29; migration 0030): "Shameer | Trybe | UGC | 60 Sec
+  Video Demo" names an in-house pod and a partner, so it's credited to **both**: the pod as its pod, the
+  partner as `co_pod_id` (`podsFromAdSetName`). It counts in full for each (spend, purchases, concepts,
+  hits, testing now, CS report sections), and once in account totals, share bars and the CS report's
+  totals (`PodRow.sharedCents`). The partner part is left out of the concept's name. Two in-house pods (or
+  two partners) in one name stay ambiguous: no pod, for a human. In To review, "+ partner" sets or clears
+  the partner by hand (marks the pod hand-set). Shown as "Shameer + Trybe".
 - **Strategists** (per pod, migration 0028): a pod run by several strategists lists them (Pod 0: Andrei,
   Reika, Adrian) and names one in each ad set ("POD0 | Andrei | Depuff Static"). Each gets their own hit
   rate on the Pods page and in the CS report (`shared/strategists.ts`); the pod's own numbers don't change.

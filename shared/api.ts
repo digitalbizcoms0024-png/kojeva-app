@@ -33,6 +33,8 @@ export interface Editor {
 /** Fields a person can set on a post. `null` clears a value; omitted fields are left alone. */
 export interface AssignmentPatch {
   podId?: string | null;
+  /** A partner (not in-house) also credited with the post; null removes it. Marks the pod hand-set. */
+  coPodId?: string | null;
   editorId?: string | null;
   angle?: string | null;
   format?: string | null;
@@ -92,6 +94,8 @@ export interface MetaResponse {
 export interface Assignment {
   podId: string | null;
   podSource: string | null;
+  /** A partner credited too ("Shameer | Trybe | …" → Trybe): counts the post in full, as the pod does. */
+  coPodId: string | null;
   editorId: string | null;
   editorName: string | null;
   angle: string | null;
@@ -178,6 +182,8 @@ export interface PodRow {
   name: string;
   color: string | null;
   totals: Totals;
+  /** Spend in `totals` this group has as a partner beside a pod (also in that pod's row); subtract it to add rows up. */
+  sharedCents: number;
   concepts: number;
   /** Hits including late hits. */
   hits: number;
@@ -196,6 +202,8 @@ export interface PodRow {
 export interface ConceptResult {
   conceptId: string;
   podId: string;
+  /** A partner named beside the pod in the ad set; the concept counts for both. */
+  coPodId: string | null;
   label: string;
   adsetName: string;
   ads: number;
@@ -531,6 +539,8 @@ export type ReportFigures = Totals & { cpa: number | null; roas: number | null; 
 export interface ReportConcept {
   conceptId: string;
   podId: string;
+  /** A partner credited beside the pod (see ConceptResult.coPodId). */
+  coPodId: string | null;
   label: string;
   adsetName: string;
   status: HitStatus;
@@ -563,6 +573,8 @@ export interface ReportConcept {
 export interface LateVerdict {
   conceptId: string;
   podId: string;
+  /** A partner credited beside the pod (see ConceptResult.coPodId). */
+  coPodId: string | null;
   label: string;
   format: string | null;
   status: HitStatus;

@@ -75,12 +75,12 @@ export async function buildReport(db: D1Database, from: string, to: string): Pro
     )
     .bind(from, to)
     .all<{ concept_id: string; spend_cents: number }>();
-  const podOf = new Map(all.map((k) => [k.conceptId, k.podId]));
+  // A concept shared with a partner counts in both pods' testing spend.
+  const podsOf = new Map(all.map((k) => [k.conceptId, [k.podId, ...(k.coPodId ? [k.coPodId] : [])]]));
   const testingSpend = new Map<string, number>();
-  for (const r of spend.results) {
-    const pod = podOf.get(r.concept_id);
-    if (pod && podIds.has(pod)) testingSpend.set(pod, (testingSpend.get(pod) ?? 0) + Number(r.spend_cents));
-  }
+  for (const r of spend.results)
+    for (const pod of podsOf.get(r.concept_id) ?? [])
+      if (podIds.has(pod)) testingSpend.set(pod, (testingSpend.get(pod) ?? 0) + Number(r.spend_cents));
 
   const persona = new Map(personas.map((p) => [p.id, p.name]));
   const concepts: ReportData["concepts"] = launched.map((k: Concept) => {
@@ -102,6 +102,7 @@ export async function buildReport(db: D1Database, from: string, to: string): Pro
     return {
       conceptId: k.conceptId,
       podId: k.podId,
+      coPodId: k.coPodId,
       label: k.label,
       adsetName: k.adsetName,
       status: k.status,
@@ -145,6 +146,7 @@ export async function buildReport(db: D1Database, from: string, to: string): Pro
         {
           conceptId: k.conceptId,
           podId: k.podId,
+          coPodId: k.coPodId,
           label: k.label,
           format: k.format,
           status: k.status,

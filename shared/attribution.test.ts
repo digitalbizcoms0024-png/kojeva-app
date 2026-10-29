@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { attributePod, detectPodsStart, isAgencyAdSet, podFromAdSetName } from "./attribution.ts";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { attributePod, detectPodsStart, isAgencyAdSet, podFromAdSetName, podsFromAdSetName } from "./attribution.ts";
+import { setAddedPods } from "./taxonomy.ts";
 
 describe("podFromAdSetName", () => {
   it.each([
@@ -117,5 +118,25 @@ describe("attributePod", () => {
   it("returns null when nothing identifies the pod", () => {
     expect(attributePod([{ name: "4-2", adsetName: "Broad", createdTime: null }])).toBeNull();
     expect(attributePod([])).toBeNull();
+  });
+});
+
+describe("a pod and a partner in one ad set (owner, Oct 29)", () => {
+  const trybe = { id: "trybe", code: "TRYBE", name: "Trybe", color: "#6250d6", prefix: "TRYBE", slot: 0, inhouse: false };
+  const pod0 = { id: "pod0", code: "POD0", name: "POD 0", color: "#eb6834", prefix: "POD0", slot: 2, inhouse: true };
+  beforeEach(() => setAddedPods([trybe, pod0]));
+  afterEach(() => setAddedPods([]));
+
+  it("credits the pod and the partner both", () => {
+    expect(podsFromAdSetName("Shameer | Trybe | UGC | 60 Sec Video Demo")).toEqual({ main: "SHA", partner: "TRYBE" });
+    expect(podFromAdSetName("Shameer | Trybe | UGC | 60 Sec Video Demo")).toBe("SHA");
+    expect(podsFromAdSetName("TRYBE | Larissa V | Jawline Angle")).toEqual({ main: "TRYBE", partner: null });
+    const a = attributePod([{ name: "Shameer | Trybe | 1", adsetName: "Shameer | Trybe | UGC | 60 Sec Video Demo", createdTime: "2026-10-29T05:00:00Z" }]);
+    expect(a).toMatchObject({ podCode: "SHA", partnerCode: "TRYBE", source: "adset" });
+  });
+
+  it("leaves two in-house pods in one name for a human", () => {
+    expect(podsFromAdSetName("Harris | Dhia | Static")).toBeNull();
+    expect(podsFromAdSetName("POD0 | Andrei | Ali")).toBeNull();
   });
 });

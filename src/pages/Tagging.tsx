@@ -111,6 +111,8 @@ export function TaggingPage({ meta, onChanged, range }: { meta: MetaResponse; on
 
   const pods = meta.pods;
   const podOptions = [{ value: "", label: "No pod" }, ...pods.map((p) => ({ value: p.id, label: p.name }))];
+  // Partners (pods that aren't in-house) can be credited beside a pod (owner, Oct 29).
+  const partners = meta.pods.filter((p) => p.kind === "pod" && !p.inhouse);
   const editorsFor = (podId: string | null) => meta.editors.filter((e) => !podId || !e.podId || e.podId === podId);
   const disabled = !meta.canEdit;
 
@@ -527,6 +529,23 @@ export function TaggingPage({ meta, onChanged, range }: { meta: MetaResponse; on
                             "Auto · not found"
                           )}
                         </div>
+                        {partners.length > 0 && (
+                          <select
+                            aria-label="Also credited to"
+                            title="A partner credited too: the ad counts in full for both"
+                            className={`${selectCls} mt-1`}
+                            value={a.coPodId ?? ""}
+                            disabled={disabled}
+                            onChange={(e) => patchRow(r, { coPodId: e.target.value || null })}
+                          >
+                            <option value="">+ no partner</option>
+                            {partners.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                + {p.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </td>
                       <td className="py-2.5 pr-2">
                         <select

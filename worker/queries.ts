@@ -76,7 +76,7 @@ async function loadPostBase(db: D1Database, postId?: string): Promise<Row[]> {
     db
       .prepare(
         `SELECT p.id AS post_id, p.media_type, p.thumbnail_url,
-           s.pod_id, s.pod_source, s.editor_id, e.name AS editor_name,
+           s.pod_id, s.pod_source, s.co_pod_id, s.editor_id, e.name AS editor_name,
            s.angle, s.format, s.hook, s.landing_page, s.tags_source, s.awareness, s.belief_group, s.persona_id, s.offer, s.motivations
          FROM posts p
          LEFT JOIN assignments s ON s.post_id = p.id
@@ -282,7 +282,7 @@ async function computeConceptNumbers(db: D1Database): Promise<Record<string, Con
  */
 async function conceptLabels(db: D1Database): Promise<Row[]> {
   const [concepts, ads] = await Promise.all([
-    db.prepare("SELECT id, pod_id, label, adset_name FROM concepts").all<Row>(),
+    db.prepare("SELECT id, pod_id, co_pod_id, label, adset_name FROM concepts").all<Row>(),
     db
       .prepare(
         `SELECT x.concept_id, x.name, t.status AS t_status, t.tags, t.awareness, t.belief_group, t.belief, t.persona_id,
@@ -368,6 +368,7 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
       motivations: list(r.motivations_list).sort(),
       conceptId: String(r.id),
       podId: String(r.pod_id),
+      coPodId: r.co_pod_id == null ? null : String(r.co_pod_id),
       label: String(r.label),
       adsetName: String(r.adset_name),
       ads: Number(r.ads),
@@ -410,6 +411,7 @@ function toAssignment(r: Row): Assignment {
   return {
     podId: s("pod_id"),
     podSource: s("pod_source"),
+    coPodId: s("co_pod_id"),
     editorId: s("editor_id"),
     editorName: s("editor_name"),
     angle: s("angle"),

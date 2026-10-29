@@ -25,6 +25,10 @@ type Problem = string | null;
 /** Validates a patch against the controlled vocabularies and the editor roster. */
 async function checkPatch(db: D1Database, p: AssignmentPatch): Promise<Problem> {
   if (p.podId != null && !GROUPS.some((g) => g.id === p.podId)) return `Unknown pod "${p.podId}".`;
+  if (p.coPodId != null) {
+    const partner = await db.prepare("SELECT 1 FROM pods WHERE id = ?1 AND kind = 'pod' AND inhouse = 0").bind(p.coPodId).first();
+    if (!partner) return "Also credited to: pick a partner (a pod that isn't in-house), or none.";
+  }
   const vocab: [keyof AssignmentPatch, Record<string, string>][] = [
     ["angle", ANGLES],
     ["format", FORMATS],
@@ -68,6 +72,10 @@ function patchStatements(db: D1Database, postIds: string[], p: AssignmentPatch, 
   if (p.podId !== undefined) {
     col("pod_id = ?", p.podId);
     sets.push("pod_source = 'manual'");
+  }
+  if (p.coPodId !== undefined) {
+    col("co_pod_id = ?", p.coPodId);
+    if (p.podId === undefined) sets.push("pod_source = 'manual'");
   }
   if (p.editorId !== undefined) col("editor_id = ?", p.editorId);
   const tagCols: [keyof AssignmentPatch, string][] = [
@@ -349,6 +357,8 @@ editing.delete("/pods/:id", requireAccess, async (c) => {
   if (!row.prefix) return c.json({ error: "Built-in pods can't be removed." }, 400);
   await db.batch([
     db.prepare("UPDATE assignments SET pod_id = NULL, pod_source = NULL WHERE pod_id = ?1").bind(id),
+    db.prepare("UPDATE assignments SET co_pod_id = NULL WHERE co_pod_id = ?1").bind(id),
+    db.prepare("UPDATE concepts SET co_pod_id = NULL WHERE co_pod_id = ?1").bind(id),
     db.prepare("UPDATE editors SET pod_id = NULL WHERE pod_id = ?1").bind(id),
     db.prepare("DELETE FROM concepts WHERE pod_id = ?1").bind(id),
     db.prepare("UPDATE ads SET concept_id = NULL WHERE concept_id NOT IN (SELECT id FROM concepts)"),

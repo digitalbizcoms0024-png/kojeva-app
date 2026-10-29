@@ -100,7 +100,26 @@ export function PodSwatch({ podId, className = "" }: { podId: string | null; cla
   );
 }
 
-export function PodChip({ podId, source, suffix }: { podId: string | null; source?: string | null; suffix?: ReactNode }) {
+export function PodChip({
+  podId,
+  source,
+  suffix,
+  coPodId,
+}: {
+  podId: string | null;
+  source?: string | null;
+  suffix?: ReactNode;
+  /** A partner credited too ("Shameer | Trybe | …"): shown as "Shameer + Trybe". */
+  coPodId?: string | null;
+}) {
+  if (coPodId)
+    return (
+      <span className="inline-flex items-center gap-1 whitespace-nowrap" title="Counts in full for both">
+        <PodChip podId={podId} source={source} />
+        <span className="text-xs text-ink-3">+</span>
+        <PodChip podId={coPodId} suffix={suffix} />
+      </span>
+    );
   const pod = podId ? podById(podId) : null;
   return (
     <span

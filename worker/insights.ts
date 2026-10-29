@@ -28,7 +28,7 @@ export function valuesOf(k: Concept, d: InsightDimension): (string | null)[] {
 function summarize(value: string | null, list: Concept[]): InsightRow {
   const statuses = list.map((k) => k.status);
   const pods = new Map<string, number>();
-  for (const k of list) pods.set(k.podId, (pods.get(k.podId) ?? 0) + 1);
+  for (const k of list) for (const pod of [k.podId, ...(k.coPodId ? [k.coPodId] : [])]) pods.set(pod, (pods.get(pod) ?? 0) + 1);
   return {
     value,
     concepts: list.length,

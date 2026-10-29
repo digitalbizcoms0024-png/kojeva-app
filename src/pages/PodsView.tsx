@@ -385,7 +385,7 @@ export function ConceptsTable({
               {data.rows.map((k) => (
                 <tr key={k.conceptId} className="border-b border-divider">
                   <td className="py-2.5 pr-3">
-                    <PodChip podId={k.podId} />
+                    <PodChip podId={k.podId} coPodId={k.coPodId} />
                   </td>
                   <td className="py-2.5 pr-3">
                     <a href={conceptHref(k.conceptId)} className="font-semibold text-ink hover:underline">

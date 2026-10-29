@@ -22,7 +22,7 @@ import type {
 } from "../shared/api.ts";
 import { OFF_STATUSES, ZERO_TOTALS, addTotals, cpa, ctr, hitRate, isHit, roas, type Totals } from "../shared/metrics.ts";
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
-import { GROUPS } from "../shared/taxonomy.ts";
+import { creditsPod, GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware, internalReadHeaders } from "./access.ts";
 import { bumpVersion, setDeployedVersion, cachedResponse, cacheResponse, dataVersion, memoize, readSnapshot, writeSnapshot } from "./cache.ts";
 import type { AppEnv, Env } from "./env.ts";
@@ -233,7 +233,7 @@ app.get("/rankings", async (c) => {
     const inhouse = new Set(results.map((r) => r.id));
     items = items.filter((p) => p.assignment.podId != null && inhouse.has(p.assignment.podId));
   }
-  else if (pod !== "all") items = items.filter((p) => p.assignment.podId === pod);
+  else if (pod !== "all") items = items.filter((p) => creditsPod(p.assignment, pod));
   const format = c.req.query("format");
   const angle = c.req.query("angle");
   if (format) items = items.filter((p) => p.assignment.format === format);
@@ -363,11 +363,14 @@ app.get("/pods", async (c) => {
       { durable: true, scope: "stats" },
     ),
   ]);
-  const podOf = new Map(posts.map((p) => [p.postId, p.assignment.podId ?? ""]));
+  // A post shared with a partner counts in both lines.
+  const podsOf = new Map(posts.map((p) => [p.postId, [p.assignment.podId ?? "", ...(p.assignment.coPodId ? [p.assignment.coPodId] : [])]]));
   const spendOn = new Map<string, number>();
   for (const r of daily) {
-    const k = `${podOf.get(r.post_id) ?? ""}|${r.date}`;
-    spendOn.set(k, (spendOn.get(k) ?? 0) + Number(r.spend_cents));
+    for (const pod of podsOf.get(r.post_id) ?? [""]) {
+      const k = `${pod}|${r.date}`;
+      spendOn.set(k, (spendOn.get(k) ?? 0) + Number(r.spend_cents));
+    }
   }
 
   const groups: { podId: string | null; name: string; color: string | null; kind: PodRow["kind"] }[] = [
@@ -384,21 +387,22 @@ app.get("/pods", async (c) => {
     "concepts-on",
     async () => {
       const { results } = await db
-        .prepare("SELECT a.concept_id, c.pod_id, a.status FROM ads a JOIN concepts c ON c.id = a.concept_id WHERE a.concept_id IS NOT NULL")
-        .all<{ concept_id: string; pod_id: string | null; status: string }>();
-      const on = new Map<string, string>();
-      for (const r of results) if (!OFF_STATUSES.includes(r.status) && r.status !== "DISAPPROVED") on.set(r.concept_id, r.pod_id ?? "");
+        .prepare("SELECT a.concept_id, c.pod_id, c.co_pod_id, a.status FROM ads a JOIN concepts c ON c.id = a.concept_id WHERE a.concept_id IS NOT NULL")
+        .all<{ concept_id: string; pod_id: string | null; co_pod_id: string | null; status: string }>();
+      const on = new Map<string, string[]>();
+      for (const r of results)
+        if (!OFF_STATUSES.includes(r.status) && r.status !== "DISAPPROVED") on.set(r.concept_id, [r.pod_id ?? "", ...(r.co_pod_id ? [r.co_pod_id] : [])]);
       const counts: Record<string, number> = {};
-      for (const pod of on.values()) counts[pod] = (counts[pod] ?? 0) + 1;
+      for (const pods of on.values()) for (const pod of pods) counts[pod] = (counts[pod] ?? 0) + 1;
       return counts;
     },
     { durable: true, scope: "stats" },
   );
 
   const rows: PodRow[] = groups.map((g) => {
-    const mine = posts.filter((p) => p.assignment.podId === g.podId);
+    const mine = posts.filter((p) => creditsPod(p.assignment, g.podId));
     const launched = mine.filter((p) => p.firstSpend && p.firstSpend >= range.from && p.firstSpend <= range.to);
-    const statuses = inRange.filter((k) => k.podId === g.podId).map((k) => k.status);
+    const statuses = inRange.filter((k) => creditsPod(k, g.podId)).map((k) => k.status);
     const editors = new Map<string, PodRow["editors"][number]>();
     for (const p of mine) {
       const key = p.assignment.editorId ?? "";
@@ -415,6 +419,8 @@ app.get("/pods", async (c) => {
     return {
       ...g,
       totals: mine.reduce((acc, p) => addTotals(acc, p.totals), ZERO_TOTALS),
+      // Spend this group shares as a partner with a pod's row, so totals across rows count it once.
+      sharedCents: mine.filter((p) => g.podId != null && p.assignment.coPodId === g.podId).reduce((n, p) => n + p.totals.spendCents, 0),
       concepts: statuses.length,
       hits: statuses.filter(isHit).length,
       lateHits: statuses.filter((s) => s === "late_hit").length,
@@ -433,7 +439,7 @@ app.get("/pods", async (c) => {
 
 /** Concepts that started testing in the period (and pod): what Creative Insights counts. */
 async function insightConcepts(db: D1Database, range: { from: string; to: string }, pod: string | undefined) {
-  return (await loadConcepts(db)).filter((k) => k.firstSpend >= range.from && k.firstSpend <= range.to && (!pod || k.podId === pod));
+  return (await loadConcepts(db)).filter((k) => k.firstSpend >= range.from && k.firstSpend <= range.to && (!pod || creditsPod(k, pod)));
 }
 
 /** Concept results grouped by one dimension. Same period rule as the Pods tab. */
@@ -479,7 +485,7 @@ app.get("/trends", async (c) => {
     c.req.query("grain") === "day" ? "day" : c.req.query("grain") === "week" || range.from === "2000-01-01" || span > 62 ? "week" : "day";
   const pod = c.req.query("pod") || null;
   const bucket = (col: string) => (grain === "week" ? `date(${col}, 'weekday 0', '-6 days')` : col);
-  const podSql = pod === "unassigned" ? "AND s.pod_id IS NULL" : pod ? "AND s.pod_id = ?3" : "";
+  const podSql = pod === "unassigned" ? "AND s.pod_id IS NULL" : pod ? "AND (s.pod_id = ?3 OR s.co_pod_id = ?3)" : "";
   const binds = pod && pod !== "unassigned" ? [range.from, range.to, pod] : [range.from, range.to];
   const query = () =>
     db
@@ -597,8 +603,11 @@ app.get("/launches", async (c) => {
   const byPod = new Map(rows.map((r) => [r.podId, r]));
   for (const k of concepts) {
     const i = index.get(mondayOf(k.firstSpend));
-    const row = byPod.get(k.podId);
-    if (i !== undefined && row) row.counts[i]!++;
+    if (i === undefined) continue;
+    for (const pod of [k.podId, ...(k.coPodId ? [k.coPodId] : [])]) {
+      const row = byPod.get(pod);
+      if (row) row.counts[i]!++;
+    }
   }
   const body: LaunchesResponse = { weeks, rows };
   return c.json(body);
@@ -680,7 +689,7 @@ app.get("/concepts", async (c) => {
       (k) =>
         k.firstSpend >= range.from &&
         k.firstSpend <= range.to &&
-        (!pod || k.podId === pod) &&
+        (!pod || creditsPod(k, pod)) &&
         tag(angle, k.angle) &&
         tag(format, k.format) &&
         tag(awareness, k.awareness) &&

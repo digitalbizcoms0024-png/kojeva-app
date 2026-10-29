@@ -10,6 +10,8 @@ export interface Group {
   prefix?: string | null;
   /** Added pods only: which of POD_SLOTS gives their color. */
   slot?: number | null;
+  /** Added pods only: false for partners (Trybe), who can share an ad set with an in-house pod. Built-in pods are in-house. */
+  inhouse?: boolean;
 }
 
 /** The four in-house pods, matched by strategist name in ad set names. */
@@ -50,6 +52,11 @@ export function setAddedPods(list: Group[]) {
 /** Every pod (built-in and added), without the agency. */
 export function allPods(): Group[] {
   return [...PODS, ...added];
+}
+
+/** Whether a post or concept counts for a pod: its pod, or a partner credited beside it (owner, Oct 29). */
+export function creditsPod(x: { podId: string | null; coPodId?: string | null }, podId: string | null): boolean {
+  return x.podId === podId || (podId != null && x.coPodId === podId);
 }
 
 export type PodCode = string;

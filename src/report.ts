@@ -122,7 +122,8 @@ export function reportBlocks(d: ReportData, text: ReportText | null, podNames: M
 
   const pods = d.pods
     .map((p) => {
-      const mine = C.filter((k) => k.podId === p.podId);
+      // A concept shared with a partner ("Shameer | Trybe | …") is in both sections; the totals above count it once.
+      const mine = C.filter((k) => k.podId === p.podId || k.coPodId === p.podId);
       const el = mine.filter((k) => isEligible(k.status));
       const h = mine.filter((k) => isHit(k.status));
       return { p, mine, el, h };
