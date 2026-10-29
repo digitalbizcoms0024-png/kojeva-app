@@ -12,6 +12,7 @@ import { InsightsPage } from "./pages/Insights.tsx";
 import { NamingToolPage } from "./pages/NamingTool.tsx";
 import { PodsPage } from "./pages/PodsView.tsx";
 import { RankingsPage } from "./pages/Rankings.tsx";
+import { SwipePage } from "./pages/Swipe.tsx";
 import { SettingsPage } from "./pages/Settings.tsx";
 import { ReportsPage } from "./pages/Reports.tsx";
 import { GroupDrawer } from "./components/GroupDrawer.tsx";
@@ -28,6 +29,7 @@ const NAV: { path: string; label: string; icon: IconName; group: NavGroup }[] = 
   { path: "dashboard", label: "Dashboard", icon: "dashboard", group: "analyse" },
   { path: "pods", label: "Pods", icon: "pods", group: "analyse" },
   { path: "rankings", label: "Ad Rankings", icon: "rankings", group: "analyse" },
+  { path: "swipe", label: "Ad Swipe", icon: "play", group: "analyse" },
   { path: "insights", label: "Creative Insights", icon: "insights", group: "analyse" },
   { path: "coverage", label: "Coverage Map", icon: "grid", group: "analyse" },
   { path: "tagging", label: "To review", icon: "tagging", group: "do" },
@@ -50,7 +52,7 @@ function rangeFromHash(): Range | null {
 }
 
 /** Pages with the date-range switch; they all share one range, kept in the link. */
-const RANGED = new Set(["dashboard", "rankings", "pods", "insights", "coverage"]);
+const RANGED = new Set(["dashboard", "rankings", "swipe", "pods", "insights", "coverage"]);
 
 function currentRoute() {
   const [p = "", q = ""] = window.location.hash.replace(/^#\/?/, "").split("?");
@@ -333,6 +335,7 @@ export default function App() {
         )}
         {meta.error && <Empty>Couldn't reach the API: {meta.error.message}</Empty>}
         {m && path === "dashboard" && <DashboardPage meta={m} range={range} setRange={setRange} />}
+        {m && path === "swipe" && <SwipePage meta={m} range={range} setRange={setRange} />}
         {m && path === "rankings" && <RankingsPage meta={m} range={range} setRange={setRange} initialPost={route.params.get("post")} initialStatus={route.params.get("status")} />}
         {m && path === "pods" && <PodsPage meta={m} range={range} setRange={setRange} />}
         {m && path === "tagging" && <TaggingPage meta={m} onChanged={refresh} range={range} />}

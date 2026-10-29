@@ -174,6 +174,13 @@ export interface PostDetail extends PostSummary {
   allTime: Totals;
   copyRows: CopyRow[];
   daily: ({ date: string } & Totals)[];
+  /**
+   * Extra counts over the range (Ad Swipe): null when a day with spend in it lacks the number
+   * (synced before Oct 29, 2026, when outbound clicks and adds to cart started being stored).
+   */
+  extra: { outboundClicks: number | null; addToCart: number | null; reach: number | null };
+  /** Last day any copy spent, any date. */
+  lastSpend: string | null;
 }
 
 export interface PodRow {

@@ -31,7 +31,12 @@ describe("insightToDaily", () => {
         impressions: "1897316",
         reach: "1320455",
         inline_link_clicks: "41000",
-        actions: [{ action_type: "omni_purchase", value: "4885" }],
+        outbound_clicks: [{ action_type: "outbound_click", value: "38250" }],
+        actions: [
+          { action_type: "omni_purchase", value: "4885" },
+          { action_type: "omni_add_to_cart", value: "15120" },
+          { action_type: "add_to_cart", value: "14000" },
+        ],
         action_values: [{ action_type: "omni_purchase", value: "117240.55" }],
       }),
     ).toEqual({
@@ -41,12 +46,14 @@ describe("insightToDaily", () => {
       impressions: 1897316,
       reach: 1320455,
       linkClicks: 41000,
+      outboundClicks: 38250,
+      addToCart: 15120,
       purchases: 4885,
       revenueCents: 11724055,
     });
   });
   it("treats missing fields as zero", () => {
-    expect(insightToDaily({ ad_id: "1", date_start: "2026-10-08" })).toMatchObject({ spendCents: 0, purchases: 0, revenueCents: 0 });
+    expect(insightToDaily({ ad_id: "1", date_start: "2026-10-08" })).toMatchObject({ spendCents: 0, purchases: 0, revenueCents: 0, addToCart: 0, outboundClicks: null });
   });
 });
 

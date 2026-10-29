@@ -237,6 +237,9 @@ app.get("/rankings", async (c) => {
   const format = c.req.query("format");
   const angle = c.req.query("angle");
   if (format) items = items.filter((p) => p.assignment.format === format);
+  // Ad Swipe's Statics / Videos.
+  const media = c.req.query("media");
+  if (media === "image" || media === "video") items = items.filter((p) => p.mediaType === media);
   if (angle) items = items.filter((p) => p.assignment.angle === angle);
   if (status === "active") items = items.filter((p) => p.active);
   if (status === "paused") items = items.filter((p) => !p.active);
@@ -296,7 +299,7 @@ app.get("/posts/:id", async (c) => {
   const [summary] = await loadPosts(db, range.from, range.to, { postId });
   if (!summary) return c.json({ error: "Not found" }, 404);
 
-  const [copies, daily, allTime] = await Promise.all([
+  const [copies, daily, allTime, extra] = await Promise.all([
     db
       .prepare(
         `SELECT a.id, a.name, a.campaign_name, a.adset_name, a.status, ${TOTALS_SQL}
@@ -314,8 +317,26 @@ app.get("/posts/:id", async (c) => {
       )
       .bind(postId, range.from, range.to)
       .all<Record<string, unknown>>(),
-    db.prepare(`SELECT ${TOTALS_SQL} FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id WHERE a.post_id = ?1`).bind(postId).first<Record<string, unknown>>(),
+    db
+      .prepare(
+        `SELECT ${TOTALS_SQL}, MAX(CASE WHEN d.spend_cents > 0 THEN d.date END) AS last_spend
+         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id WHERE a.post_id = ?1`,
+      )
+      .bind(postId)
+      .first<Record<string, unknown>>(),
+    // Missing is not zero: a day with spend but no stored count makes the range's count unknown.
+    db
+      .prepare(
+        `SELECT SUM(d.outbound_clicks) AS outbound, SUM(CASE WHEN d.outbound_clicks IS NULL AND d.spend_cents > 0 THEN 1 ELSE 0 END) AS outbound_gaps,
+           SUM(d.add_to_cart) AS atc, SUM(CASE WHEN d.add_to_cart IS NULL AND d.spend_cents > 0 THEN 1 ELSE 0 END) AS atc_gaps,
+           SUM(d.reach) AS reach, SUM(CASE WHEN d.reach IS NULL AND d.spend_cents > 0 THEN 1 ELSE 0 END) AS reach_gaps
+         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
+         WHERE a.post_id = ?1 AND d.date BETWEEN ?2 AND ?3`,
+      )
+      .bind(postId, range.from, range.to)
+      .first<Record<string, number | null>>(),
   ]);
+  const known = (sum: number | null | undefined, gaps: number | null | undefined) => (gaps ? null : Number(sum ?? 0));
 
   const body: PostDetail = {
     ...summary,
@@ -331,6 +352,12 @@ app.get("/posts/:id", async (c) => {
       }),
     ),
     daily: daily.results.map((r) => ({ date: String(r.date), ...toTotals(r) })),
+    extra: {
+      outboundClicks: known(extra?.outbound, extra?.outbound_gaps),
+      addToCart: known(extra?.atc, extra?.atc_gaps),
+      reach: known(extra?.reach, extra?.reach_gaps),
+    },
+    lastSpend: allTime?.last_spend == null ? null : String(allTime.last_spend),
   };
   return c.json(body);
 });

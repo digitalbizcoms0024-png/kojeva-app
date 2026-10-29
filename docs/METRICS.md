@@ -109,6 +109,17 @@ Ranking by purchases, ROAS, CTR or CPA only includes posts that spent at least `
 - **Days live** = latest synced day − (launch, or first spend if earlier) + 1. First spend alone stopped
   at the start of the synced history, so older ads all read "101 days live".
 
+## Ad Swipe (owner, Oct 29)
+One post at a time, ← / → (keys or buttons; a bottom bar on a phone). View-only. Deck = `/api/rankings` with
+the page's filters: format (`?media=image|video`), pod (default in-house pods), status (default running now),
+order (spend default, ROAS, newest launch). Each card is `/api/posts/:id` for the global range.
+- **Outbound CPC** = spend ÷ Meta `outbound_clicks` (not unique). **Cost per add to cart** = spend ÷ adds to cart
+  (`omni_add_to_cart`, else pixel add to cart). Both stored in `ad_daily` from Oct 29 (migration 0031); a range
+  containing a spend day without them shows "—", never a partial number.
+- **Frequency** ≈ impressions ÷ summed daily reach (people reached on several days count again, so it reads low);
+  "—" when a spend day has no reach.
+- **Running N days** = Days live as on Ad Rankings; "where it runs" lists the 5 biggest-spending copies.
+
 ## CSV export
 - Rankings (current filters), Concepts and the Pods table. Money in plain dollars, every value labelled with its source;
   missing values are empty cells, never 0.

@@ -171,13 +171,16 @@ for (let i = 0; i < Number(process.env.SAMPLE_POSTS ?? 64); i++) {
         Math.round(click7 * incShare * 1000),
         Math.round(revenue * (click7 / Math.max(1, purchases)) * incShare * 100),
       ];
+      // Outbound clicks a little under link clicks; adds to cart a few per purchase (derived without rand()).
+      const outbound = Math.round(clicks * (0.86 + (day % 5) / 50));
+      const atc = Math.round(purchases * (2.6 + (c % 4) / 2));
       rows.push(
-        `(${q(adId)}, ${q(isoDay(day))}, ${Math.round(spend * 100)}, ${impressions}, ${reach}, ${clicks}, ${purchases}, ${Math.round(revenue * 100)}, ${win.join(", ")})`,
+        `(${q(adId)}, ${q(isoDay(day))}, ${Math.round(spend * 100)}, ${impressions}, ${reach}, ${clicks}, ${purchases}, ${Math.round(revenue * 100)}, ${win.join(", ")}, ${outbound}, ${atc})`,
       );
     }
     if (rows.length)
       out.push(
-        `INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, reach, link_clicks, purchases, revenue_cents, purchases_7dc, revenue_7dc_cents, purchases_inc_milli, revenue_inc_cents) VALUES\n${rows.join(",\n")};`,
+        `INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, reach, link_clicks, purchases, revenue_cents, purchases_7dc, revenue_7dc_cents, purchases_inc_milli, revenue_inc_cents, outbound_clicks, add_to_cart) VALUES\n${rows.join(",\n")};`,
       );
   }
 
