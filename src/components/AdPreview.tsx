@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useApi } from "../api.ts";
 import { Tabs, Thumb } from "./ui.tsx";
@@ -24,6 +24,56 @@ const FORMATS: { value: Format; label: string }[] = [
 ];
 
 /**
+ * Meta's preview with the placement tabs: the ad as people saw it (copy, headline, reactions and
+ * comment count; a video plays in place). Fetched fresh for each ad and placement. Without a
+ * Meta connection (or if Meta refuses) `fallback` shows instead, with the reason.
+ */
+export function AdPreviewFrame({
+  postId,
+  name,
+  fallback,
+}: {
+  postId: string;
+  name: string;
+  fallback?: ReactNode;
+}) {
+  const [format, setFormat] = useState<Format>("MOBILE_FEED_STANDARD");
+  const { data, error, loading } = useApi<Preview>(
+    `/api/posts/${encodeURIComponent(postId)}/preview?format=${format}`,
+  );
+  return (
+    <div className="flex w-full flex-col gap-2">
+      <Tabs value={format} onChange={setFormat} options={FORMATS} />
+      <div className="flex min-h-[460px] flex-col items-center justify-start gap-2 bg-surface-2">
+        {error && (
+          <>
+            {fallback}
+            <p className="p-3 text-center text-xs text-ink-3">
+              Couldn't load Meta's preview: {error.message}
+            </p>
+          </>
+        )}
+        {!error && (loading || !data) && (
+          <p className="p-6 text-sm text-ink-3">Loading from Meta…</p>
+        )}
+        {!error && !loading && data && (
+          <iframe
+            key={data.src}
+            src={data.src}
+            title={`Preview of ${name}`}
+            width={data.width}
+            height={data.height}
+            className="max-w-full border-0 bg-page"
+            allow="autoplay; encrypted-media"
+            referrerPolicy="no-referrer"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Meta's own preview of the ad (the video with play/pause and sound, caption and headline),
  * fetched fresh when opened. Esc or the backdrop closes it.
  */
@@ -36,10 +86,6 @@ export function AdPreviewModal({
   name: string;
   onClose: () => void;
 }) {
-  const [format, setFormat] = useState<Format>("MOBILE_FEED_STANDARD");
-  const { data, error, loading } = useApi<Preview>(
-    `/api/posts/${encodeURIComponent(postId)}/preview?format=${format}`,
-  );
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -79,29 +125,7 @@ export function AdPreviewModal({
             ✕
           </button>
         </div>
-        <Tabs value={format} onChange={setFormat} options={FORMATS} />
-        <div className="flex min-h-[460px] items-start justify-center bg-surface-2">
-          {error && (
-            <p className="p-6 text-sm text-ink-3">
-              Couldn't load the preview: {error.message}
-            </p>
-          )}
-          {!error && (loading || !data) && (
-            <p className="p-6 text-sm text-ink-3">Loading from Meta…</p>
-          )}
-          {!error && !loading && data && (
-            <iframe
-              key={data.src}
-              src={data.src}
-              title={`Preview of ${name}`}
-              width={data.width}
-              height={data.height}
-              className="max-w-full border-0 bg-page"
-              allow="autoplay; encrypted-media"
-              referrerPolicy="no-referrer"
-            />
-          )}
-        </div>
+        <AdPreviewFrame postId={postId} name={name} />
         <p className="text-xs text-ink-3">
           Shown by Meta as people saw it. Press play inside the preview; sound
           is on the video's own control.

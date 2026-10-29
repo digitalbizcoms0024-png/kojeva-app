@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { MetaResponse, PostDetail, PostSummary, RankingsResponse } from "../../shared/api.ts";
 import { cpa, ctr, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
-import { PlayableThumb } from "../components/AdPreview.tsx";
+import { AdPreviewFrame } from "../components/AdPreview.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { CpaValue, Empty, HitBadge, LoadError, PageHeader, PodChip, RoasValue, Segmented, Select, Tag } from "../components/ui.tsx";
+import { CpaValue, Empty, Thumb, HitBadge, LoadError, PageHeader, PodChip, RoasValue, Segmented, Select, Tag } from "../components/ui.tsx";
 import { conceptHref } from "../drill.ts";
 import { Info } from "../glossary.tsx";
 import { dollars, int, money, pct, shortDate } from "../format.ts";
@@ -184,8 +184,13 @@ function Card({ post, range, targets }: { post: PostSummary; range: Range; targe
 
   return (
     <article className="flex min-w-0 flex-1 flex-wrap border-2 border-divider bg-surface">
-      <div className="flex w-full items-center justify-center bg-ink p-4 sm:w-[340px] sm:flex-none">
-        <PlayableThumb postId={post.postId} name={post.name} mediaType={post.mediaType} label={format} url={post.thumbnailUrl} className="aspect-[9/16] w-full max-w-[200px] sm:max-w-[300px]" />
+      {/* Meta's own preview, open by default: copy, headline, reactions and comments; videos play in place. */}
+      <div className="flex w-full justify-center border-divider bg-surface-2 p-3 sm:w-[380px] sm:flex-none sm:border-r-2">
+        <AdPreviewFrame
+          postId={post.postId}
+          name={post.name}
+          fallback={<Thumb mediaType={post.mediaType} label={format} url={post.thumbnailUrl} className="aspect-[4/5] w-full max-w-[300px]" />}
+        />
       </div>
       <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-4 p-5 md:p-6">
         <div className="flex flex-col gap-2">

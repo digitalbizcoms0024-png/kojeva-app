@@ -113,6 +113,9 @@ Ranking by purchases, ROAS, CTR or CPA only includes posts that spent at least `
 One post at a time, ← / → (keys or buttons; a bottom bar on a phone). View-only. Deck = `/api/rankings` with
 the page's filters: format (`?media=image|video`), pod (default in-house pods), status (default running now),
 order (spend default, ROAS, newest launch). Each card is `/api/posts/:id` for the global range.
+- The ad shows as Meta's preview straight away (`/api/posts/:id/preview`, Facebook feed first; tabs for
+  Instagram feed, Reels, Story): copy, headline, reactions and comment count, and videos play in place. One Graph
+  read per card and placement viewed; without Meta it falls back to the thumbnail.
 - **Outbound CPC** = spend ÷ Meta `outbound_clicks` (not unique). **Cost per add to cart** = spend ÷ adds to cart
   (`omni_add_to_cart`, else pixel add to cart). Both stored in `ad_daily` from Oct 29 (migration 0031); a range
   containing a spend day without them shows "—", never a partial number.
