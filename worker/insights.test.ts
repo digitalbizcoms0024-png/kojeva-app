@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ConceptsResponse } from "../shared/api.ts";
-import { hitRateFloor } from "../shared/metrics.ts";
+import { hitRateFloor, ZERO_TOTALS } from "../shared/metrics.ts";
 import { insightRows, matrix, overview } from "./insights.ts";
 
 type Concept = ConceptsResponse["rows"][number];
@@ -58,7 +58,7 @@ describe("overview", () => {
     ...many(3, { angle: "scarcity", format: "static", status: "hit" }),
     ...many(6, { angle: "mechanism", format: "video", status: "hit", motivations: ["proof"] }),
     ...many(4, { angle: "mechanism", format: "video", status: "miss" }),
-    ...many(6, { angle: "depuffing", format: "static", status: "miss", window: { spendCents: 50_000, impressions: 0, linkClicks: 0, purchases: 1, revenueCents: 0 } }),
+    ...many(6, { angle: "depuffing", format: "static", status: "miss", window: { ...ZERO_TOTALS, spendCents: 50_000, purchases: 1 } }),
     ...many(2, { angle: "eyes", status: "hit" }),
     ...many(2, { angle: "eyes", status: "testing" }),
   ];

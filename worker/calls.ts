@@ -22,6 +22,8 @@ const sub = (a: Totals, b: Totals): Totals => ({
   linkClicks: a.linkClicks - b.linkClicks,
   purchases: a.purchases - b.purchases,
   revenueCents: a.revenueCents - b.revenueCents,
+  reach: a.reach - b.reach,
+  reachImpressions: a.reachImpressions - b.reachImpressions,
 });
 const days = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1;
 const MOF_BOF = new Set(["product", "most"]);

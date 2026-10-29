@@ -336,6 +336,8 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
   const [roasMin, setRoasMin] = useState(String(t.scoreRoasMinSpend));
   const [fullHit, setFullHit] = useState(String(t.scoreFullHitRate));
   const [minDecided, setMinDecided] = useState(String(t.scoreMinDecided));
+  const [freqTop, setFreqTop] = useState(String(t.freqTopMax));
+  const [freqMid, setFreqMid] = useState(String(t.freqMiddleMax));
   const weightSum = (Number(wHit) || 0) + (Number(wSpendS) || 0) + (Number(wRoasS) || 0);
   const buyer = meta.isMediaBuyer;
   const { busy, run, note } = useSave(onSaved);
@@ -360,6 +362,8 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           scoreRoasMinSpend: Number(roasMin),
           scoreFullHitRate: Number(fullHit),
           scoreMinDecided: Number(minDecided),
+          freqTopMax: Number(freqTop),
+          freqMiddleMax: Number(freqMid),
           // Only the media buyer sets these (the server refuses them from anyone else).
           ...(buyer
             ? { winnerMinRoas: Number(wRoas), winnerMinSpend: Number(wSpend), winnerMinDays: Number(wDays), superWinnerMinSpend: Number(swSpend) }
@@ -498,6 +502,19 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
         </Labeled>
         <Labeled label="Full ROAS points from ($ spend)">
           <input id="s-roasmin" type="number" min="0" step="50" value={roasMin} onChange={(e) => setRoasMin(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+      </div>
+      <h3 className="mt-6 mb-1 font-extrabold text-ink">Funnel by frequency</h3>
+      <p className="mb-3 max-w-[90ch] text-sm text-ink-3">
+        An ad's average daily frequency (impressions ÷ people reached, per day) shows which part of the funnel Meta is using it for. Up to the
+        first number it's top of funnel (new eyeballs), up to the second middle, above it bottom. Used on Pods → Reach by pod, Ad Rankings and Ad Swipe.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-7">
+        <Labeled label="Top of funnel up to">
+          <input id="f-top" type="number" min="1" max="5" step="0.01" value={freqTop} onChange={(e) => setFreqTop(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+        <Labeled label="Middle of funnel up to">
+          <input id="f-mid" type="number" min="1" max="5" step="0.01" value={freqMid} onChange={(e) => setFreqMid(e.target.value)} className={field} disabled={!meta.canEdit} />
         </Labeled>
       </div>
       <h3 className="mt-6 mb-1 font-extrabold text-ink">Hit (call)</h3>

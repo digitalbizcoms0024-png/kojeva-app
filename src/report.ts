@@ -2,7 +2,7 @@
 // copied for Slack (rich text, plus mrkdwn as plain text) from the same blocks, so both match.
 import type { HitStatus } from "../shared/metrics.ts";
 import { byStrategist } from "../shared/strategists.ts";
-import { cpaBand, isHit } from "../shared/metrics.ts";
+import { addTotals, cpaBand, isHit, ZERO_TOTALS } from "../shared/metrics.ts";
 import type { ReportConcept, ReportData, ReportFigures, ReportText } from "../shared/api.ts";
 import { FORMATS } from "../shared/taxonomy.ts";
 import { dollars, moneyExact, ratio, shortDate } from "./format.ts";
@@ -32,14 +32,8 @@ function line(f: ReportFigures, targetCpa: number, warnMax: number | null): stri
 
 function sum(list: ReportFigures[]): ReportFigures {
   const t = list.reduce(
-    (a, f) => ({
-      spendCents: a.spendCents + f.spendCents,
-      impressions: a.impressions + f.impressions,
-      linkClicks: a.linkClicks + f.linkClicks,
-      purchases: a.purchases + f.purchases,
-      revenueCents: a.revenueCents + f.revenueCents,
-    }),
-    { spendCents: 0, impressions: 0, linkClicks: 0, purchases: 0, revenueCents: 0 },
+    (a, f) => addTotals(a, f),
+    ZERO_TOTALS,
   );
   return {
     ...t,

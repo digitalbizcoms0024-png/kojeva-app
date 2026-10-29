@@ -12,6 +12,7 @@ import type {
   CopyRow,
   MetaResponse,
   PodRow,
+  FrequencyTrendResponse,
   PodsResponse,
   PostDetail,
   RankingsResponse,
@@ -20,7 +21,7 @@ import type {
   TrendGrain,
   TrendsResponse,
 } from "../shared/api.ts";
-import { OFF_STATUSES, ZERO_TOTALS, addTotals, cpa, ctr, hitRate, isHit, roas, type Totals } from "../shared/metrics.ts";
+import { OFF_STATUSES, ZERO_TOTALS, addTotals, cpa, ctr, dailyFrequency, funnelBand, hitRate, isHit, roas, type Totals } from "../shared/metrics.ts";
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { creditsPod, GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware, internalReadHeaders } from "./access.ts";
@@ -131,6 +132,11 @@ const SORTERS: Record<SortKey, (t: Totals) => number | null> = {
   // Lower CPA is better, so negate it to keep "descending = best first".
   cpa: (t) => {
     const v = cpa(t);
+    return v == null ? null : -v;
+  },
+  // Lowest frequency first: the most new eyeballs (owner, Oct 29).
+  freq: (t) => {
+    const v = dailyFrequency(t);
     return v == null ? null : -v;
   },
 };
@@ -368,7 +374,7 @@ app.get("/pods", async (c) => {
   if (!range) return c.json({ error: "Invalid custom date range" }, 400);
   const latest = await getLatestDate(db);
   const sparkDays = latest ? Array.from({ length: 7 }, (_, i) => shiftDay(latest, i - 6)) : [];
-  const [posts, concepts, pods, daily] = await Promise.all([
+  const [posts, concepts, pods, daily, targets] = await Promise.all([
     loadPosts(db, range.from, range.to),
     loadConcepts(db),
     db.prepare("SELECT id, name, color, kind FROM pods ORDER BY kind DESC, name").all<{ id: string; name: string; color: string; kind: "pod" | "agency" }>(),
@@ -389,6 +395,7 @@ app.get("/pods", async (c) => {
         ).results,
       { durable: true, scope: "stats" },
     ),
+    getTargets(db),
   ]);
   // A post shared with a partner counts in both lines.
   const podsOf = new Map(posts.map((p) => [p.postId, [p.assignment.podId ?? "", ...(p.assignment.coPodId ? [p.assignment.coPodId] : [])]]));
@@ -457,11 +464,64 @@ app.get("/pods", async (c) => {
       hitRate: hitRate(statuses),
       editors: [...editors.values()].sort((a, b) => b.totals.spendCents - a.totals.spendCents),
       spark: sparkDays.map((d) => spendOn.get(`${g.podId ?? ""}|${d}`) ?? 0),
+      funnelSpend: mine.reduce(
+        (acc, p) => {
+          const band = funnelBand(dailyFrequency(p.totals), targets) ?? "unknown";
+          acc[band] += p.totals.spendCents;
+          return acc;
+        },
+        { top: 0, middle: 0, bottom: 0, unknown: 0 },
+      ),
     };
   });
 
   const body: PodsResponse = { ...range, rows };
   return c.json(body);
+});
+
+/**
+ * Average daily frequency per pod by week, the last 8 Monday-start weeks to the latest synced day.
+ * Per post per week once per sync (stats), grouped by the current pods here, so tag edits don't re-read ad_daily.
+ */
+app.get("/pods/frequency", async (c) => {
+  const db = c.env.DB;
+  const latest = await getLatestDate(db);
+  if (!latest) return c.json({ weeks: [], pods: {} } satisfies FrequencyTrendResponse);
+  const monday = shiftDay(latest, -((new Date(`${latest}T00:00:00Z`).getUTCDay() + 6) % 7));
+  const weeks = Array.from({ length: 8 }, (_, i) => shiftDay(monday, (i - 7) * 7));
+  const [rows, assigned] = await Promise.all([
+    memoize(
+      db,
+      `post-week-reach-${weeks[0]}`,
+      async () =>
+        (
+          await db
+            .prepare(
+              `SELECT a.post_id, date(d.date, 'weekday 0', '-6 days') AS w,
+                 SUM(d.reach) AS reach, SUM(CASE WHEN d.reach IS NOT NULL THEN d.impressions END) AS impr
+               FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
+               WHERE d.date >= ?1 AND d.reach > 0 GROUP BY a.post_id, w`,
+            )
+            .bind(weeks[0])
+            .all<{ post_id: string; w: string; reach: number; impr: number }>()
+        ).results,
+      { durable: true, scope: "stats" },
+    ),
+    db.prepare("SELECT post_id, pod_id, co_pod_id FROM assignments").all<{ post_id: string; pod_id: string | null; co_pod_id: string | null }>(),
+  ]);
+  // A post shared with a partner counts for both, as everywhere.
+  const podsOf = new Map(assigned.results.map((r) => [r.post_id, [r.pod_id ?? "", ...(r.co_pod_id ? [r.co_pod_id] : [])]]));
+  const pods: FrequencyTrendResponse["pods"] = {};
+  for (const r of rows) {
+    const i = weeks.indexOf(r.w);
+    if (i < 0) continue;
+    for (const pod of podsOf.get(r.post_id) ?? [""]) {
+      const points = (pods[pod] ??= weeks.map(() => ({ reachImpressions: 0, reach: 0 })));
+      points[i]!.reach += Number(r.reach);
+      points[i]!.reachImpressions += Number(r.impr);
+    }
+  }
+  return c.json({ weeks, pods } satisfies FrequencyTrendResponse);
 });
 
 /** Concepts that started testing in the period (and pod): what Creative Insights counts. */

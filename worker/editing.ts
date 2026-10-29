@@ -173,6 +173,10 @@ function checkTargets(t: Partial<Targets>): Problem {
   if (t.scoreFullHitRate !== undefined && !num(t.scoreFullHitRate, 1, 100)) return "Full hit-rate points must start at a hit rate from 1% to 100%.";
   if (t.scoreMinDecided !== undefined && !(Number.isInteger(t.scoreMinDecided) && num(t.scoreMinDecided, 0, 100)))
     return "Decided concepts for full hit-rate points must be a whole number from 0 to 100.";
+  for (const k of ["freqTopMax", "freqMiddleMax"] as const)
+    if (t[k] !== undefined && !num(t[k], 1, 5)) return "Funnel frequencies must be between 1 and 5.";
+  if (t.freqTopMax !== undefined && t.freqMiddleMax !== undefined && t.freqMiddleMax <= t.freqTopMax)
+    return "Middle of funnel must go up to more than top of funnel.";
   return null;
 }
 
@@ -214,7 +218,7 @@ editing.put("/settings", requireAccess, async (c) => {
     await mergeSetting(db, "targets", body.targets, by);
     // Hit results and fatigue depend on the targets; the ranking minimum and the pod score are applied
     // per request (score in the app), so they alone need no recompute.
-    const perRequest = ["rankMinSpendPerDay", "scoreWeightHitRate", "scoreWeightSpend", "scoreWeightRoas", "scoreRoasMinSpend", "scoreFullHitRate", "scoreMinDecided"];
+    const perRequest = ["rankMinSpendPerDay", "scoreWeightHitRate", "scoreWeightSpend", "scoreWeightRoas", "scoreRoasMinSpend", "scoreFullHitRate", "scoreMinDecided", "freqTopMax", "freqMiddleMax"];
     if (Object.keys(body.targets).some((k) => !perRequest.includes(k))) await bumpStats(db);
   }
   if (body.attribution) {
