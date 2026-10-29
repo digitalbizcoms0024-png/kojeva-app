@@ -522,7 +522,7 @@ function RankCard({ post, rank, targets, active, onSelect }: { post: PostSummary
             {post.name}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
-            <PodChip podId={post.assignment.podId} source={post.assignment.podSource} />
+            <PodChip podId={post.assignment.podId} coPodId={post.assignment.coPodId} source={post.assignment.podSource} />
             {post.launched && <span>Launched {shortDate(post.launched)}</span>}
             {post.daysLive != null && <span>· {post.daysLive} days live</span>}
             {post.copies > 1 && <span>· {post.copies} copies</span>}
@@ -612,7 +612,7 @@ function RankTable({
                       {p.name}
                     </span>
                     <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-3">
-                      <PodChip podId={p.assignment.podId} source={p.assignment.podSource} />
+                      <PodChip podId={p.assignment.podId} coPodId={p.assignment.coPodId} source={p.assignment.podSource} />
                       {!p.active && <Tag tone="outline">Paused</Tag>}
                       <FatigueTag f={p.fatigue} />
                       <HitBadge status={p.hit} />

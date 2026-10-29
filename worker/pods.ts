@@ -5,8 +5,10 @@ import { memoize } from "./cache.ts";
 
 export async function loadAddedPods(db: D1Database): Promise<Group[]> {
   const list = await memoize(db, "added-pods", async () => {
-    const { results } = await db.prepare("SELECT id, code, name, color, prefix, slot FROM pods WHERE prefix IS NOT NULL ORDER BY slot").all<Group>();
-    return results;
+    const { results } = await db
+      .prepare("SELECT id, code, name, color, prefix, slot, inhouse FROM pods WHERE prefix IS NOT NULL ORDER BY slot")
+      .all<Omit<Group, "inhouse"> & { inhouse: number | null }>();
+    return results.map((p) => ({ ...p, inhouse: p.inhouse == null || Number(p.inhouse) === 1 }));
   });
   setAddedPods(list);
   return list;

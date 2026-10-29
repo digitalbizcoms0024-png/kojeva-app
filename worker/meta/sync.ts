@@ -320,13 +320,14 @@ type AssignmentRow = {
   post_id: string;
   pod_id: string | null;
   pod_source: string | null;
+  co_pod_id: string | null;
   angle: string | null;
   format: string | null;
   hook: string | null;
   landing_page: string | null;
   tags_source: string | null;
 };
-const ASSIGN_COLS = ["pod_id", "pod_source", "angle", "format", "hook", "landing_page", "tags_source"] as const;
+const ASSIGN_COLS = ["pod_id", "pod_source", "co_pod_id", "angle", "format", "hook", "landing_page", "tags_source"] as const;
 
 async function setSetting(db: D1Database, key: string, value: unknown) {
   const json = JSON.stringify(value);
@@ -386,6 +387,8 @@ export async function attribute(db: D1Database) {
       post_id: postId,
       pod_id: keepPod ? old!.pod_id : pod ? podByCode(pod.podCode)!.id : null,
       pod_source: keepPod ? "manual" : (pod?.source ?? null),
+      // A partner named beside the pod in the ad set ("Shameer | Trybe | …") is credited too.
+      co_pod_id: keepPod ? old!.co_pod_id : pod?.partnerCode ? (podByCode(pod.partnerCode)?.id ?? null) : null,
       angle: keepTags ? old!.angle : tags.angle,
       format: keepTags ? old!.format : tags.format,
       hook: keepTags ? old!.hook : tags.hook,
@@ -396,13 +399,13 @@ export async function attribute(db: D1Database) {
     stmts.push(
       db
         .prepare(
-          `INSERT INTO assignments (post_id, pod_id, pod_source, angle, format, hook, landing_page, tags_source, updated_at, updated_by)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'sync')
-           ON CONFLICT(post_id) DO UPDATE SET pod_id = excluded.pod_id, pod_source = excluded.pod_source,
+          `INSERT INTO assignments (post_id, pod_id, pod_source, angle, format, hook, landing_page, tags_source, updated_at, updated_by, co_pod_id)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'sync', ?10)
+           ON CONFLICT(post_id) DO UPDATE SET pod_id = excluded.pod_id, pod_source = excluded.pod_source, co_pod_id = excluded.co_pod_id,
              angle = excluded.angle, format = excluded.format, hook = excluded.hook, landing_page = excluded.landing_page,
              tags_source = excluded.tags_source, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
         )
-        .bind(postId, next.pod_id, next.pod_source, next.angle, next.format, next.hook, next.landing_page, next.tags_source, now),
+        .bind(postId, next.pod_id, next.pod_source, next.angle, next.format, next.hook, next.landing_page, next.tags_source, now, next.co_pod_id),
     );
   }
   await runBatched(db, stmts);
@@ -417,26 +420,33 @@ async function saveConcepts(
 ) {
   const concepts = buildConcepts(ads.map((a) => ({ id: a.id, name: a.name, adsetId: a.adset_id, adsetName: a.adset_name })), settings);
   const { results: stored } = await db
-    .prepare("SELECT id, adset_id, adset_name, label, pod_id FROM concepts")
-    .all<{ id: string; adset_id: string; adset_name: string; label: string; pod_id: string }>();
+    .prepare("SELECT id, adset_id, adset_name, label, pod_id, co_pod_id FROM concepts")
+    .all<{ id: string; adset_id: string; adset_name: string; label: string; pod_id: string; co_pod_id: string | null }>();
   const oldConcepts = new Map(stored.map((c) => [c.id, c]));
 
   const stmts: D1PreparedStatement[] = [];
   const wanted = new Map<string, string | null>(ads.map((a) => [a.id, null]));
   for (const c of concepts) {
     for (const id of c.adIds) wanted.set(id, c.id);
-    const next = { id: c.id, adset_id: c.adsetId, adset_name: c.adsetName, label: c.label, pod_id: podByCode(c.podCode)!.id };
+    const next = {
+      id: c.id,
+      adset_id: c.adsetId,
+      adset_name: c.adsetName,
+      label: c.label,
+      pod_id: podByCode(c.podCode)!.id,
+      co_pod_id: c.partnerCode ? (podByCode(c.partnerCode)?.id ?? null) : null,
+    };
     const old = oldConcepts.get(c.id);
     oldConcepts.delete(c.id);
-    if (old && same(old, next, ["adset_id", "adset_name", "label", "pod_id"])) continue;
+    if (old && same(old, next, ["adset_id", "adset_name", "label", "pod_id", "co_pod_id"])) continue;
     stmts.push(
       db
         .prepare(
-          `INSERT INTO concepts (id, adset_id, adset_name, label, pod_id) VALUES (?1, ?2, ?3, ?4, ?5)
+          `INSERT INTO concepts (id, adset_id, adset_name, label, pod_id, co_pod_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
            ON CONFLICT(id) DO UPDATE SET adset_id = excluded.adset_id, adset_name = excluded.adset_name,
-             label = excluded.label, pod_id = excluded.pod_id`,
+             label = excluded.label, pod_id = excluded.pod_id, co_pod_id = excluded.co_pod_id`,
         )
-        .bind(next.id, next.adset_id, next.adset_name, next.label, next.pod_id),
+        .bind(next.id, next.adset_id, next.adset_name, next.label, next.pod_id, next.co_pod_id),
     );
   }
   for (const id of oldConcepts.keys()) stmts.push(db.prepare("DELETE FROM concepts WHERE id = ?1").bind(id));

@@ -134,7 +134,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
                             <RoasValue value={roas(p.totals)} target={tg.targetRoas} />
                           </span>
                           <span className="mt-1 block">
-                            <PodChip podId={p.assignment.podId} />
+                            <PodChip podId={p.assignment.podId} coPodId={p.assignment.coPodId} />
                           </span>
                         </span>
                       </a>
@@ -244,7 +244,7 @@ function NewLaunches({ meta }: { meta: MetaResponse }) {
                         {p.name}
                       </span>
                       <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
-                        <PodChip podId={p.assignment.podId} />
+                        <PodChip podId={p.assignment.podId} coPodId={p.assignment.coPodId} />
                         <span>Launched {shortDate(p.firstSpend)}</span>
                       </span>
                     </span>

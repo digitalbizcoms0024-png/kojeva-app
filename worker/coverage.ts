@@ -30,6 +30,7 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
       thumbnailUrl: p.thumbnailUrl,
       mediaType: p.mediaType,
       podId: p.assignment.podId,
+      coPodId: p.assignment.coPodId,
       totals: p.totals,
       personaId,
       awareness,
@@ -120,9 +121,10 @@ export function buildCoverage(posts: PostSummary[], concepts: ConceptResult[], p
 export async function loadCoverage(db: D1Database, from: string, to: string, pod?: string, loaded?: ConceptResult[]): Promise<CoverageResponse> {
   const [concepts, personas] = await Promise.all([loaded ?? loadConcepts(db), loadPersonas(db)]);
   const posts = await loadPosts(db, from, to, { concepts });
-  const byPod = <T extends { podId: string | null }>(x: T) => !pod || (pod === "unassigned" ? !x.podId : x.podId === pod);
+  const byPod = <T extends { podId: string | null; coPodId?: string | null }>(x: T) =>
+    !pod || (pod === "unassigned" ? !x.podId : x.podId === pod || x.coPodId === pod);
   return buildCoverage(
-    posts.filter((p) => byPod({ podId: p.assignment.podId })),
+    posts.filter((p) => byPod({ podId: p.assignment.podId, coPodId: p.assignment.coPodId })),
     concepts.filter(byPod),
     personas,
     { from, to },

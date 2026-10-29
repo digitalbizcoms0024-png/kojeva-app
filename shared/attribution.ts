@@ -30,6 +30,15 @@ export const DEFAULT_ATTRIBUTION: AttributionSettings = {
  * word ("Caicos Pod" → CAICOS).
  */
 export function podFromAdSetName(adsetName: string | null): PodCode | null {
+  return podsFromAdSetName(adsetName)?.main ?? null;
+}
+
+/**
+ * Who an ad set name credits: one pod, or an in-house pod together with a partner
+ * ("Shameer | Trybe | UGC | …" → Shameer, partner Trybe), which both count it in full (owner, Oct 29).
+ * Two in-house pods, or two partners, in one name is ambiguous; left for a human.
+ */
+export function podsFromAdSetName(adsetName: string | null): { main: PodCode; partner: PodCode | null } | null {
   if (!adsetName) return null;
   const words = new Set(adsetName.toUpperCase().split(/[^A-Z]+/).filter(Boolean));
   const parts = new Set(
@@ -42,8 +51,11 @@ export function podFromAdSetName(adsetName: string | null): PodCode | null {
       .filter(Boolean),
   );
   const found = allPods().filter((p) => (p.prefix ? parts.has(p.prefix.toUpperCase()) : words.has(p.name.toUpperCase())));
-  // Two strategists in one ad set name is ambiguous; leave it for a human.
-  return found.length === 1 ? found[0]!.code : null;
+  if (found.length === 1) return { main: found[0]!.code, partner: null };
+  const inhouse = found.filter((p) => p.inhouse !== false);
+  const partners = found.filter((p) => p.inhouse === false);
+  if (found.length === 2 && inhouse.length === 1 && partners.length === 1) return { main: inhouse[0]!.code, partner: partners[0]!.code };
+  return null;
 }
 
 /** "QW  | 12 ROUND 3 | …" → true when "QW" is an agency prefix. */
@@ -71,7 +83,7 @@ export function attributePod(
   ads: AttributionAd[],
   legacyPrefixMap: Record<string, PodCode> = {},
   settings: AttributionSettings = DEFAULT_ATTRIBUTION,
-): { podCode: PodCode; source: Exclude<PodSource, "manual">; reason: string } | null {
+): { podCode: PodCode; partnerCode?: PodCode | null; source: Exclude<PodSource, "manual">; reason: string } | null {
   const ordered = [...ads].sort((a, b) => (a.createdTime ?? "").localeCompare(b.createdTime ?? ""));
   const origin = ordered[0];
   if (!origin) return null;
@@ -80,8 +92,8 @@ export function attributePod(
   if (parsed.podCode) return { podCode: parsed.podCode, source: "name", reason: "pod code in ad name" };
 
   for (const ad of ordered) {
-    const code = podFromAdSetName(ad.adsetName);
-    if (code) return { podCode: code, source: "adset", reason: `ad set "${ad.adsetName}"` };
+    const pods = podsFromAdSetName(ad.adsetName);
+    if (pods) return { podCode: pods.main, partnerCode: pods.partner, source: "adset", reason: `ad set "${ad.adsetName}"` };
   }
   for (const ad of ordered) {
     if (isAgencyAdSet(ad.adsetName, settings.agencyPrefixes))

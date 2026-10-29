@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import app from "./index.ts";
 import type { Env } from "./env.ts";
-import type { MetaResponse, RankingsResponse } from "../shared/api.ts";
+import type { ConceptsResponse, MetaResponse, PodsResponse, RankingsResponse } from "../shared/api.ts";
 import { podFromAdSetName } from "../shared/attribution.ts";
 import { attribute } from "./meta/sync.ts";
 import { accessFixture, TEST_TEAM } from "./testing/access.ts";
@@ -129,5 +129,58 @@ describe("added pods", () => {
     await env.DB.prepare("UPDATE settings SET value = 'old' WHERE key = 'rules_fingerprint'").run();
     await call("/api/posts/p3/assignment", { method: "PATCH", body: JSON.stringify({ angle: "Comparison" }) });
     expect(await podOf("p9")).toBe("trybe");
+  });
+
+  it("credits an ad set naming a pod and a partner to both, and counts its spend once in totals", async () => {
+    // The first such ad set (scheduled Oct 29): Shameer's concept made with Trybe.
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO posts (id, media_type) VALUES ('p4', 'video')"),
+      env.DB.prepare(
+        "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time) VALUES ('4', 'p4', 'Shameer | Trybe | 1', 's4', 'Shameer | Trybe | UGC | 60 Sec Video Demo', 'ACTIVE', '2026-10-09T00:00:00Z')",
+      ),
+      env.DB.prepare("INSERT INTO ad_daily (ad_id, date, spend_cents, purchases, revenue_cents) VALUES ('4', '2026-10-10', 12000, 10, 30000)"),
+    ]);
+    await attribute(env.DB);
+    const p4 = (await json<RankingsResponse>(call("/api/rankings?range=all"))).items.find((p) => p.postId === "p4")!;
+    expect(p4.assignment).toMatchObject({ podId: "shameer", coPodId: "trybe", podSource: "adset" });
+    const ids = async (pod: string) => (await json<RankingsResponse>(call(`/api/rankings?range=all&pod=${pod}`))).items.map((p) => p.postId).sort();
+    expect(await ids("shameer")).toEqual(["p4"]);
+    expect(await ids("trybe")).toEqual(["p1", "p4"]);
+
+    const concept = (await json<ConceptsResponse>(call("/api/concepts?range=all"))).rows.find((k) => k.adsetName.startsWith("Shameer | Trybe"))!;
+    expect(concept).toMatchObject({ podId: "shameer", coPodId: "trybe", label: "UGC | 60 Sec Video Demo" });
+
+    const rows = (await json<PodsResponse>(call("/api/pods?range=all"))).rows;
+    const shameer = rows.find((r) => r.podId === "shameer")!;
+    const trybe = rows.find((r) => r.podId === "trybe")!;
+    expect(shameer).toMatchObject({ concepts: 1, live: 1, sharedCents: 0 });
+    expect(shameer.totals.spendCents).toBe(12000);
+    expect(trybe).toMatchObject({ concepts: 2, live: 2, sharedCents: 12000 });
+    expect(trybe.totals.spendCents).toBe(31800 + 12000);
+    // Every row added up, minus shared spend, is the account's spend.
+    const sum = rows.reduce((n, r) => n + r.totals.spendCents - r.sharedCents, 0);
+    expect(sum).toBe(31800 + 9000 + 5000 + 12000);
+
+    // A re-sync with nothing changed writes nothing.
+    await attribute(env.DB);
+    const again = (await json<RankingsResponse>(call("/api/rankings?range=all"))).items.find((p) => p.postId === "p4")!;
+    expect(again.assignment.coPodId).toBe("trybe");
+
+    // Removing Trybe leaves Shameer's credit.
+    await call("/api/pods/trybe", { method: "DELETE" });
+    const after = (await json<RankingsResponse>(call("/api/rankings?range=all"))).items.find((p) => p.postId === "p4")!;
+    expect(after.assignment).toMatchObject({ podId: "shameer", coPodId: null });
+  });
+
+  it("sets or clears the partner by hand from To review", async () => {
+    const patch = (body: unknown) => call("/api/posts/p3/assignment", { method: "PATCH", body: JSON.stringify(body) });
+    expect((await patch({ coPodId: "harris" })).status).toBe(400); // in-house: not a partner
+    expect((await patch({ coPodId: "trybe" })).status).toBe(200);
+    const p3 = async () => (await json<RankingsResponse>(call("/api/rankings?range=all"))).items.find((p) => p.postId === "p3")!.assignment;
+    expect(await p3()).toMatchObject({ podId: "harris", coPodId: "trybe", podSource: "manual" });
+    await attribute(env.DB);
+    expect((await p3()).coPodId).toBe("trybe"); // hand-set: a sync keeps it
+    expect((await patch({ coPodId: null })).status).toBe(200);
+    expect((await p3()).coPodId).toBeNull();
   });
 });

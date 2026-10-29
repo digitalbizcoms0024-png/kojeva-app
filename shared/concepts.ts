@@ -1,7 +1,7 @@
 // Concepts: what hit rate is measured on. One testing ad set = one concept, except
 // older ad sets that combined several ("IH | Dhia | STATIC | Batch 3 & 5"), which are
 // split by matching each ad's name to a part. See docs/METRICS.md → Hit rate.
-import { DEFAULT_ATTRIBUTION, isAgencyAdSet, podFromAdSetName, type AttributionSettings } from "./attribution.ts";
+import { DEFAULT_ATTRIBUTION, isAgencyAdSet, podFromAdSetName, podsFromAdSetName, type AttributionSettings } from "./attribution.ts";
 import { AGENCY, type PodCode } from "./taxonomy.ts";
 
 export interface ConceptAd {
@@ -17,6 +17,8 @@ export interface Concept {
   adsetName: string;
   label: string;
   podCode: PodCode;
+  /** A partner named beside the pod ("Shameer | Trybe | …" → Trybe): it counts the concept too. */
+  partnerCode: PodCode | null;
   adIds: string[];
 }
 
@@ -52,6 +54,9 @@ export function conceptLabel(adsetName: string): string {
   let i = 0;
   if (segs[i] && /^[A-Z]{2}$/i.test(segs[i]!)) i++; // IH / ME / QW / TV / YD
   if (segs[i] && podFromAdSetName(segs[i]!)) i++;
+  // "Shameer | Trybe | UGC | …": the partner beside the pod isn't part of the concept's name either.
+  const partner = podsFromAdSetName(adsetName)?.partner;
+  if (partner && segs[i] && podFromAdSetName(segs[i]!) === partner) i++;
   return segs.slice(i).join(" | ") || adsetName.trim();
 }
 
@@ -119,18 +124,19 @@ export function buildConcepts(ads: ConceptAd[], settings: AttributionSettings = 
   for (const [adsetId, list] of byAdset) {
     const adsetName = list[0]!.adsetName!;
     const podCode = testingPod(adsetName, settings)!;
+    const partnerCode = podsFromAdSetName(adsetName)?.partner ?? null;
     const label = conceptLabel(adsetName);
     if (ONE_CONCEPT_PER_AD.has(adsetId)) {
       const byTitle = new Map<string, string[]>();
       for (const ad of list) byTitle.set(staticTitle(ad.name), [...(byTitle.get(staticTitle(ad.name)) ?? []), ad.id]);
       for (const [title, adIds] of byTitle)
-        out.push({ id: `${adsetId}#${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, adsetId, adsetName, label: `${label} | ${title}`, podCode, adIds });
+        out.push({ id: `${adsetId}#${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, adsetId, adsetName, label: `${label} | ${title}`, podCode, partnerCode, adIds });
       continue;
     }
     const segs = label.split("|").map((s) => s.trim());
     const combinedAt = segs.findIndex((s) => SEP.test(s) && splitParts(s).length > 1);
     if (combinedAt < 0) {
-      out.push({ id: adsetId, adsetId, adsetName, label, podCode, adIds: list.map((a) => a.id) });
+      out.push({ id: adsetId, adsetId, adsetName, label, podCode, partnerCode, adIds: list.map((a) => a.id) });
       continue;
     }
 
@@ -148,7 +154,7 @@ export function buildConcepts(ads: ConceptAd[], settings: AttributionSettings = 
     // "AI Voiceover + Brolls" is one concept whose name happens to contain a "+".
     const numbered = parts.every((p) => /\d+$/.test(p));
     if (!(numbered && direct.size >= 1) && direct.size < 2) {
-      out.push({ id: adsetId, adsetId, adsetName, label, podCode, adIds: list.map((a) => a.id) });
+      out.push({ id: adsetId, adsetId, adsetName, label, podCode, partnerCode, adIds: list.map((a) => a.id) });
       continue;
     }
     // One part with no ads left and ads nobody claimed: they're that part's ("Did you know" → Batch 9).
@@ -157,9 +163,9 @@ export function buildConcepts(ads: ConceptAd[], settings: AttributionSettings = 
 
     const partLabel = (p: string) => segs.map((s, i) => (i === combinedAt ? p : s)).join(" | ");
     parts.forEach((p, i) => {
-      if (buckets[i]!.length) out.push({ id: `${adsetId}#${i}`, adsetId, adsetName, label: partLabel(p), podCode, adIds: buckets[i]! });
+      if (buckets[i]!.length) out.push({ id: `${adsetId}#${i}`, adsetId, adsetName, label: partLabel(p), podCode, partnerCode, adIds: buckets[i]! });
     });
-    if (unmatched.length) out.push({ id: `${adsetId}#rest`, adsetId, adsetName, label: `${label} (unsplit)`, podCode, adIds: unmatched });
+    if (unmatched.length) out.push({ id: `${adsetId}#rest`, adsetId, adsetName, label: `${label} (unsplit)`, podCode, partnerCode, adIds: unmatched });
   }
   return out;
 }

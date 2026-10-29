@@ -7,6 +7,9 @@ import { previousPeriod, type Range } from "./HeaderControls.tsx";
 import { useState } from "react";
 import { CpaValue, CsvButton, PodChip, RoasValue, SectionTitle, Segmented } from "./ui.tsx";
 
+/** A row's spend not also counted in another row: a partner's share of a pod's ad set is the pod's in bars and totals. */
+const ownSpend = (r: PodRow) => r.totals.spendCents - (r.sharedCents ?? 0);
+
 // Built-in pods, added pods, the agency, then unassigned.
 const order = (r: PodRow) => {
   const i = r.podId ? GROUPS.findIndex((g) => g.id === r.podId) : -1;
@@ -38,13 +41,13 @@ function ShareBar({ rows, total }: { rows: PodRow[]; total: number }) {
     <div>
       <div className="flex h-4 w-full gap-0.5 overflow-hidden" role="img" aria-label="Spend share by pod">
         {rows
-          .filter((r) => r.totals.spendCents > 0)
+          .filter((r) => ownSpend(r) > 0)
           .map((r) => (
             <div
               key={r.podId ?? "none"}
-              title={`${r.name}: ${money(r.totals.spendCents)} (${pct(r.totals.spendCents / total, 0)})`}
+              title={`${r.name}: ${money(ownSpend(r))} (${pct(ownSpend(r) / total, 0)})`}
               style={{
-                width: `${(r.totals.spendCents / total) * 100}%`,
+                width: `${(ownSpend(r) / total) * 100}%`,
                 background: r.podId ? `var(--pod-${r.podId})` : "repeating-linear-gradient(135deg, var(--line) 0 4px, var(--surface-2) 4px 8px)",
               }}
             />
@@ -52,7 +55,7 @@ function ShareBar({ rows, total }: { rows: PodRow[]; total: number }) {
       </div>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
         {rows
-          .filter((r) => r.totals.spendCents > 0)
+          .filter((r) => ownSpend(r) > 0)
           .map((r) => (
             <span key={r.podId ?? "none"} className="num inline-flex items-center gap-1.5">
               <span
@@ -60,7 +63,7 @@ function ShareBar({ rows, total }: { rows: PodRow[]; total: number }) {
                 style={{ background: r.podId ? `var(--pod-${r.podId})` : "var(--line)" }}
                 aria-hidden
               />
-              <b className="text-ink">{r.name}</b> {pct(r.totals.spendCents / total, 0)} · {money(r.totals.spendCents, { compact: true })}
+              <b className="text-ink">{r.name}</b> {pct(ownSpend(r) / total, 0)} · {money(ownSpend(r), { compact: true })}
             </span>
           ))}
       </div>
@@ -98,11 +101,13 @@ export function PodSpend({
   const prev = previousPeriod(range, latest);
   const before = useApi<PodsResponse>(prev ? `/api/pods?${qs({ range: "custom", from: prev.from, to: prev.to })}` : null);
   const all = rowsOf(now.data);
-  const allTotal = all.reduce((n, r) => n + r.totals.spendCents, 0);
+  // Spend shared by a pod and a partner counts once in totals and shares.
+  const allTotal = all.reduce((n, r) => n + ownSpend(r), 0);
   const isInside = (r: PodRow) => r.podId != null && inhouseIds.includes(r.podId);
   // The share bar and "Share" column: in-house pods only, or everyone.
   const rows = view === "inhouse" ? all.filter(isInside) : all;
-  const total = rows.reduce((n, r) => n + r.totals.spendCents, 0);
+  const total = rows.reduce((n, r) => n + ownSpend(r), 0);
+  const shared = rows.filter((r) => (r.sharedCents ?? 0) > 0);
   const switcher = controlled ? null : (
     <Segmented
       label="Spend by pod view"
@@ -115,6 +120,7 @@ export function PodSpend({
     />
   );
   const prevBy = new Map((before.data?.rows ?? []).map((r) => [r.podId ?? "none", r.totals.spendCents]));
+  const prevOwnBy = new Map((before.data?.rows ?? []).map((r) => [r.podId ?? "none", ownSpend(r)]));
   const period = now.data ? (now.data.from === "2000-01-01" ? "All time" : `${shortDate(now.data.from)} – ${shortDate(now.data.to)}`) : "";
 
   if (compact)
@@ -184,12 +190,18 @@ export function PodSpend({
           </thead>
           <tbody>
             {rows.map((r) => (
-              <SpendRow key={r.podId ?? "none"} r={r} share={total > 0 ? r.totals.spendCents / total : null} before={prevBy.get(r.podId ?? "none")} prev={!!prev} targets={targets} />
+              <SpendRow key={r.podId ?? "none"} r={r} share={total > 0 ? ownSpend(r) / total : null} before={prevBy.get(r.podId ?? "none")} prev={!!prev} targets={targets} />
             ))}
-            <TotalRow label={view === "inhouse" ? "In-house total" : "Total"} rows={rows} prevBy={prevBy} prev={!!prev} />
+            <TotalRow label={view === "inhouse" ? "In-house total" : "Total"} rows={rows} prevBy={prevOwnBy} prev={!!prev} />
           </tbody>
         </table>
       </div>
+      {shared.length > 0 && (
+        <p className="mt-2 text-xs text-ink-2">
+          {shared.map((r) => `${r.name}'s spend includes ${money(r.sharedCents, { compact: true })} shared with a pod`).join(" · ")} (ad sets naming both, e.g.
+          "Shameer | Trybe | …"): it counts in full for each, but once in the share and the total.
+        </p>
+      )}
       <p className="mt-2 text-xs text-ink-3">Spend change is shown in ink, not green or red: more or less spend isn't good or bad by itself.</p>
     </section>
   );
@@ -217,7 +229,7 @@ function SpendRow({ r, share, before, prev, targets }: { r: PodRow; share: numbe
 }
 
 function TotalRow({ label, rows, prevBy, prev }: { label: string; rows: PodRow[]; prevBy: Map<string, number>; prev: boolean }) {
-  const total = rows.reduce((n, r) => n + r.totals.spendCents, 0);
+  const total = rows.reduce((n, r) => n + ownSpend(r), 0);
   const before = rows.reduce((n, r) => n + (prevBy.get(r.podId ?? "none") ?? 0), 0);
   return (
     <tr className="font-bold">

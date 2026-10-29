@@ -2,7 +2,7 @@
 // to run a sync for the change to show. The fingerprint covers the rule code itself (function
 // source, so any edit to it counts), its constants and the pods table; it's stored in settings.
 // attribute() writes only rows whose pod, tags or concept changed.
-import { attributePod, DEFAULT_ATTRIBUTION, podFromAdSetName } from "../shared/attribution.ts";
+import { attributePod, DEFAULT_ATTRIBUTION, podFromAdSetName, podsFromAdSetName } from "../shared/attribution.ts";
 import { classify } from "../shared/classify.ts";
 import { buildConcepts, ONE_CONCEPT_PER_AD, staticTitle } from "../shared/concepts.ts";
 import { hitStatus, judgeTurnedOff, judgingWindowEnd, OFF_STATUSES } from "../shared/metrics.ts";
@@ -14,7 +14,7 @@ import { loadAddedPods } from "./pods.ts";
 
 // The judging rules too (hitStatus, judgeTurnedOff): their results are cached per sync, so a deploy
 // that changes them must recompute (bumpStats below) without waiting for a sync.
-const CODE = [attributePod, podFromAdSetName, buildConcepts, staticTitle, classify, parseAdName, hitStatus, judgeTurnedOff, judgingWindowEnd]
+const CODE = [attributePod, podFromAdSetName, podsFromAdSetName, buildConcepts, staticTitle, classify, parseAdName, hitStatus, judgeTurnedOff, judgingWindowEnd]
   .map((f) => f.toString())
   .join("\n");
 const CONSTANTS = JSON.stringify([PODS, DEFAULT_ATTRIBUTION, [...ONE_CONCEPT_PER_AD], OFF_STATUSES]);
@@ -32,7 +32,7 @@ function hash(s: string): string {
 export function ensureAttributed(db: D1Database): Promise<void> {
   return memoize(db, "rules-check", async () => {
     const pods = await loadAddedPods(db);
-    const fingerprint = hash(`${CODE}\n${CONSTANTS}\n${JSON.stringify(pods.map((p) => [p.id, p.code, p.prefix]))}`);
+    const fingerprint = hash(`${CODE}\n${CONSTANTS}\n${JSON.stringify(pods.map((p) => [p.id, p.code, p.prefix, p.inhouse]))}`);
     const stored = await db.prepare("SELECT value FROM settings WHERE key = 'rules_fingerprint'").first<{ value: string }>();
     if (stored?.value === fingerprint) return;
     await attribute(db);
