@@ -19,6 +19,9 @@ export type TermId =
   | "testing"
   | "testingNow"
   | "sharedCredit"
+  | "outboundCpc"
+  | "costPerAtc"
+  | "frequency"
   | "podScore"
   | "hit"
   | "miss"
@@ -72,6 +75,21 @@ export function terms(t: Targets): Record<TermId, Term> {
       group: "Testing",
       term: "Pod score",
       text: `Out of 100: how the pod leaderboard ranks the in-house pods. Hit rate, up to ${t.scoreWeightHitRate} points: full points at ${t.scoreFullHitRate}% or above, a share below (${t.scoreFullHitRate / 2}% earns half)${t.scoreMinDecided > 0 ? `, and less for pods with fewer than ${t.scoreMinDecided} decided concepts (2 decided earns 2/${t.scoreMinDecided}), so a lucky hit on a few tests can't top the board` : ""}. Spend, up to ${t.scoreWeightSpend}: the pod's spend as a share of the biggest pod's. ROAS, up to ${t.scoreWeightRoas}: full points at the ${t.targetRoas} target or above, a share below, and less for pods that spent under $${t.scoreRoasMinSpend}. The bar under the score shows the three parts. Change them in Settings → Targets.`,
+    },
+    outboundCpc: {
+      group: "Numbers",
+      term: "Outbound CPC",
+      text: "Spend ÷ outbound clicks: clicks on links that leave Meta (to the site), from Meta. Stored from Oct 29, 2026; earlier days show —.",
+    },
+    costPerAtc: {
+      group: "Numbers",
+      term: "Cost per add to cart",
+      text: "Spend ÷ adds to cart reported by Meta for the ad (its default attribution). Stored from Oct 29, 2026; earlier days show —.",
+    },
+    frequency: {
+      group: "Numbers",
+      term: "Frequency",
+      text: "About how many times each person saw the ad: impressions ÷ people reached. Reach is added up day by day, so someone reached on two days counts twice: an estimate (≈).",
     },
     sharedCredit: {
       group: "Pages",

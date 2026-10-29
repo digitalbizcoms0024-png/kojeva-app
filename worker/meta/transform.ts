@@ -47,6 +47,7 @@ export interface GraphInsight {
   impressions?: string;
   reach?: string;
   inline_link_clicks?: string;
+  outbound_clicks?: GraphAction[];
   actions?: GraphAction[];
   action_values?: GraphAction[];
 }
@@ -57,8 +58,11 @@ export interface GraphInsight {
  */
 export const PURCHASE_TYPES = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"] as const;
 
-export function pickAction(list: GraphAction[] | undefined): number {
-  for (const type of PURCHASE_TYPES) {
+/** Add-to-cart action types, in the same order of preference as purchases. */
+export const ADD_TO_CART_TYPES = ["omni_add_to_cart", "add_to_cart", "offsite_conversion.fb_pixel_add_to_cart"] as const;
+
+export function pickAction(list: GraphAction[] | undefined, types: readonly string[] = PURCHASE_TYPES): number {
+  for (const type of types) {
     const hit = list?.find((a) => a.action_type === type);
     if (hit) return Number(hit.value) || 0;
   }
@@ -75,6 +79,9 @@ export interface DailyRow {
   /** People reached that day; null when Meta didn't report it. */
   reach: number | null;
   linkClicks: number;
+  /** Clicks leading off Meta; null when Meta didn't report the field. */
+  outboundClicks: number | null;
+  addToCart: number;
   purchases: number;
   revenueCents: number;
 }
@@ -87,6 +94,8 @@ export function insightToDaily(r: GraphInsight): DailyRow {
     impressions: Number(r.impressions) || 0,
     reach: r.reach == null || r.reach === "" ? null : Number(r.reach) || 0,
     linkClicks: Number(r.inline_link_clicks) || 0,
+    outboundClicks: r.outbound_clicks ? Math.round(r.outbound_clicks.reduce((n, a) => n + (Number(a.value) || 0), 0)) : null,
+    addToCart: Math.round(pickAction(r.actions, ADD_TO_CART_TYPES)),
     purchases: Math.round(pickAction(r.actions)),
     revenueCents: Math.round(pickAction(r.action_values) * 100),
   };

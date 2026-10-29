@@ -21,6 +21,7 @@ interface Item {
 const PLACES: Item[] = [
   { id: "p:dashboard", label: "Dashboard", kind: "Page", href: "#/dashboard", keywords: "home overview spend purchases cpa roas totals" },
   { id: "p:rankings", label: "Ad Rankings", kind: "Page", href: "#/rankings", keywords: "ads best top list" },
+  { id: "p:swipe", label: "Ad Swipe", kind: "Page", href: "#/swipe", keywords: "swipe cards one by one review statics videos" },
   { id: "p:pods", label: "Pods", kind: "Page", href: "#/pods", keywords: "hit rate harris dhia shameer ali compare" },
   { id: "p:insights", label: "Creative Insights", kind: "Page", href: "#/insights", keywords: "angles formats hooks what works make more of" },
   { id: "p:combos", label: "Combinations heatmap", kind: "Creative Insights", href: "#/insights?tab=combos", keywords: "persona awareness angle format matrix" },

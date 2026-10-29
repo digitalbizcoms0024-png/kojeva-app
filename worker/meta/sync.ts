@@ -33,7 +33,7 @@ const AD_FIELDS =
   "creative{id,effective_object_story_id,thumbnail_url,image_url,object_type,video_id,image_hash," +
   "asset_feed_spec{images{hash,adlabels},asset_customization_rules{customization_spec,image_label,priority}}}";
 const INSIGHT_FIELDS =
-  "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,reach,inline_link_clicks,actions,action_values";
+  "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,reach,inline_link_clicks,outbound_clicks,actions,action_values";
 const ALL_STATUSES = [
   "ACTIVE", "PAUSED", "ARCHIVED", "CAMPAIGN_PAUSED", "ADSET_PAUSED", "DISAPPROVED",
   "PENDING_REVIEW", "WITH_ISSUES", "IN_PROCESS", "PREAPPROVED", "PENDING_BILLING_INFO",
@@ -492,10 +492,12 @@ type DailyDbRow = {
   impressions: number;
   reach: number | null;
   link_clicks: number;
+  outbound_clicks: number | null;
+  add_to_cart: number | null;
   purchases: number;
   revenue_cents: number;
 };
-const DAILY_COLS = ["spend_cents", "impressions", "reach", "link_clicks", "purchases", "revenue_cents"] as const;
+const DAILY_COLS = ["spend_cents", "impressions", "reach", "link_clicks", "outbound_clicks", "add_to_cart", "purchases", "revenue_cents"] as const;
 
 /** Brings daily metrics for [since, until] (inclusive, account timezone) in line with Meta. */
 export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, since: string, until: string) {
@@ -557,6 +559,8 @@ export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, si
       impressions: d.impressions,
       reach: d.reach,
       link_clicks: d.linkClicks,
+      outbound_clicks: d.outboundClicks,
+      add_to_cart: d.addToCart,
       purchases: d.purchases,
       revenue_cents: d.revenueCents,
     };
@@ -569,18 +573,20 @@ export async function syncInsights(env: Env, db: D1Database, gc: GraphClient, si
         next.impressions = prev.impressions;
         next.reach = prev.reach;
         next.link_clicks = prev.link_clicks;
+        next.outbound_clicks = prev.outbound_clicks;
       }
     }
     if (prev && same(prev, next, DAILY_COLS)) continue;
     stmts.push(
       db
         .prepare(
-          `INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, reach, link_clicks, purchases, revenue_cents)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+          `INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, reach, link_clicks, purchases, revenue_cents, outbound_clicks, add_to_cart)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
            ON CONFLICT(ad_id, date) DO UPDATE SET spend_cents = excluded.spend_cents, impressions = excluded.impressions,
-             reach = excluded.reach, link_clicks = excluded.link_clicks, purchases = excluded.purchases, revenue_cents = excluded.revenue_cents`,
+             reach = excluded.reach, link_clicks = excluded.link_clicks, purchases = excluded.purchases, revenue_cents = excluded.revenue_cents,
+             outbound_clicks = excluded.outbound_clicks, add_to_cart = excluded.add_to_cart`,
         )
-        .bind(next.ad_id, next.date, next.spend_cents, next.impressions, next.reach, next.link_clicks, next.purchases, next.revenue_cents),
+        .bind(next.ad_id, next.date, next.spend_cents, next.impressions, next.reach, next.link_clicks, next.purchases, next.revenue_cents, next.outbound_clicks, next.add_to_cart),
     );
   }
   // Rows Meta no longer reports for this window (e.g. revised to zero).
