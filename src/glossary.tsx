@@ -21,7 +21,7 @@ export type TermId =
   | "sharedCredit"
   | "outboundCpc"
   | "costPerAtc"
-  | "frequency"
+  | "dailyFrequency"
   | "podScore"
   | "hit"
   | "miss"
@@ -86,10 +86,10 @@ export function terms(t: Targets): Record<TermId, Term> {
       term: "Cost per add to cart",
       text: "Spend ÷ adds to cart reported by Meta for the ad (its default attribution). Stored from Oct 29, 2026; earlier days show —.",
     },
-    frequency: {
+    dailyFrequency: {
       group: "Numbers",
-      term: "Frequency",
-      text: "About how many times each person saw the ad: impressions ÷ people reached. Reach is added up day by day, so someone reached on two days counts twice: an estimate (≈).",
+      term: "Avg daily frequency · funnel",
+      text: `Impressions ÷ people reached, per ad per day, added up over the period (bigger ads weigh more). 1.00 means everyone who saw it that day was seeing it for the first time that day: new eyeballs. Meta uses an ad at up to ${t.freqTopMax.toFixed(2)} for the top of the funnel, up to ${t.freqMiddleMax.toFixed(2)} the middle, and above that the bottom (Settings → Targets). Days Meta sent no reach for are left out.`,
     },
     sharedCredit: {
       group: "Pages",

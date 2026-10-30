@@ -7,6 +7,10 @@ export interface Totals {
   linkClicks: number;
   purchases: number;
   revenueCents: number;
+  /** Sum of each ad's daily reach (people per ad per day, so the same person counts again on another day or ad). */
+  reach: number;
+  /** Impressions on the days Meta sent reach for: the other side of the daily frequency. */
+  reachImpressions: number;
 }
 
 export const ZERO_TOTALS: Totals = {
@@ -15,6 +19,8 @@ export const ZERO_TOTALS: Totals = {
   linkClicks: 0,
   purchases: 0,
   revenueCents: 0,
+  reach: 0,
+  reachImpressions: 0,
 };
 
 export function addTotals(a: Totals, b: Totals): Totals {
@@ -24,6 +30,9 @@ export function addTotals(a: Totals, b: Totals): Totals {
     linkClicks: a.linkClicks + b.linkClicks,
     purchases: a.purchases + b.purchases,
     revenueCents: a.revenueCents + b.revenueCents,
+    // Results stored before reach was added have none: they read as missing, not as NaN.
+    reach: (a.reach ?? 0) + (b.reach ?? 0),
+    reachImpressions: (a.reachImpressions ?? 0) + (b.reachImpressions ?? 0),
   };
 }
 
@@ -34,6 +43,27 @@ export function cpa(t: Totals): number | null {
 
 export function roas(t: Totals): number | null {
   return t.spendCents > 0 ? t.revenueCents / t.spendCents : null;
+}
+
+/**
+ * Average daily frequency (owner, Oct 29): impressions ÷ people reached, per ad per day, added up, so
+ * big ads weigh more. 1.00 = every impression reached someone new that day. Days without reach are left out.
+ */
+export function dailyFrequency(t: Totals): number | null {
+  return t.reach > 0 ? t.reachImpressions / t.reach : null;
+}
+
+export type FunnelBand = "top" | "middle" | "bottom";
+
+/**
+ * The part of the funnel Meta is using an ad (or pod) for, from its average daily frequency rounded
+ * to 2 decimals (owner, Oct 29): up to `freqTopMax` (1.15) top, up to `freqMiddleMax` (1.25) middle,
+ * above that bottom (the owner's 1.26–1.35, and anything higher).
+ */
+export function funnelBand(freq: number | null, t: Pick<Targets, "freqTopMax" | "freqMiddleMax">): FunnelBand | null {
+  if (freq == null) return null;
+  const f = Math.round(freq * 100) / 100;
+  return f <= t.freqTopMax ? "top" : f <= t.freqMiddleMax ? "middle" : "bottom";
 }
 
 /** Link clicks / impressions, as a fraction. */
@@ -71,6 +101,10 @@ export interface Targets {
   scoreFullHitRate: number;
   /** …once it has this many decided concepts; fewer earn a share (2 of 5 → 2/5). */
   scoreMinDecided: number;
+  /** Average daily frequency up to this is top of funnel (new eyeballs)… */
+  freqTopMax: number;
+  /** …up to this middle; above it bottom. */
+  freqMiddleMax: number;
 }
 
 export const DEFAULT_TARGETS: Targets = {
@@ -92,6 +126,8 @@ export const DEFAULT_TARGETS: Targets = {
   scoreRoasMinSpend: 300,
   scoreFullHitRate: 20,
   scoreMinDecided: 5,
+  freqTopMax: 1.15,
+  freqMiddleMax: 1.25,
 };
 
 export interface PodScore {

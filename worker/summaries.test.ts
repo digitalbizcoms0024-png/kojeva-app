@@ -42,6 +42,7 @@ const PAGES = [
   "/api/rankings?range=week&sort=cpa",
   "/api/pods?range=all",
   "/api/pods?range=month",
+  "/api/pods/frequency",
   "/api/concepts?range=all",
   "/api/alerts",
   "/api/trends?range=all",

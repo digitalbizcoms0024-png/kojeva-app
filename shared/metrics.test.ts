@@ -7,6 +7,9 @@ import {
   cpa,
   cpaBand,
   ctr,
+  addTotals,
+  dailyFrequency,
+  funnelBand,
   hitRate,
   incrementalShare,
   attributedCpa,
@@ -36,6 +39,31 @@ describe("ratios", () => {
   it("computes CPA in dollars and ROAS as a multiple", () => {
     expect(cpa(t(140, 10, 0))).toBe(14);
     expect(roas(t(100, 3, 170))).toBeCloseTo(1.7);
+  });
+});
+
+describe("daily frequency and funnel band (owner, Oct 29)", () => {
+  const f = (reachImpressions: number, reach: number): Totals => ({ ...ZERO_TOTALS, impressions: reachImpressions, reachImpressions, reach });
+  it("is impressions ÷ daily reach, weighted by size, and missing without reach", () => {
+    expect(dailyFrequency(f(1100, 1000))).toBeCloseTo(1.1);
+    // A big ad at 1.30 and a tiny one at 1.00: the pod reads near 1.30, not the 1.15 middle.
+    expect(dailyFrequency(addTotals(f(13_000, 10_000), f(100, 100)))).toBeCloseTo(1.297, 3);
+    expect(dailyFrequency(f(0, 0))).toBeNull();
+    // Results stored before reach existed (no fields) read as missing, not NaN.
+    const old = { spendCents: 100, impressions: 10, linkClicks: 0, purchases: 0, revenueCents: 0 } as Totals;
+    expect(dailyFrequency(addTotals(ZERO_TOTALS, old))).toBeNull();
+  });
+  it("uses the owner's bands: ≤1.15 top, ≤1.25 middle, above bottom (1.26–1.35 and beyond)", () => {
+    const band = (v: number | null) => funnelBand(v, DEFAULT_TARGETS);
+    expect(band(1.0)).toBe("top");
+    expect(band(1.15)).toBe("top");
+    expect(band(1.1549)).toBe("top"); // rounds to 1.15
+    expect(band(1.16)).toBe("middle");
+    expect(band(1.25)).toBe("middle");
+    expect(band(1.26)).toBe("bottom");
+    expect(band(1.35)).toBe("bottom");
+    expect(band(1.8)).toBe("bottom");
+    expect(band(null)).toBeNull();
   });
 });
 
@@ -110,7 +138,7 @@ describe("lateHitWindow", () => {
   const daily = Array.from({ length: 12 }, (_, i) => {
     const date = `2026-10-${String(i + 1).padStart(2, "0")}`;
     const purchases = i < 3 ? 4 : 10;
-    return { date, spendCents: 10000, impressions: 1000, linkClicks: 10, purchases, revenueCents: purchases * 2500 };
+    return { ...ZERO_TOTALS, date, spendCents: 10000, impressions: 1000, linkClicks: 10, purchases, revenueCents: purchases * 2500 };
   });
 
   it("judges the totals since launch, from day 7 on", () => {
@@ -140,6 +168,7 @@ describe("lateHitWindow", () => {
   it("matches Harris KOJEVA 12 | WOMEN OVER 50 and Get It or Regret It (both late hits), Meta, Sep–Oct 2026", () => {
     // Revenue = spend × ROAS, or given directly for days with purchases but no spend (Meta shows no ROAS there).
     const day = (date: string, spend: number, purchases: number, roas: number, revenue?: number) => ({
+      ...ZERO_TOTALS,
       date,
       spendCents: Math.round(spend * 100),
       impressions: 0,

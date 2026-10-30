@@ -6,6 +6,7 @@ import { conceptHref } from "../components/ConceptDrawer.tsx";
 import { openDrill } from "../drill.ts";
 import { LaunchCadence } from "../components/LaunchCadence.tsx";
 import { PodLeaderboard } from "../components/PodLeaderboard.tsx";
+import { PodReach } from "../components/PodReach.tsx";
 import { PodSpend, type SpendView } from "../components/PodSpend.tsx";
 import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
@@ -207,6 +208,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
         {/* Leaderboard, spend by pod, hit rate by pod, strategists, launches (owner, Oct 28). */}
         <PodLeaderboard data={pods.data} error={pods.error} retry={pods.retry} meta={meta} range={range} />
         <PodSpend range={range} latest={meta.latestDate} targets={t} inhouseIds={inhouseIds} view={view} />
+        <PodReach rows={pods.data?.rows} error={pods.error} retry={pods.retry} targets={t} shown={shown.map((r) => r.podId!)} />
         <SectionTitle
           title="Hit rate by pod"
           className="mb-0"

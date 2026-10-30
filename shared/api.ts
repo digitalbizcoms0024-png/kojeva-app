@@ -1,10 +1,10 @@
 // Response shapes shared by the Worker API and the React app.
 import type { Fatigue } from "./fatigue.ts";
-import type { AttributedTotals, HitStatus, Targets, Totals } from "./metrics.ts";
+import type { AttributedTotals, FunnelBand, HitStatus, Targets, Totals } from "./metrics.ts";
 
 /** week / month = the last 7 / 30 synced days; mtd = from the 1st of the latest synced day's month. */
 export type RangeKey = "week" | "14d" | "month" | "mtd" | "all" | "custom";
-export type SortKey = "spend" | "purchases" | "roas" | "cpa" | "ctr";
+export type SortKey = "spend" | "purchases" | "roas" | "cpa" | "ctr" | "freq";
 
 export interface ConnectionStatus {
   accessProtected: boolean;
@@ -204,6 +204,15 @@ export interface PodRow {
   editors: { editorId: string | null; name: string; totals: Totals; concepts: number }[];
   /** Daily spend in cents for the last 7 synced days, oldest first (0 on days without spend). */
   spark: number[];
+  /** The group's spend in the range by the funnel band of each ad's own average daily frequency; `unknown` without reach. */
+  funnelSpend: Record<FunnelBand | "unknown", number>;
+}
+
+/** Average daily frequency by week for each pod (Pods → Reach by pod), the last 8 Monday-start weeks. */
+export interface FrequencyTrendResponse {
+  weeks: string[];
+  /** Per pod id ("" = no pod): impressions on days with reach and summed daily reach, one per week. */
+  pods: Record<string, { reachImpressions: number; reach: number }[]>;
 }
 
 export interface ConceptResult {

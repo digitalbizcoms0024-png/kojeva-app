@@ -1,3 +1,4 @@
+import { FrequencyValue } from "../components/PodReach.tsx";
 import { useEffect, useRef, useState } from "react";
 import { Info } from "../glossary.tsx";
 import type { AttributionResponse, MetaResponse, PodsResponse, PostDetail, PostSummary, RankingsResponse, SortKey } from "../../shared/api.ts";
@@ -47,6 +48,7 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: "roas", label: "ROAS" },
   { value: "cpa", label: "CPA" },
   { value: "ctr", label: "CTR" },
+  { value: "freq", label: "Frequency, lowest first" },
 ];
 
 const vocab = (v: Record<string, string>, all: string) => [{ value: "", label: all }, ...Object.entries(v).map(([value, label]) => ({ value, label }))];
@@ -65,19 +67,25 @@ export function RankingsPage({
   setRange,
   initialPost,
   initialStatus,
+  initialSort,
+  initialPod,
 }: {
   meta: MetaResponse;
   range: Range;
   setRange: (r: Range) => void;
   initialPost?: string | null;
   initialStatus?: string | null;
+  /** From a link (Pods → Reach by pod: ?pod=…&sort=freq). */
+  initialSort?: string | null;
+  initialPod?: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("ads");
   // ROAS first (owner, Oct 28); ads under the daily spend minimum are left out of it.
-  const [sort, setSort] = useState<SortKey>("roas");
-  const [view, setView] = useState<View>("inhouse");
+  const [sort, setSort] = useState<SortKey>(SORTS.some((s) => s.value === initialSort) ? (initialSort as SortKey) : "roas");
+  // A partner pod from a link needs the view that includes partners.
+  const [view, setView] = useState<View>(initialPod && !meta.pods.some((p) => p.id === initialPod && p.inhouse) ? "all" : "inhouse");
   // A pod picked in Filters; "" means every pod in the view.
-  const [pod, setPod] = useState("");
+  const [pod, setPod] = useState(initialPod ?? "");
   const [status, setStatus] = useState(initialStatus ?? "all");
   // Preset: only ads launched in the last 7 days, or since Monday of last week (numbers from then on).
   const [preset, setPreset] = useState<Preset>("all");
@@ -530,7 +538,7 @@ function RankCard({ post, rank, targets, active, onSelect }: { post: PostSummary
             <FatigueTag f={post.fatigue} />
             <HitBadge status={post.hit} />
           </div>
-          <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-2 border-t border-divider pt-2 2xl:grid-cols-5">
+          <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-2 border-t border-divider pt-2 2xl:grid-cols-6">
             <Metric label="Spend">{money(post.totals.spendCents)}</Metric>
             <Metric label="Purchases">{int(post.totals.purchases)}</Metric>
             <Metric label="Link CTR">{pct(ctr(post.totals))}</Metric>
@@ -539,6 +547,9 @@ function RankCard({ post, rank, targets, active, onSelect }: { post: PostSummary
             </Metric>
             <Metric label="ROAS · Meta">
               <RoasValue value={roas(post.totals)} target={targets.targetRoas} />
+            </Metric>
+            <Metric label="Daily frequency">
+              <FrequencyValue totals={post.totals} targets={targets} short />
             </Metric>
           </div>
         </div>
@@ -591,6 +602,7 @@ function RankTable({
             {head("CPA", "cpa")}
             {head("ROAS", "roas")}
             {head("CTR", "ctr", "hidden md:table-cell")}
+            {head("Frequency", "freq", "hidden md:table-cell")}
             <th className="hidden py-2 pr-3 text-right font-normal lg:table-cell">
               Days live <Info id="daysLive" />
             </th>
@@ -629,6 +641,9 @@ function RankTable({
                 <RoasValue value={roas(p.totals)} target={targets.targetRoas} />
               </td>
               <td className="num hidden py-2 pr-3 text-right text-ink md:table-cell">{pct(ctr(p.totals))}</td>
+              <td className="hidden py-2 pr-3 text-right text-ink md:table-cell">
+                <FrequencyValue totals={p.totals} targets={targets} short />
+              </td>
               <td className="num hidden py-2 pr-3 text-right text-ink-3 lg:table-cell">{p.daysLive ?? "—"}</td>
             </tr>
           ))}
@@ -745,6 +760,9 @@ function PostDetailPanel({ postId, range, targets }: { postId: string; range: Ra
           </Cell>
           <Cell label="Link CTR">{pct(ctr(data.totals))}</Cell>
           <Cell label="CPM">{dollars(cpm(data.totals))}</Cell>
+          <Cell label="Daily frequency">
+            <FrequencyValue totals={data.totals} targets={targets} />
+          </Cell>
         </div>
         <div className="mt-0.5 grid grid-cols-2 gap-0.5 border-2 border-t-0 border-divider bg-divider sm:grid-cols-3">
           <Cell label="Purch. · 7-day click">{click7 ? int(click7.purchases) : "—"}</Cell>

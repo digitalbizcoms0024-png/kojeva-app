@@ -24,7 +24,9 @@ export const TOTALS_SQL = `
   COALESCE(SUM(d.impressions), 0)   AS impressions,
   COALESCE(SUM(d.link_clicks), 0)   AS link_clicks,
   COALESCE(SUM(d.purchases), 0)     AS purchases,
-  COALESCE(SUM(d.revenue_cents), 0) AS revenue_cents`;
+  COALESCE(SUM(d.revenue_cents), 0) AS revenue_cents,
+  COALESCE(SUM(d.reach), 0)         AS reach,
+  COALESCE(SUM(CASE WHEN d.reach IS NOT NULL THEN d.impressions END), 0) AS reach_impressions`;
 
 export function toTotals(r: Row | undefined): Totals {
   return {
@@ -33,6 +35,8 @@ export function toTotals(r: Row | undefined): Totals {
     linkClicks: Number(r?.link_clicks ?? 0),
     purchases: Number(r?.purchases ?? 0),
     revenueCents: Number(r?.revenue_cents ?? 0),
+    reach: Number(r?.reach ?? 0),
+    reachImpressions: Number(r?.reach_impressions ?? 0),
   };
 }
 
@@ -229,7 +233,7 @@ async function computeConceptNumbers(db: D1Database): Promise<Record<string, Con
   for (const [conceptId, adId, date, spendCents, impressions, linkClicks, purchases, revenueCents] of rows) {
     let byDay = days.get(conceptId);
     if (!byDay) days.set(conceptId, (byDay = new Map()));
-    byDay.set(date, addTotals(byDay.get(date) ?? ZERO_TOTALS, { spendCents, impressions, linkClicks, purchases, revenueCents }));
+    byDay.set(date, addTotals(byDay.get(date) ?? ZERO_TOTALS, { spendCents, impressions, linkClicks, purchases, revenueCents, reach: 0, reachImpressions: 0 }));
     let ad = adDays.get(adId);
     if (!ad) adDays.set(adId, (ad = { concept: conceptId, days: [] }));
     ad.days.push([date, spendCents]);

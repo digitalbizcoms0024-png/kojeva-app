@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { MetaResponse, PostDetail, PostSummary, RankingsResponse } from "../../shared/api.ts";
-import { cpa, ctr, roas, type Targets } from "../../shared/metrics.ts";
+import { cpa, ctr, dailyFrequency, funnelBand, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
-import { PlayableThumb } from "../components/AdPreview.tsx";
+import { AdPreviewFrame } from "../components/AdPreview.tsx";
+import { freqText, FunnelTag } from "../components/PodReach.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
-import { CpaValue, Empty, HitBadge, LoadError, PageHeader, PodChip, RoasValue, Segmented, Select, Tag } from "../components/ui.tsx";
+import { CpaValue, Empty, Thumb, HitBadge, LoadError, PageHeader, PodChip, RoasValue, Segmented, Select, Tag } from "../components/ui.tsx";
 import { conceptHref } from "../drill.ts";
 import { Info } from "../glossary.tsx";
 import { dollars, int, money, pct, shortDate } from "../format.ts";
@@ -177,15 +178,22 @@ function Card({ post, range, targets }: { post: PostSummary; range: Range; targe
   const outboundCpc = per(x?.outboundClicks);
   const costPerAtc = per(x?.addToCart);
   const cpm = t.impressions > 0 ? t.spendCents / 100 / (t.impressions / 1000) : null;
-  const frequency = x?.reach ? t.impressions / x.reach : x?.reach === 0 ? null : undefined;
+  // Days without reach are left out of both sides (see dailyFrequency).
+  const frequency = dailyFrequency(t);
+  const band = funnelBand(frequency, targets);
   const loading = <span className="skeleton inline-block h-6 w-20" aria-label="Loading" />;
   const notYet = "stored from Oct 29";
   const format = post.mediaType === "image" ? "Static image" : "Video";
 
   return (
     <article className="flex min-w-0 flex-1 flex-wrap border-2 border-divider bg-surface">
-      <div className="flex w-full items-center justify-center bg-ink p-4 sm:w-[340px] sm:flex-none">
-        <PlayableThumb postId={post.postId} name={post.name} mediaType={post.mediaType} label={format} url={post.thumbnailUrl} className="aspect-[9/16] w-full max-w-[200px] sm:max-w-[300px]" />
+      {/* Meta's own preview, open by default: copy, headline, reactions and comments; videos play in place. */}
+      <div className="flex w-full justify-center border-divider bg-surface-2 p-3 sm:w-[380px] sm:flex-none sm:border-r-2">
+        <AdPreviewFrame
+          postId={post.postId}
+          name={post.name}
+          fallback={<Thumb mediaType={post.mediaType} label={format} url={post.thumbnailUrl} className="aspect-[4/5] w-full max-w-[300px]" />}
+        />
       </div>
       <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-4 p-5 md:p-6">
         <div className="flex flex-col gap-2">
@@ -227,8 +235,8 @@ function Card({ post, range, targets }: { post: PostSummary; range: Range; targe
           <Metric label="CPM" note="per 1,000 impressions">
             {dollars(cpm)}
           </Metric>
-          <Metric label="Frequency" term="frequency" note="≈ impressions ÷ people reached">
-            {frequency === undefined ? (d ? "—" : loading) : frequency == null ? "—" : `≈ ${frequency.toFixed(2)}`}
+          <Metric label="Daily frequency" term="dailyFrequency" note={band ? <FunnelTag band={band} /> : "no reach from Meta"}>
+            {freqText(frequency)}
           </Metric>
         </div>
 
@@ -278,7 +286,7 @@ function statusLabel(s: string): string {
   return s.charAt(0) + s.slice(1).toLowerCase().replace(/_/g, " ");
 }
 
-function Metric({ label, note, term, children }: { label: string; note?: string; term?: "outboundCpc" | "costPerAtc" | "frequency"; children: ReactNode }) {
+function Metric({ label, note, term, children }: { label: string; term?: "outboundCpc" | "costPerAtc" | "dailyFrequency"; note?: ReactNode; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-1 bg-page px-3 py-3">
       <span className="kicker">

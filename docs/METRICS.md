@@ -113,11 +113,13 @@ Ranking by purchases, ROAS, CTR or CPA only includes posts that spent at least `
 One post at a time, ← / → (keys or buttons; a bottom bar on a phone). View-only. Deck = `/api/rankings` with
 the page's filters: format (`?media=image|video`), pod (default in-house pods), status (default running now),
 order (spend default, ROAS, newest launch). Each card is `/api/posts/:id` for the global range.
+- The ad shows as Meta's preview straight away (`/api/posts/:id/preview`, Facebook feed first; tabs for
+  Instagram feed, Reels, Story): copy, headline, reactions and comment count, and videos play in place. One Graph
+  read per card and placement viewed; without Meta it falls back to the thumbnail.
 - **Outbound CPC** = spend ÷ Meta `outbound_clicks` (not unique). **Cost per add to cart** = spend ÷ adds to cart
   (`omni_add_to_cart`, else pixel add to cart). Both stored in `ad_daily` from Oct 29 (migration 0031); a range
   containing a spend day without them shows "—", never a partial number.
-- **Frequency** ≈ impressions ÷ summed daily reach (people reached on several days count again, so it reads low);
-  "—" when a spend day has no reach.
+- **Daily frequency** with its funnel band, as below.
 - **Running N days** = Days live as on Ad Rankings; "where it runs" lists the 5 biggest-spending copies.
 
 ## CSV export
@@ -173,6 +175,20 @@ then Oct 5 – 18, Oct 19 – Nov 1, and so on.
 - **In-house** view (default): the share bar and Share column cover in-house pods only (Settings → In-house tick); the agency, partners (Trybe) and uncredited spend are left out of the bar and the table; switch to **All spend** to see them. **All spend** shows everyone in one bar, as before.
 - Pods page section (and a share bar on the Dashboard): spend per pod, the agency and unassigned for the global range, share of
   total, and change vs the period before (same length). Spend changes are shown without good/bad color.
+
+## Average daily frequency and funnel (owner, Oct 29; `dailyFrequency`, `funnelBand` in `shared/metrics.ts`)
+Which pod brings the most new eyeballs into the funnel.
+- **Average daily frequency** = Σ impressions ÷ Σ reach over each ad's days (Meta's reach is per ad per day), so
+  bigger ads weigh more. Days without reach are left out of both sides; none at all → "—". `Totals.reach` and
+  `Totals.reachImpressions` carry the two sums everywhere totals go.
+- **Funnel band** (rounded to 2 decimals; Settings → Targets `freqTopMax`, `freqMiddleMax`): ≤ 1.15 top of funnel,
+  ≤ 1.25 middle, above bottom (the owner's 1.26–1.35, and higher counts as bottom too). Neutral shades, not status colors.
+- **Pods → Reach by pod** (after Spend by pod): each pod's average over all its ads in the range (scaling copies
+  included; a pod + partner ad set counts for both), lowest first with ★ Most new eyeballs; the pod's spend split by
+  each ad's own band (`PodRow.funnelSpend`); "Its ads" opens Ad Rankings sorted by frequency, lowest first.
+  Below it the last 8 Monday-start weeks per pod (`/api/pods/frequency`, per post per week once per sync, grouped by current tags).
+- Ad Rankings: Frequency column and sort (`sort=freq`), and on cards and the side card. Ad Swipe: Daily frequency with the band.
+  The ranking minimum spend applies to the frequency sort as to the other ratios.
 
 ## Concepts launched per week
 - New concepts per pod by the Monday–Sunday week of their first spend, last 8 weeks, ending with the week of the latest synced

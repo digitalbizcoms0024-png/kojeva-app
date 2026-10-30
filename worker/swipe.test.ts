@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { PostDetail, RankingsResponse } from "../shared/api.ts";
+import type { FrequencyTrendResponse, PodsResponse, PostDetail, RankingsResponse } from "../shared/api.ts";
+import { dailyFrequency } from "../shared/metrics.ts";
 import type { Env } from "./env.ts";
 import app from "./index.ts";
 import { attribute } from "./meta/sync.ts";
@@ -53,5 +54,39 @@ describe("Ad Swipe data", () => {
     expect(img.lastSpend).toBe("2026-10-11");
     const vid = await get<PostDetail>("/api/posts/vid?range=all");
     expect(vid.extra).toEqual({ outboundClicks: null, addToCart: null, reach: null });
+  });
+});
+
+describe("Reach by pod", () => {
+  beforeEach(async () => {
+    // a-img (1.25 → middle: 100/80 and 150/120), a-vid (only the day with reach: 1000/700 → bottom); add a top-of-funnel Dhia ad.
+    await env.DB.batch([
+      env.DB.prepare("UPDATE ad_daily SET impressions = 100, reach = 80 WHERE ad_id = 'a-img' AND date = '2026-10-10'"),
+      env.DB.prepare("UPDATE ad_daily SET impressions = 150, reach = 120 WHERE ad_id = 'a-img' AND date = '2026-10-11'"),
+    ]);
+    await ad("dhia", "a-dhia", "image");
+    await env.DB.prepare("UPDATE ads SET adset_name = 'IH | Dhia | a-dhia' WHERE id = 'a-dhia'").run();
+    await day("a-dhia", "2026-10-11", null, null, 950);
+    await env.DB.prepare("UPDATE ad_daily SET impressions = 1000 WHERE ad_id = 'a-dhia'").run();
+    await attribute(env.DB);
+  });
+
+  it("splits each pod's spend by its ads' bands and ranks ads by lowest frequency", async () => {
+    const pods = await get<PodsResponse>("/api/pods?range=all");
+    const harris = pods.rows.find((r) => r.podId === "harris")!;
+    expect(harris.funnelSpend).toEqual({ top: 0, middle: 20000, bottom: 20000, unknown: 0 });
+    // 250 + 1000 impressions with reach ÷ (200 + 700) people.
+    expect(dailyFrequency(harris.totals)).toBeCloseTo(1250 / 900);
+    expect(pods.rows.find((r) => r.podId === "dhia")!.funnelSpend.top).toBe(10000);
+    const ranked = await get<RankingsResponse>("/api/rankings?range=all&sort=freq");
+    expect(ranked.items.map((p) => p.postId)).toEqual(["dhia", "img", "vid"]);
+  });
+
+  it("gives each pod's weekly average daily frequency", async () => {
+    const trend = await get<FrequencyTrendResponse>("/api/pods/frequency");
+    expect(trend.weeks).toHaveLength(8);
+    expect(trend.weeks.at(-1)).toBe("2026-10-05");
+    expect(trend.pods.harris!.at(-1)).toEqual({ reachImpressions: 1250, reach: 900 });
+    expect(trend.pods.dhia!.at(-1)).toEqual({ reachImpressions: 1000, reach: 950 });
   });
 });
