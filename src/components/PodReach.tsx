@@ -1,7 +1,5 @@
-import { useState } from "react";
 import type { FrequencyTrendResponse, PodRow } from "../../shared/api.ts";
 import { dailyFrequency, funnelBand, type FunnelBand, type Targets, type Totals } from "../../shared/metrics.ts";
-import { podById } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { money, shortDate } from "../format.ts";
 import { Info } from "../glossary.tsx";
@@ -145,111 +143,59 @@ function SpendBar({ split }: { split: PodRow["funnelSpend"] }) {
   );
 }
 
-const W = 640;
-const H = 200;
-const PAD = { l: 40, r: 12, t: 12, b: 22 };
-
-/** The last 8 weeks' average daily frequency, one line per pod, one y-axis, with the band lines. */
+/**
+ * The last 8 weeks' average daily frequency as a table (owner, Oct 30: a table, not a chart): one row
+ * per pod, one column per Monday-start week, each cell with its funnel band.
+ */
 function FrequencyTrend({ shown, targets }: { shown: string[]; targets: Targets }) {
   const { data, error, retry } = useApi<FrequencyTrendResponse>("/api/pods/frequency");
-  const [hover, setHover] = useState<number | null>(null);
-  if (error) return <LoadError error={error} retry={retry} what="the frequency trend" />;
+  if (error) return <LoadError error={error} retry={retry} what="the weekly frequency" />;
   if (!data) return <LoadError error={null} loading rows={4} />;
-  const n = data.weeks.length;
-  const lines = shown
+  const rows = shown
     .filter((id) => data.pods[id])
     .map((id) => ({ id, values: data.pods[id]!.map((p) => (p.reach > 0 ? p.reachImpressions / p.reach : null)) }));
-  if (n === 0 || lines.length === 0) return null;
-  const vals = lines.flatMap((l) => l.values.filter((v): v is number => v != null));
-  const lo = Math.min(1, ...vals);
-  const hi = Math.max(targets.freqMiddleMax + 0.1, ...vals);
-  const innerW = W - PAD.l - PAD.r;
-  const innerH = H - PAD.t - PAD.b;
-  const x = (i: number) => PAD.l + (n === 1 ? innerW / 2 : (innerW * i) / (n - 1));
-  const y = (v: number) => PAD.t + innerH - ((v - lo) / (hi - lo)) * innerH;
-  const path = (values: (number | null)[]) => {
-    let d = "";
-    let pen = false;
-    values.forEach((v, i) => {
-      if (v == null) pen = false;
-      else {
-        d += `${pen ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
-        pen = true;
-      }
-    });
-    return d;
-  };
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const px = ((e.clientX - r.left) / r.width) * W;
-    setHover(Math.max(0, Math.min(n - 1, Math.round(((px - PAD.l) / innerW) * (n - 1)))));
-  };
+  if (data.weeks.length === 0 || rows.length === 0) return null;
+  const last = data.weeks.length - 1;
   return (
     <div className="mt-2">
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <span className="kicker">Avg daily frequency by week · last 8 weeks</span>
-        <span className="flex flex-wrap gap-3 text-xs text-ink-3">
-          {lines.map((l) => (
-            <span key={l.id} className="inline-flex items-center gap-1">
-              <span className="inline-block h-0.5 w-4" style={{ background: `var(--pod-${l.id})` }} aria-hidden />
-              {podById(l.id)?.name ?? l.id}
-            </span>
-          ))}
-        </span>
+      <h3 className="kicker mb-1">Avg daily frequency by week · last 8 weeks</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead className="kicker text-left">
+            <tr className="border-b-2 border-divider">
+              <th className="py-2 pr-3 font-normal">Pod</th>
+              {data.weeks.map((w, i) => (
+                <th key={w} className="py-2 pr-3 text-right font-normal whitespace-nowrap">
+                  {i === last ? "This week" : shortDate(w)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b border-divider">
+                <td className="py-2 pr-3">
+                  <PodChip podId={r.id} />
+                </td>
+                {r.values.map((v, i) => {
+                  const band = funnelBand(v, targets);
+                  return (
+                    <td key={data.weeks[i]} className="py-2 pr-3 text-right align-top">
+                      <span className="num block font-semibold text-ink">{freqText(v)}</span>
+                      {band && (
+                        <span className="inline-flex justify-end">
+                          <FunnelTag band={band} short />
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-      <div className="relative">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[900px]" role="img" aria-label="Average daily frequency by week per pod" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
-          {[targets.freqTopMax, targets.freqMiddleMax].map((v) => (
-            <g key={v}>
-              <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="var(--ink-3)" strokeWidth={1} strokeDasharray="3 3" />
-              <text x={PAD.l + 4} y={y(v) - 3} fontSize={10} fill="var(--ink-3)" stroke="var(--page)" strokeWidth={3} paintOrder="stroke">
-                {v === targets.freqTopMax ? `top ≤ ${v.toFixed(2)}` : `middle ≤ ${v.toFixed(2)}`}
-              </text>
-            </g>
-          ))}
-          {[lo, (lo + hi) / 2, hi].map((v) => (
-            <g key={v}>
-              <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="var(--line)" strokeWidth={1} />
-              <text x={PAD.l - 6} y={y(v) + 3} textAnchor="end" fontSize={10} fill="var(--ink-3)">
-                {v.toFixed(2)}
-              </text>
-            </g>
-          ))}
-          {data.weeks.map((w, i) => (
-            <text key={w} x={x(i)} y={H - 6} textAnchor={i === 0 ? "start" : i === n - 1 ? "end" : "middle"} fontSize={10} fill="var(--ink-3)">
-              {shortDate(w)}
-            </text>
-          ))}
-          {lines.map((l) => (
-            <path key={l.id} d={path(l.values)} fill="none" stroke={`var(--pod-${l.id})`} strokeWidth={2} strokeLinejoin="round" />
-          ))}
-          {hover != null && <line x1={x(hover)} x2={x(hover)} y1={PAD.t} y2={PAD.t + innerH} stroke="var(--ink-3)" strokeWidth={1} />}
-          {hover != null &&
-            lines.map((l) => {
-              const v = l.values[hover];
-              return v == null ? null : <circle key={l.id} cx={x(hover)} cy={y(v)} r={4} fill={`var(--pod-${l.id})`} stroke="var(--page)" strokeWidth={2} />;
-            })}
-        </svg>
-        {hover != null && (
-          <div className="pointer-events-none absolute top-0 left-12 border border-divider bg-page px-3 py-2 text-xs shadow">
-            <div className="mb-1 font-bold text-ink">Week of {shortDate(data.weeks[hover]!)}</div>
-            {lines
-              .map((l) => ({ l, v: l.values[hover] ?? null }))
-              .sort((a, b) => (a.v ?? Infinity) - (b.v ?? Infinity))
-              .map(({ l, v }) => {
-                const band = funnelBand(v, targets);
-                return (
-                  <div key={l.id} className="flex items-center justify-between gap-4">
-                    <PodChip podId={l.id} />
-                    <span className="num text-ink">
-                      {freqText(v)} {band && <span className="text-ink-3">· {band}</span>}
-                    </span>
-                  </div>
-                );
-              })}
-          </div>
-        )}
-      </div>
+      <p className="mt-1 text-xs text-ink-3">Weeks start Monday; this week runs to the last synced day. — = the pod's ads didn't run that week.</p>
     </div>
   );
 }

@@ -186,7 +186,7 @@ Which pod brings the most new eyeballs into the funnel.
 - **Pods → Reach by pod** (after Spend by pod): each pod's average over all its ads in the range (scaling copies
   included; a pod + partner ad set counts for both), lowest first with ★ Most new eyeballs; the pod's spend split by
   each ad's own band (`PodRow.funnelSpend`); "Its ads" opens Ad Rankings sorted by frequency, lowest first.
-  Below it the last 8 Monday-start weeks per pod (`/api/pods/frequency`, per post per week once per sync, grouped by current tags).
+  Below it a table of the last 8 Monday-start weeks per pod with each week's band (`/api/pods/frequency`, per post per week once per sync, grouped by current tags).
 - Ad Rankings: Frequency column and sort (`sort=freq`), and on cards and the side card. Ad Swipe: Daily frequency with the band.
   The ranking minimum spend applies to the frequency sort as to the other ratios.
 
