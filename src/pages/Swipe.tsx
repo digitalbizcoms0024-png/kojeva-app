@@ -188,7 +188,7 @@ function Card({ post, range, targets }: { post: PostSummary; range: Range; targe
   return (
     <article className="flex min-w-0 flex-1 flex-wrap border-2 border-divider bg-surface">
       {/* Meta's own preview, open by default: copy, headline, reactions and comments; videos play in place. */}
-      <div className="flex w-full justify-center border-divider bg-surface-2 p-3 sm:w-[380px] sm:flex-none sm:border-r-2">
+      <div className="flex w-full justify-center p-3 sm:w-[380px] sm:flex-none sm:self-start">
         <AdPreviewFrame
           postId={post.postId}
           name={post.name}

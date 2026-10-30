@@ -56,7 +56,8 @@ export function AdPreviewFrame({
   return (
     <div className="flex w-full flex-col gap-2">
       <Tabs value={format} onChange={setFormat} options={FORMATS} />
-      <div className="flex min-h-[460px] flex-col items-center justify-start gap-2 bg-surface-2">
+      {/* No backdrop: the frame ends where the ad does (owner, Oct 30). Room is kept only while loading. */}
+      <div className={`flex flex-col items-center justify-start gap-2 ${data && !loading ? "" : "min-h-[460px] bg-surface-2"}`}>
         {error && (
           <>
             {fallback}
