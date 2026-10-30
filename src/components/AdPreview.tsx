@@ -16,6 +16,18 @@ type Preview = {
   height: number;
 };
 
+/**
+ * Meta sends every feed preview as a 335×450 frame that scrolls (Oct 30), cutting off the copy, the
+ * image and the reactions. Frames this tall show a whole ad without scrolling: a 4:5 feed ad with its
+ * copy, headline, reactions and buttons is about 720px; Reels and Story come at their own full height.
+ */
+const MIN_HEIGHT: Record<Format, number> = {
+  MOBILE_FEED_STANDARD: 760,
+  INSTAGRAM_STANDARD: 700,
+  INSTAGRAM_REELS: 0,
+  INSTAGRAM_STORY: 0,
+};
+
 const FORMATS: { value: Format; label: string }[] = [
   { value: "MOBILE_FEED_STANDARD", label: "Facebook feed" },
   { value: "INSTAGRAM_STANDARD", label: "Instagram feed" },
@@ -62,7 +74,7 @@ export function AdPreviewFrame({
             src={data.src}
             title={`Preview of ${name}`}
             width={data.width}
-            height={data.height}
+            height={Math.max(data.height, MIN_HEIGHT[format])}
             className="max-w-full border-0 bg-page"
             allow="autoplay; encrypted-media"
             referrerPolicy="no-referrer"
