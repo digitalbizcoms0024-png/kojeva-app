@@ -74,6 +74,17 @@ describe("mediaTypeFor / isoTime", () => {
     expect(mediaTypeFor({ creative: { id: "c", object_type: "VIDEO" } })).toBe("video");
     expect(mediaTypeFor({ creative: { id: "c", object_type: "PHOTO" } })).toBe("image");
     expect(mediaTypeFor({ creative: { id: "c", object_type: "SHARE", image_url: "https://x" } })).toBe("image");
+    // Shameer | Static 3 | Negative Marketing #2, ad "1" (creative 1709247247216003): a link ad with an
+    // image per placement and no image_url, counted as a video until Oct 30.
+    expect(
+      mediaTypeFor({
+        creative: { id: "1709247247216003", object_type: "SHARE", asset_feed_spec: { images: [{ hash: "968e3d8f" }, { hash: "6c1e5e08" }] } },
+      }),
+    ).toBe("image");
+    expect(mediaTypeFor({ creative: { id: "c", object_type: "SHARE", image_hash: "abc" } })).toBe("image");
+    expect(mediaTypeFor({ creative: { id: "c", object_type: "SHARE", video_id: "v1", image_hash: "thumb" } })).toBe("video");
+    expect(mediaTypeFor({ creative: { id: "c", object_type: "SHARE", asset_feed_spec: { videos: [{ video_id: "v" }], images: [{ hash: "t" }] } } })).toBe("video");
+    expect(mediaTypeFor({ creative: { id: "c", object_type: "PRIVACY_CHECK_FAIL" } })).toBe("video");
   });
   it("normalises Meta timestamps", () => {
     expect(isoTime("2026-10-08T14:03:11-0400")).toBe("2026-10-08T18:03:11.000Z");
