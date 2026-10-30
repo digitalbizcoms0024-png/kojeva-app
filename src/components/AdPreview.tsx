@@ -16,6 +16,18 @@ type Preview = {
   height: number;
 };
 
+/**
+ * Meta sends every feed preview as a 335×450 frame that scrolls (Oct 30), cutting off the copy, the
+ * image and the reactions. Frames this tall show a whole ad without scrolling: a 4:5 Facebook feed ad with its
+ * copy, headline, reactions and buttons measured 654px (owner's screenshots); Reels and Story come at full height.
+ */
+const MIN_HEIGHT: Record<Format, number> = {
+  MOBILE_FEED_STANDARD: 680,
+  INSTAGRAM_STANDARD: 700,
+  INSTAGRAM_REELS: 0,
+  INSTAGRAM_STORY: 0,
+};
+
 const FORMATS: { value: Format; label: string }[] = [
   { value: "MOBILE_FEED_STANDARD", label: "Facebook feed" },
   { value: "INSTAGRAM_STANDARD", label: "Instagram feed" },
@@ -44,7 +56,8 @@ export function AdPreviewFrame({
   return (
     <div className="flex w-full flex-col gap-2">
       <Tabs value={format} onChange={setFormat} options={FORMATS} />
-      <div className="flex min-h-[460px] flex-col items-center justify-start gap-2 bg-surface-2">
+      {/* No backdrop: the frame ends where the ad does (owner, Oct 30). Room is kept only while loading. */}
+      <div className={`flex flex-col items-center justify-start gap-2 ${data && !loading ? "" : "min-h-[460px] bg-surface-2"}`}>
         {error && (
           <>
             {fallback}
@@ -62,7 +75,7 @@ export function AdPreviewFrame({
             src={data.src}
             title={`Preview of ${name}`}
             width={data.width}
-            height={data.height}
+            height={Math.max(data.height, MIN_HEIGHT[format])}
             className="max-w-full border-0 bg-page"
             allow="autoplay; encrypted-media"
             referrerPolicy="no-referrer"
