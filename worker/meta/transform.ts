@@ -19,6 +19,7 @@ export interface GraphAd {
     /** Ads with an image per placement (Feed vs Stories/Reels) list them here, with rules saying which goes where. */
     asset_feed_spec?: {
       images?: { hash: string; adlabels?: { name?: string; id?: string }[] }[];
+      videos?: { video_id?: string }[];
       asset_customization_rules?: {
         customization_spec?: { publisher_platforms?: string[]; facebook_positions?: string[]; instagram_positions?: string[] };
         image_label?: { name?: string; id?: string };
@@ -111,10 +112,17 @@ export function postIdFor(ad: Pick<GraphAd, "id" | "creative">): string {
   return `ad:${ad.id}`;
 }
 
+/**
+ * Static or video. A video anywhere in the creative makes it a video; otherwise any image does: one
+ * image_url / image_hash, or one image per placement in asset_feed_spec (link ads, object_type SHARE,
+ * have no image_url then, and were all counted as videos until Oct 30: Shameer's Negative Marketing #2).
+ * Creatives Meta hides from the token (PRIVACY_CHECK_FAIL) show neither and stay "video".
+ */
 export function mediaTypeFor(ad: Pick<GraphAd, "creative">): string {
-  const t = ad.creative?.object_type?.toUpperCase();
-  if (t === "VIDEO") return "video";
-  if (t === "PHOTO" || (t !== "VIDEO" && ad.creative?.image_url)) return "image";
+  const c = ad.creative;
+  const t = c?.object_type?.toUpperCase();
+  if (t === "VIDEO" || c?.video_id || (c?.asset_feed_spec?.videos?.length ?? 0) > 0) return "video";
+  if (t === "PHOTO" || c?.image_url || c?.image_hash || (c?.asset_feed_spec?.images?.length ?? 0) > 0) return "image";
   return "video";
 }
 

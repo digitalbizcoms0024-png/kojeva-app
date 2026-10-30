@@ -31,7 +31,7 @@ import {
 const AD_FIELDS =
   "id,name,status,effective_status,created_time,adset{id,name},campaign{id,name}," +
   "creative{id,effective_object_story_id,thumbnail_url,image_url,object_type,video_id,image_hash," +
-  "asset_feed_spec{images{hash,adlabels},asset_customization_rules{customization_spec,image_label,priority}}}";
+  "asset_feed_spec{images{hash,adlabels},videos{video_id},asset_customization_rules{customization_spec,image_label,priority}}}";
 const INSIGHT_FIELDS =
   "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,reach,inline_link_clicks,outbound_clicks,actions,action_values";
 const ALL_STATUSES = [
