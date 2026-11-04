@@ -115,7 +115,7 @@ the page's filters: format (`?media=image|video`), pod (default in-house pods), 
 order (spend default, ROAS, newest launch). Each card is `/api/posts/:id` for the global range.
 - Campaigns (owner, Nov 4; `?campaigns=` on `/api/rankings`, matched as part of the name, any case): by default only
   posts with a copy in "CBO | Internal Pod | Testing" or "CBO | Cost Cap | Scale" (not the graveyards); with Running now,
-  an active copy there. "All campaigns" drops it. The card's numbers stay the post's totals across all its copies.
+  an active copy there. "Internal Pod Testing only" keeps just the testing campaign; "All campaigns" drops it. The card's numbers stay the post's totals across all its copies.
 - The ads either side of the current one are loaded hidden (Meta preview and numbers), so the arrows show a ready card.
 - The ad shows as Meta's preview straight away (`/api/posts/:id/preview`, Facebook feed first; tabs for
   Instagram feed, Reels, Story): copy, headline, reactions and comment count, and videos play in place. One Graph
