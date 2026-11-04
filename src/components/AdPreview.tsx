@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useApi } from "../api.ts";
 import { Tabs, Thumb } from "./ui.tsx";
 
+export type PreviewFormat = Format;
 type Format =
   | "MOBILE_FEED_STANDARD"
   | "INSTAGRAM_STANDARD"
@@ -44,12 +45,19 @@ export function AdPreviewFrame({
   postId,
   name,
   fallback,
+  format: controlled,
+  onFormat,
 }: {
   postId: string;
   name: string;
   fallback?: ReactNode;
+  /** Set by a page that keeps one placement across several previews (Ad Swipe). */
+  format?: Format;
+  onFormat?: (f: Format) => void;
 }) {
-  const [format, setFormat] = useState<Format>("MOBILE_FEED_STANDARD");
+  const [own, setOwn] = useState<Format>("MOBILE_FEED_STANDARD");
+  const format = controlled ?? own;
+  const setFormat = onFormat ?? setOwn;
   const { data, error, loading } = useApi<Preview>(
     `/api/posts/${encodeURIComponent(postId)}/preview?format=${format}`,
   );

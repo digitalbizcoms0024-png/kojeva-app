@@ -113,6 +113,10 @@ Ranking by purchases, ROAS, CTR or CPA only includes posts that spent at least `
 One post at a time, ← / → (keys or buttons; a bottom bar on a phone). View-only. Deck = `/api/rankings` with
 the page's filters: format (`?media=image|video`), pod (default in-house pods), status (default running now),
 order (spend default, ROAS, newest launch). Each card is `/api/posts/:id` for the global range.
+- Campaigns (owner, Nov 4; `?campaigns=` on `/api/rankings`, matched as part of the name, any case): by default only
+  posts with a copy in "CBO | Internal Pod | Testing" or "CBO | Cost Cap | Scale" (not the graveyards); with Running now,
+  an active copy there. "All campaigns" drops it. The card's numbers stay the post's totals across all its copies.
+- The ads either side of the current one are loaded hidden (Meta preview and numbers), so the arrows show a ready card.
 - The ad shows as Meta's preview straight away (`/api/posts/:id/preview`, Facebook feed first; tabs for
   Instagram feed, Reels, Story): copy, headline, reactions and comment count, and videos play in place. One Graph
   read per card and placement viewed; without Meta it falls back to the thumbnail.

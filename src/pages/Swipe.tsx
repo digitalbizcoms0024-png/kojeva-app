@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { MetaResponse, PostDetail, PostSummary, RankingsResponse } from "../../shared/api.ts";
 import { cpa, ctr, dailyFrequency, funnelBand, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
-import { AdPreviewFrame } from "../components/AdPreview.tsx";
+import { AdPreviewFrame, type PreviewFormat } from "../components/AdPreview.tsx";
 import { freqText, FunnelTag } from "../components/PodReach.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { CpaValue, Empty, Thumb, HitBadge, LoadError, PageHeader, PodChip, RoasValue, Segmented, Select, Tag } from "../components/ui.tsx";
@@ -35,9 +35,12 @@ export function SwipePage({ meta, range, setRange }: { meta: MetaResponse; range
   const [pod, setPod] = useState("inhouse");
   const [status, setStatus] = useState("active");
   const [order, setOrder] = useState<Order>("spend");
+  const [campaigns, setCampaigns] = useState<keyof typeof CAMPAIGNS>("pods");
   const [i, setI] = useState(readIndex);
+  // The placement tab (Facebook feed, Reels…) stays as you move through the deck.
+  const [format, setFormat] = useState<PreviewFormat>("MOBILE_FEED_STANDARD");
   const list = useApi<RankingsResponse>(
-    `/api/rankings?${qs({ range, pod, status, sort: order === "roas" ? "roas" : "spend", media: media === "all" ? undefined : media })}`,
+    `/api/rankings?${qs({ range, pod, status, sort: order === "roas" ? "roas" : "spend", campaigns: CAMPAIGNS[campaigns].match, media: media === "all" ? undefined : media })}`,
   );
   const items = useMemo(() => {
     const all = list.data?.items ?? [];
@@ -92,6 +95,12 @@ export function SwipePage({ meta, range, setRange }: { meta: MetaResponse; range
             options={[{ value: "inhouse", label: "In-house pods" }, ...inhouse.map((p) => ({ value: p.id, label: p.name }))]}
           />
           <Select
+            label="Campaigns"
+            value={campaigns}
+            onChange={(v) => reset(setCampaigns)(v as keyof typeof CAMPAIGNS)}
+            options={Object.entries(CAMPAIGNS).map(([value, c]) => ({ value, label: c.label }))}
+          />
+          <Select
             label="Status"
             value={status}
             onChange={reset(setStatus)}
@@ -136,7 +145,15 @@ export function SwipePage({ meta, range, setRange }: { meta: MetaResponse; range
             )}
             <div className="flex items-center gap-3 pb-20 md:gap-4 md:pb-0">
               <ArrowButton dir="prev" onClick={() => go(-1)} />
-              <Card post={post} range={range} targets={meta.targets} />
+              {/* The ads either side are loaded too, hidden, so an arrow shows one that's ready instead of
+                  waiting on Meta (owner, Nov 4). Kept in deck order so React never moves a loaded frame. */}
+              <div className="min-w-0 flex-1">
+                {[...new Set([at - 1, at, at + 1].map((k) => (k + n) % n))]
+                  .sort((a, b) => a - b)
+                  .map((k) => (
+                    <Card key={items[k]!.postId} post={items[k]!} range={range} targets={meta.targets} format={format} onFormat={setFormat} hidden={k !== at} />
+                  ))}
+              </div>
               <ArrowButton dir="next" onClick={() => go(1)} />
             </div>
             {/* On a phone the arrows sit in a bar pinned to the bottom, under the thumb. */}
@@ -155,6 +172,15 @@ export function SwipePage({ meta, range, setRange }: { meta: MetaResponse; range
   );
 }
 
+/**
+ * Which campaigns the deck comes from (owner, Nov 4): by default the pods' testing campaign and the
+ * Cost Cap scaling one, not the graveyards. Matched as part of the campaign name, any case.
+ */
+const CAMPAIGNS = {
+  pods: { label: "Internal Pod Testing + Cost Cap Scale", match: "Internal Pod | Testing,Cost Cap | Scale" },
+  all: { label: "All campaigns", match: undefined },
+} as const;
+
 function ArrowButton({ dir, onClick }: { dir: "prev" | "next"; onClick: () => void }) {
   const next = dir === "next";
   return (
@@ -169,7 +195,21 @@ function ArrowButton({ dir, onClick }: { dir: "prev" | "next"; onClick: () => vo
   );
 }
 
-function Card({ post, range, targets }: { post: PostSummary; range: Range; targets: Targets }) {
+function Card({
+  post,
+  range,
+  targets,
+  format: placement,
+  onFormat,
+  hidden,
+}: {
+  post: PostSummary;
+  range: Range;
+  targets: Targets;
+  format: PreviewFormat;
+  onFormat: (f: PreviewFormat) => void;
+  hidden: boolean;
+}) {
   const detail = useApi<PostDetail>(`/api/posts/${encodeURIComponent(post.postId)}?${qs({ range })}`);
   const d = detail.data?.postId === post.postId ? detail.data : null;
   const t = post.totals;
@@ -186,12 +226,14 @@ function Card({ post, range, targets }: { post: PostSummary; range: Range; targe
   const format = post.mediaType === "image" ? "Static image" : "Video";
 
   return (
-    <article className="flex min-w-0 flex-1 flex-wrap border-2 border-divider bg-surface">
+    <article hidden={hidden} aria-hidden={hidden || undefined} className="flex w-full min-w-0 flex-wrap border-2 border-divider bg-surface">
       {/* Meta's own preview, open by default: copy, headline, reactions and comments; videos play in place. */}
       <div className="flex w-full justify-center p-3 sm:w-[380px] sm:flex-none sm:self-start">
         <AdPreviewFrame
           postId={post.postId}
           name={post.name}
+          format={placement}
+          onFormat={onFormat}
           fallback={<Thumb mediaType={post.mediaType} label={format} url={post.thumbnailUrl} className="aspect-[4/5] w-full max-w-[300px]" />}
         />
       </div>
