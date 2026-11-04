@@ -247,6 +247,20 @@ app.get("/rankings", async (c) => {
   const media = c.req.query("media");
   if (media === "image" || media === "video") items = items.filter((p) => p.mediaType === media);
   if (angle) items = items.filter((p) => p.assignment.angle === angle);
+  // Ad Swipe's campaigns (?campaigns=a,b): posts with a copy in a campaign whose name contains one of
+  // them (any case); with status=active, an active copy there (owner, Nov 4).
+  const campaigns = (c.req.query("campaigns") ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (campaigns.length) {
+    const { results } = await c.env.DB.prepare("SELECT post_id, campaign_name, status FROM ads WHERE campaign_name IS NOT NULL").all<{
+      post_id: string;
+      campaign_name: string;
+      status: string;
+    }>();
+    const there = new Set<string>();
+    for (const r of results)
+      if ((status !== "active" || r.status === "ACTIVE") && campaigns.some((k) => r.campaign_name.toLowerCase().includes(k))) there.add(r.post_id);
+    items = items.filter((p) => there.has(p.postId));
+  }
   if (status === "active") items = items.filter((p) => p.active);
   if (status === "paused") items = items.filter((p) => !p.active);
   if (status === "fatigued") items = items.filter((p) => p.fatigue);

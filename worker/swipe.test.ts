@@ -3,6 +3,7 @@ import type { FrequencyTrendResponse, PodsResponse, PostDetail, RankingsResponse
 import { dailyFrequency } from "../shared/metrics.ts";
 import type { Env } from "./env.ts";
 import app from "./index.ts";
+import { bumpVersion } from "./cache.ts";
 import { attribute } from "./meta/sync.ts";
 import { testDb } from "./testing/db.ts";
 
@@ -88,5 +89,25 @@ describe("Reach by pod", () => {
     expect(trend.weeks.at(-1)).toBe("2026-10-05");
     expect(trend.pods.harris!.at(-1)).toEqual({ reachImpressions: 1250, reach: 900 });
     expect(trend.pods.dhia!.at(-1)).toEqual({ reachImpressions: 1000, reach: 950 });
+  });
+});
+
+describe("Ad Swipe campaigns", () => {
+  it("keeps posts with a copy in the pods' testing or Cost Cap scaling campaign, running there when asked", async () => {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE ads SET campaign_name = 'CBO | Internal Pod | Testing' WHERE id = 'a-img'"),
+      env.DB.prepare("UPDATE ads SET campaign_name = 'Graveyard | Cost Cap' WHERE id = 'a-vid'"),
+    ]);
+    const ids = async (q: string) => (await get<RankingsResponse>(`/api/rankings?range=all${q}`)).items.map((p) => p.postId).sort();
+    const pods = "&campaigns=" + encodeURIComponent("Internal Pod | Testing,Cost Cap | Scale");
+    expect(await ids(pods)).toEqual(["img"]);
+    // A paused copy in the scaling campaign counts for "all", not for "running now".
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO ads (id, post_id, name, adset_id, adset_name, campaign_name, status) VALUES ('a-vid-2', 'vid', 'copy', 's-x', 'Scale', 'CBO | Cost Cap | Scale (New)', 'PAUSED')"),
+    ]);
+    await bumpVersion(env.DB);
+    expect(await ids(pods)).toEqual(["img", "vid"]);
+    expect(await ids(pods + "&status=active")).toEqual(["img"]);
+    expect(await ids("")).toEqual(["img", "vid"]);
   });
 });
