@@ -178,6 +178,7 @@ export function SwipePage({ meta, range, setRange }: { meta: MetaResponse; range
  */
 const CAMPAIGNS = {
   pods: { label: "Internal Pod Testing + Cost Cap Scale", match: "Internal Pod | Testing,Cost Cap | Scale" },
+  testing: { label: "Internal Pod Testing only", match: "Internal Pod | Testing" },
   all: { label: "All campaigns", match: undefined },
 } as const;
 
