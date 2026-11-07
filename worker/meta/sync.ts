@@ -307,6 +307,16 @@ export async function syncAds(env: Env, db: D1Database, gc: GraphClient) {
     );
   }
 
+  // Deleted in Meta: the listing above leaves deleted ads out, so one we stored that is no longer listed
+  // was deleted (owner, Nov 7: ad sets are deleted from the CBO testing campaign to stay under its
+  // 200 ad set limit). Marked DELETED once, an off status, so its test ends and it is judged at once
+  // (judgeTurnedOff); its stored days stay. An empty listing marks nothing, in case Meta answered wrongly.
+  const listed = new Set(ads.map((a) => a.id));
+  if (ads.length > 0)
+    for (const old of storedAds)
+      if (!listed.has(old.id) && old.status !== "DELETED")
+        adStmts.push(db.prepare("UPDATE ads SET status = 'DELETED', updated_at = ?2 WHERE id = ?1").bind(old.id, now));
+
   // Posts before ads (foreign key), then ads.
   await runBatched(db, postStmts);
   await runBatched(db, adStmts);

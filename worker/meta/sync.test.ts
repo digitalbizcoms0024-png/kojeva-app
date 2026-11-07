@@ -297,6 +297,38 @@ describe("runSync", () => {
   });
 });
 
+describe("deleted in Meta", () => {
+  // Meta leaves deleted ads out of /ads (we never ask for DELETED), so the hub notices them by absence.
+  const without = (gone: string[]) =>
+    fakeMeta((url) => {
+      if (url.pathname.endsWith(`${ACT}/ads`)) return { data: ADS.filter((a) => !gone.includes(a.id)) };
+      if (url.pathname.endsWith(`${ACT}/insights`)) return { data: insights() };
+      return { error: { message: `Unexpected ${url.pathname}`, code: 100 } };
+    });
+  const range = { since: "2026-10-08", until: "2026-10-14", ads: true };
+  const status = async (id: string) => (await q<{ status: string }>("SELECT status FROM ads WHERE id = ?1", id))[0]?.status;
+
+  it("marks an ad Meta no longer lists as deleted, once, keeping its history", async () => {
+    await runSync(env, range, metaApi());
+    const gone = ADS[5]!.id; // active, in "ABO - Dhia - Batch 22", with a day of spend
+    expect(await status(gone)).toBe("ACTIVE");
+    const days = (await q<{ n: number }>("SELECT COUNT(*) AS n FROM ad_daily WHERE ad_id = ?1", gone))[0]!.n;
+
+    await runSync(env, range, without([gone]));
+    expect(await status(gone)).toBe("DELETED");
+    expect((await q<{ n: number }>("SELECT COUNT(*) AS n FROM ad_daily WHERE ad_id = ?1", gone))[0]!.n).toBe(days);
+    // Unchanged after that: nothing written.
+    expect((await runSync(env, range, without([gone]))).written).toBe(0);
+    expect(days).toBeGreaterThan(0);
+  });
+
+  it("marks nothing when Meta lists no ads at all", async () => {
+    await runSync(env, range, metaApi());
+    await runSync(env, range, without(ADS.map((a) => a.id)));
+    expect(await status(ADS[5]!.id)).toBe("ACTIVE");
+  });
+});
+
 describe("many concepts", () => {
   it("loads more concepts than fit in one D1 query", async () => {
     const stmts: D1PreparedStatement[] = [];

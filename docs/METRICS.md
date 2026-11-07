@@ -41,7 +41,10 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   campaign, archived or deleted; `OFF_STATUSES`), a concept still testing or with no ad at $100 is
   judged at once on everything it spent, whatever it spent, from first spend to its last day of
   spend (`judgeTurnedOff`, `turnedOff` in the API). Results already decided stay as they were. The
-  on/off status is Meta's at the last sync. The judging code is in the rules fingerprint
+  on/off status is Meta's at the last sync. Deleting an ad set ends its test too (owner, Nov 7: ad sets are
+  deleted from CBO | Internal Pod | Testing to stay under Meta's 200 ad set limit): Meta leaves deleted ads out
+  of the ad list, so each sync marks a stored ad it no longer lists as DELETED (once; never when Meta lists
+  no ads at all). Its stored days are kept. The judging code is in the rules fingerprint
   (`worker/rules.ts`), so a deploy that changes it recomputes without a sync.
 - **Hit rate** = hits ÷ (hits + misses).
 - **Pod score** (Dashboard leaderboard order; `podScores` in `shared/metrics.ts`, owner, Oct 28), out of 100:
