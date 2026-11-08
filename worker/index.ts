@@ -39,6 +39,7 @@ import { loadHitCreatives } from "./hitsoff.ts";
 import { baseline, INSIGHT_DIMENSIONS, insightRows, MATRIX_DIMENSIONS, matrix, overview, valuesOf } from "./insights.ts";
 import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
+import { loadBfcm } from "./bfcm.ts";
 import { loadAddedPods, parseMembers } from "./pods.ts";
 import { ensureAttributed } from "./rules.ts";
 import { loadPersonas } from "./personas.ts";
@@ -301,6 +302,9 @@ app.get("/rankings", async (c) => {
   };
   return c.json(body);
 });
+
+/** The BFCM page: the promo campaign's ads, day by day (worker/bfcm.ts). */
+app.get("/bfcm", async (c) => c.json(await loadBfcm(c.env.DB)));
 
 /** Meta's preview of one of the post's ads, for the play button (?format=, default Facebook feed). */
 app.get("/posts/:id/preview", async (c) => {

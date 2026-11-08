@@ -1,7 +1,9 @@
 // Dashboard alerts and pod suggestions, computed from stored data (read-only: no D1 writes).
+import { BFCM, bfcmCall } from "../shared/bfcm.ts";
+import { loadBfcm } from "./bfcm.ts";
 import type { Alert, ConceptResult, Editor, PodSuggestion } from "../shared/api.ts";
 import type { Fatigue } from "../shared/fatigue.ts";
-import { cpa, roas } from "../shared/metrics.ts";
+import { cpa, roas, type Targets } from "../shared/metrics.ts";
 import { AWARENESS, podById } from "../shared/taxonomy.ts";
 import { loadCoverage } from "./coverage.ts";
 import { confirmed, loadPersonas } from "./personas.ts";
@@ -54,6 +56,7 @@ export async function loadAlerts(db: D1Database): Promise<{ asOf: string | null;
   }
 
   alerts.push(...(await hitsTurnedOff(db, concepts, latest)));
+  alerts.push(...(await bfcmAlerts(db, latest, targets)));
 
   for (const k of concepts
     .filter((k) => k.candidate && k.stillRunning)
@@ -270,4 +273,21 @@ export function incompleteDays(db: D1Database, from: string, to: string): Promis
     },
     { durable: true, scope: "stats" },
   );
+}
+
+/** During the promo: how many BFCM ads the page says to scale and to cut (owner, Nov 8). */
+async function bfcmAlerts(db: D1Database, latest: string, targets: Targets): Promise<Alert[]> {
+  if (latest < BFCM.from || latest > BFCM.to) return [];
+  const { ads } = await loadBfcm(db);
+  const calls = ads.map((a) => ({ name: a.name, ...bfcmCall(a.daily, latest, targets) }));
+  const out: Alert[] = [];
+  const list = (action: "scale" | "cut") => calls.filter((c) => c.action === action).sort((a, b) => b.promo.spendCents - a.promo.spendCents);
+  const scale = list("scale");
+  const cut = list("cut");
+  const names = (l: typeof calls) => l.slice(0, 2).map((c) => c.name).join(", ") + (l.length > 2 ? ` and ${l.length - 2} more` : "");
+  if (scale.length)
+    out.push({ id: `bfcm-scale:${latest}`, tone: "good", title: `BFCM: ${scale.length} to scale`, detail: names(scale), href: "#/bfcm", action: "Open BFCM" });
+  if (cut.length)
+    out.push({ id: `bfcm-cut:${latest}`, tone: "bad", title: `BFCM: ${cut.length} to cut`, detail: names(cut), href: "#/bfcm", action: "Open BFCM" });
+  return out;
 }

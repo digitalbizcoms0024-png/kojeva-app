@@ -9,6 +9,16 @@ export interface ConceptAd {
   name: string;
   adsetId: string | null;
   adsetName: string | null;
+  campaignName?: string | null;
+}
+
+/**
+ * A promo campaign ("CBO | Promo | BFCM"): its ad sets are not concepts, so they never count in a
+ * pod's hit rate, even when named after a pod ("Shameer | Black Friday | …"). They have their own
+ * page (BFCM; owner, Nov 8).
+ */
+export function isPromoCampaign(name: string | null | undefined): boolean {
+  return !!name && name.split("|").some((part) => part.trim().toLowerCase() === "promo");
 }
 
 export interface Concept {
@@ -116,7 +126,7 @@ function testingPod(adsetName: string, settings: AttributionSettings): PodCode |
 export function buildConcepts(ads: ConceptAd[], settings: AttributionSettings = DEFAULT_ATTRIBUTION): Concept[] {
   const byAdset = new Map<string, ConceptAd[]>();
   for (const ad of ads) {
-    if (!ad.adsetId || !ad.adsetName || !testingPod(ad.adsetName, settings)) continue;
+    if (!ad.adsetId || !ad.adsetName || isPromoCampaign(ad.campaignName) || !testingPod(ad.adsetName, settings)) continue;
     byAdset.set(ad.adsetId, [...(byAdset.get(ad.adsetId) ?? []), ad]);
   }
 

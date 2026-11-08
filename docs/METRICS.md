@@ -129,6 +129,19 @@ order (spend default, ROAS, newest launch). Each card is `/api/posts/:id` for th
 - **Daily frequency** with its funnel band, as below.
 - **Running N days** = Days live as on Ad Rankings; "where it runs" lists the 5 biggest-spending copies.
 
+## BFCM (owner, Nov 8; `shared/bfcm.ts`, `worker/bfcm.ts`, BFCM page)
+- Ads in the campaign whose name contains "Promo | BFCM" (CBO | Promo | BFCM), Nov 8 – Dec 1, with only their numbers
+  in that campaign (copies elsewhere aren't counted), grouped by post. Views: promo so far, last 3 days, the day
+  before, the latest synced day (no automatic refresh: Sync now).
+- **Promo ad sets are not concepts** (`isPromoCampaign`: a campaign name part "Promo"), so they never count in a pod's
+  hit rate, testing count or score, even when named after a pod ("Shameer | Black Friday | …").
+- Calls on the usual targets (Settings → Targets), from the promo so far and the last 3 synced days (`bfcmAction`):
+  **Too early** under $50 spent; **Cut** $100+ spent with no purchase, or ROAS under 1.0; **Scale** $100+ spent in the
+  last 3 days at target (ROAS ≥ target or CPA ≤ target, as the hit rule says) and not slipping (last 3 days' ROAS at
+  least 80% of the promo's); **Watch** the rest. The hub only recommends; it never changes Meta.
+- Also: daily spend/CPA/ROAS charts, rankings (sortable), by batch (first two ad set name parts), fatigue watch,
+  alerts in the bell ("BFCM: N to scale / to cut", during the promo), and a "BFCM promo" deck on Ad Swipe.
+
 ## CSV export
 - Rankings (current filters), Concepts and the Pods table. Money in plain dollars, every value labelled with its source;
   missing values are empty cells, never 0.
