@@ -635,3 +635,36 @@ export interface ReportResponse {
 export interface ReportsListResponse {
   periods: { n: number; from: string; to: string; closed: boolean; text: ReportText["source"] | null }[];
 }
+
+/** One BFCM day of one ad (copies in the promo campaign grouped by post). */
+export type BfcmDay = { date: string } & Totals & {
+  /** Null when a day with spend has none stored (before Oct 29). */
+  outboundClicks: number | null;
+  addToCart: number | null;
+};
+
+/** One post in the promo campaign: only its numbers there (copies elsewhere aren't counted). */
+export interface BfcmAd {
+  postId: string;
+  name: string;
+  mediaType: string;
+  thumbnailUrl: string | null;
+  podId: string | null;
+  /** The promo ad sets it runs in. */
+  adsets: string[];
+  /** An ad in the promo campaign is switched on in Meta. */
+  active: boolean;
+  fatigue: Fatigue | null;
+  /** Days with delivery or results, oldest first. */
+  daily: BfcmDay[];
+}
+
+/** The BFCM page (/api/bfcm): the promo window and its ads; the page works out views and calls. */
+export interface BfcmResponse {
+  from: string;
+  to: string;
+  /** Latest synced day (the last day of the views), or null before any sync. */
+  latest: string | null;
+  ads: BfcmAd[];
+}
+

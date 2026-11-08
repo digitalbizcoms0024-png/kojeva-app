@@ -11,6 +11,7 @@ import { CoveragePage } from "./pages/Coverage.tsx";
 import { InsightsPage } from "./pages/Insights.tsx";
 import { NamingToolPage } from "./pages/NamingTool.tsx";
 import { PodsPage } from "./pages/PodsView.tsx";
+import { BfcmPage } from "./pages/Bfcm.tsx";
 import { RankingsPage } from "./pages/Rankings.tsx";
 import { SwipePage } from "./pages/Swipe.tsx";
 import { SettingsPage } from "./pages/Settings.tsx";
@@ -30,6 +31,7 @@ const NAV: { path: string; label: string; icon: IconName; group: NavGroup }[] = 
   { path: "pods", label: "Pods", icon: "pods", group: "analyse" },
   { path: "rankings", label: "Ad Rankings", icon: "rankings", group: "analyse" },
   { path: "swipe", label: "Ad Swipe", icon: "play", group: "analyse" },
+  { path: "bfcm", label: "BFCM", icon: "tagging", group: "analyse" },
   { path: "insights", label: "Creative Insights", icon: "insights", group: "analyse" },
   { path: "coverage", label: "Coverage Map", icon: "grid", group: "analyse" },
   { path: "tagging", label: "To review", icon: "tagging", group: "do" },
@@ -336,6 +338,7 @@ export default function App() {
         {meta.error && <Empty>Couldn't reach the API: {meta.error.message}</Empty>}
         {m && path === "dashboard" && <DashboardPage meta={m} range={range} setRange={setRange} />}
         {m && path === "swipe" && <SwipePage meta={m} range={range} setRange={setRange} />}
+        {m && path === "bfcm" && <BfcmPage meta={m} />}
         {m && path === "rankings" && <RankingsPage meta={m} range={range} setRange={setRange} initialPost={route.params.get("post")} initialStatus={route.params.get("status")} initialSort={route.params.get("sort")} initialPod={route.params.get("pod")} />}
         {m && path === "pods" && <PodsPage meta={m} range={range} setRange={setRange} />}
         {m && path === "tagging" && <TaggingPage meta={m} onChanged={refresh} range={range} />}

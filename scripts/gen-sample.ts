@@ -2,6 +2,7 @@
 // Usage: node scripts/gen-sample.ts > seed/sample.sql
 import { attributePod, type AttributionAd } from "../shared/attribution.ts";
 import { buildConcepts, type ConceptAd } from "../shared/concepts.ts";
+import { BFCM } from "../shared/bfcm.ts";
 import { parseAdName } from "../shared/naming.ts";
 import { GROUPS, PODS } from "../shared/taxonomy.ts";
 
@@ -21,8 +22,11 @@ const between = (a: number, b: number) => a + rand() * (b - a);
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!;
 const q = (s: string | null) => (s == null ? "NULL" : `'${s.replace(/'/g, "''")}'`);
 
+// SAMPLE_END=YYYY-MM-DD dates the sample as if synced then (e.g. to preview the BFCM page mid-promo).
+const END = process.env.SAMPLE_END ? new Date(`${process.env.SAMPLE_END}T00:00:00Z`) : new Date();
+
 function isoDay(offset: number): string {
-  const d = new Date();
+  const d = new Date(END);
   d.setUTCHours(0, 0, 0, 0);
   d.setUTCDate(d.getUTCDate() - offset);
   return d.toISOString().slice(0, 10);
@@ -266,5 +270,44 @@ posts.forEach((p, i) => {
     `INSERT INTO atria_assets (asset_id, status, tags, fetched_at, awareness, belief, belief_group, labeled_at, persona_id, persona_at, offer, motivations, motivations_at) VALUES (${q(`v:${p.id}`)}, 'tagged', ${q(JSON.stringify(tags))}, ${q(now)}, ${q(i % 10 === 9 ? SAMPLE_AWARENESS[(i * 3) % 5]! : awareness)}, ${q(belief)}, ${q(group)}, ${q(now)}, ${q(persona)}, ${q(now)}, ${offer}, ${q(JSON.stringify(SAMPLE_MOTIVATIONS[i % SAMPLE_MOTIVATIONS.length]))}, ${q(now)});`,
   );
 });
+// BFCM promo ads (CBO | Promo | BFCM, from Nov 8), from the sample's last day back to the promo's
+// start. Numbers derived without rand(), so the rest of the sample is unchanged.
+{
+  const bfDays: string[] = [];
+  for (let d = 0; isoDay(d) >= BFCM.from; d++) if (isoDay(d) <= BFCM.to) bfDays.push(isoDay(d));
+  const sets = [
+    ...[1, 2, 3, 4, 5].map((n) => `Statics | Early Black Friday | Batch #${n}`),
+    ...[1, 2, 3].map((n) => `Statics | Black Friday | Batch #${n}`),
+    "Shameer | Black Friday | The Apology",
+    "Shameer | Black Friday | Last Chance",
+  ];
+  sets.forEach((adset, s) => {
+    for (let k = 0; k < 2; k++) {
+      const n = s * 2 + k;
+      const id = `bf_${n}`;
+      const video = adset.startsWith("Shameer");
+      out.push(`INSERT INTO posts (id, media_type, created_time) VALUES (${q(`post_${id}`)}, ${q(video ? "video" : "image")}, ${q(BFCM.from)});`);
+      out.push(
+        `INSERT INTO ads (id, post_id, name, campaign_id, campaign_name, adset_id, adset_name, status, created_time, asset_id) VALUES (` +
+          [q(id), q(`post_${id}`), q(video ? `ShameerxCoco_FaceBrush_ADS-35${n}_Hook${k + 1}` : `${n + 1}`), q("c_bfcm"), q(BFCM.label), q(`as_bf_${s}`), q(adset), q(n % 7 === 6 ? "PAUSED" : "ACTIVE"), q(BFCM.from), q(`i:${id}`)].join(", ") +
+          ");",
+      );
+      // Spend grows towards Black Friday; ROAS from about 0.6 to 3.4 by ad.
+      const quality = 0.6 + ((n * 37) % 29) / 10;
+      const rows = bfDays.map((day, i) => {
+        const spend = (30 + ((n * 13 + i * 7) % 40)) * (1 + (bfDays.length - i) / 20);
+        const revenue = spend * quality * (0.8 + ((n + i) % 5) / 10);
+        const purchases = Math.round(revenue / 26);
+        const impressions = Math.round((spend / 18) * 1000);
+        const clicks = Math.round(impressions * 0.025);
+        return `(${q(id)}, ${q(day)}, ${Math.round(spend * 100)}, ${impressions}, ${Math.round(impressions / 1.12)}, ${clicks}, ${purchases}, ${Math.round(purchases * 26 * 100)}, ${Math.round(clicks * 0.9)}, ${purchases * 3})`;
+      });
+      if (rows.length)
+        out.push(
+          `INSERT INTO ad_daily (ad_id, date, spend_cents, impressions, reach, link_clicks, purchases, revenue_cents, outbound_clicks, add_to_cart) VALUES\n${rows.join(",\n")};`,
+        );
+    }
+  });
+}
 out.push(`INSERT INTO sync_runs (source, started_at, finished_at, status, message) VALUES ('sample', ${q(now)}, ${q(now)}, 'ok', 'Sample data loaded');`);
 console.log(out.join("\n"));

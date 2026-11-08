@@ -43,6 +43,7 @@ const PAGES = [
   "/api/pods?range=all",
   "/api/pods?range=month",
   "/api/pods/frequency",
+  "/api/bfcm",
   "/api/concepts?range=all",
   "/api/alerts",
   "/api/trends?range=all",
