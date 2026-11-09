@@ -4,7 +4,8 @@
 import { cleanTags, FREE_TAGS, TAG_OPTIONS, type CreativeReadout, type CreativeTags } from "../shared/analysis.ts";
 
 const BASE = "https://generativelanguage.googleapis.com";
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+// gemini-2.5-flash was closed to new keys (Nov 2026: "no longer available to new users").
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 /** Videos larger than this are not sent. */
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;

@@ -180,13 +180,13 @@ uses (its AI is branded "Raya").
    existing Google Cloud project or let it create one. Copy the key.
 2. **Turn on billing** (for more than the free tier's limits): in AI Studio, **Set up billing** on the key's
    project, or link a billing account in Google Cloud Console → Billing. Add a **budget alert** there
-   (e.g. $20/month) so a spike emails you. A 30–60 s video costs about a cent or two with Gemini Flash.
+   (e.g. $20/month) so a spike emails you. A 30–60 s video costs about a cent or two with a Gemini Flash model.
 3. **Add it to the Worker as a secret** (never in chat, code or `wrangler.jsonc`): Cloudflare dashboard →
    Workers & Pages → **kojeva-hub** → Settings → Variables and Secrets → **Add** → type **Secret**, name
    `GEMINI_API_KEY`, paste the key → Deploy. Do the same on **kojeva-hub-preview** to try it there first.
    (Or `npx wrangler secret put GEMINI_API_KEY`.)
 4. `GEMINI_DAILY_CAP` (10, for the free tier) and `GEMINI_MIN_SPEND` (50, in dollars) are set in
    `wrangler.jsonc`, not the dashboard: every deploy resets plain variables to that file (secrets are kept).
-   Optional there too: `GEMINI_MODEL` (default `gemini-2.5-flash`). The preview has no nightly job (no
+   `GEMINI_MODEL` is there too (`gemini-3.8-flash`): when Google retires a model, the ad card shows its error naming the replacement; change it there. The preview has no nightly job (no
    cron), so there it runs only when someone presses Analyze.
 5. Treat the key like a password. If it leaks, delete it in AI Studio and create a new one.
