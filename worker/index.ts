@@ -40,6 +40,7 @@ import { baseline, INSIGHT_DIMENSIONS, insightRows, MATRIX_DIMENSIONS, matrix, o
 import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
 import { loadBfcm } from "./bfcm.ts";
+import { analysis, analyzeNew } from "./analysis.ts";
 import { loadAddedPods, parseMembers } from "./pods.ts";
 import { ensureAttributed } from "./rules.ts";
 import { loadPersonas } from "./personas.ts";
@@ -817,6 +818,7 @@ app.get("/coverage", async (c) => {
 app.route("/reports", reports);
 app.route("/", calls);
 app.route("/", editing);
+app.route("/", analysis);
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 
@@ -881,7 +883,13 @@ export default {
   },
   /** Nightly: refresh ads and re-pull the last 7 days (Meta keeps revising recent days). */
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(runSync(env, { since: utcDay(-6), until: utcDay(0), ads: true }).then(() => warmDashboard(env, ctx)));
+    // After the sync and warm-up, Gemini analyzes new ads that reached the spend threshold (capped per night).
+    ctx.waitUntil(
+      runSync(env, { since: utcDay(-6), until: utcDay(0), ads: true })
+        .then(() => warmDashboard(env, ctx))
+        .then(() => analyzeNew(env, env.DB))
+        .catch(() => undefined),
+    );
   },
 } satisfies ExportedHandler<Env>;
 

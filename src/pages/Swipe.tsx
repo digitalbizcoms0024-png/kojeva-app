@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { MetaResponse, PostDetail, PostSummary, RankingsResponse } from "../../shared/api.ts";
 import { cpa, ctr, dailyFrequency, funnelBand, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
+import { CreativeAnalysisPanel } from "../components/CreativeAnalysis.tsx";
 import { AdPreviewFrame, type PreviewFormat } from "../components/AdPreview.tsx";
 import { freqText, FunnelTag } from "../components/PodReach.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
@@ -151,7 +152,7 @@ export function SwipePage({ meta, range, setRange }: { meta: MetaResponse; range
                 {[...new Set([at - 1, at, at + 1].map((k) => (k + n) % n))]
                   .sort((a, b) => a - b)
                   .map((k) => (
-                    <Card key={items[k]!.postId} post={items[k]!} range={range} targets={meta.targets} format={format} onFormat={setFormat} hidden={k !== at} />
+                    <Card key={items[k]!.postId} post={items[k]!} range={range} targets={meta.targets} format={format} onFormat={setFormat} hidden={k !== at} canEdit={meta.canEdit} />
                   ))}
               </div>
               <ArrowButton dir="next" onClick={() => go(1)} />
@@ -204,6 +205,7 @@ function Card({
   format: placement,
   onFormat,
   hidden,
+  canEdit,
 }: {
   post: PostSummary;
   range: Range;
@@ -211,6 +213,7 @@ function Card({
   format: PreviewFormat;
   onFormat: (f: PreviewFormat) => void;
   hidden: boolean;
+  canEdit: boolean;
 }) {
   const detail = useApi<PostDetail>(`/api/posts/${encodeURIComponent(post.postId)}?${qs({ range })}`);
   const d = detail.data?.postId === post.postId ? detail.data : null;
@@ -304,6 +307,9 @@ function Card({
             </a>
           )}
         </div>
+
+        {/* Loaded only for the card on screen, not the ones preloaded either side. */}
+        {!hidden && <CreativeAnalysisPanel postId={post.postId} canEdit={canEdit} />}
 
         <div className="mt-auto flex flex-wrap gap-2">
           <a href={`#/rankings?post=${encodeURIComponent(post.postId)}`} className="btn btn-secondary">

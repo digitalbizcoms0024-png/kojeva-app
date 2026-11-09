@@ -140,7 +140,7 @@ async function syncAccountTimezone(env: Env, db: D1Database, gc: GraphClient) {
 const MAX_IMAGES = 250;
 
 /** Full-size URL and size of ad images, by hash; failures leave the current thumbnail in place. */
-async function adImages(gc: GraphClient, account: string, hashes: string[]): Promise<Map<string, { hash: string; url: string; width?: number; height?: number }>> {
+export async function adImages(gc: GraphClient, account: string, hashes: string[]): Promise<Map<string, { hash: string; url: string; width?: number; height?: number }>> {
   const out = new Map<string, { hash: string; url: string; width?: number; height?: number }>();
   const list = hashes.slice(0, MAX_IMAGES);
   for (let i = 0; i < list.length; i += 50) {
