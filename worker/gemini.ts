@@ -23,9 +23,9 @@ export const RESPONSE_SCHEMA = {
       type: "OBJECT",
       properties: {
         ...Object.fromEntries(Object.entries(TAG_OPTIONS).map(([k, opts]) => [k, { type: "STRING", enum: [...opts] }])),
-        persona: S("Who the ad speaks to, a short phrase (e.g. Self-Conscious Morning Routiners)"),
-        usp: S("The product's unique selling point the ad leans on, a short phrase"),
-        desire: S("The core desire it promises, a short phrase (e.g. Snatched Jawline De-Puffing)"),
+        persona: S("Who the ad speaks to, at most 6 words (e.g. Self-Conscious Morning Routiners)"),
+        usp: S("The product's unique selling point the ad leans on, at most 8 words"),
+        desire: S("The core desire it promises, at most 6 words (e.g. Snatched Jawline De-Puffing)"),
       },
       required: [...Object.keys(TAG_OPTIONS), ...FREE_TAGS],
     },

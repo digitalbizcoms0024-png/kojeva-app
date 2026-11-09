@@ -164,6 +164,11 @@ uses (its AI is branded "Raya").
   spoken/on-screen proof, iteration ideas, transcript.
 - **One analysis per creative** (`creative_analyses`, keyed by asset), shared by every copy. Hand edits
   (Edit tags) are kept in `manual` and always win, also after a re-analysis.
+- **On the card** (Ad Rankings side card, Ad Swipe): Analyze with Gemini sits at the top, beside two tabs,
+  Performance and Gemini analysis; pressing it opens the Gemini tab (owner, Nov 9).
+- **Analyze top 10** (Ad Rankings, editors): the first 10 ads in the order shown (current sort and filters)
+  whose creative has no analysis yet or whose last try failed (`GET /api/analysis/pending`, one post per
+  creative), analyzed one after another in the browser tab, with progress. Keep the tab open.
 - **When**: editors press Analyze with Gemini (`POST /api/posts/:id/analyze`, `requireAccess`), and the
   nightly job, after the sync, analyzes new creatives with at least `GEMINI_MIN_SPEND` ($50) spent, biggest
   first, up to `GEMINI_DAILY_CAP` (30) a night (`analyzeNew`). Off without `GEMINI_API_KEY`.
