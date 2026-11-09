@@ -22,7 +22,7 @@ export interface Env {
   MEDIA_BUYER_EMAILS?: string;
   /** Secret, optional: Google AI Studio API key for Gemini creative analysis. Analysis is off without it. */
   GEMINI_API_KEY?: string;
-  /** Gemini model (default gemini-2.5-flash). */
+  /** Gemini model (default gemini-3.8-flash; set in wrangler.jsonc). */
   GEMINI_MODEL?: string;
   /** Most ads analyzed automatically per night (default 30). */
   GEMINI_DAILY_CAP?: string;

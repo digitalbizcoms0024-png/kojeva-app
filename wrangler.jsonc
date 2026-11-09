@@ -40,6 +40,8 @@
     // spend ($). The key is the GEMINI_API_KEY secret, set in the dashboard. 10 suits the free tier.
     "GEMINI_DAILY_CAP": "10",
     "GEMINI_MIN_SPEND": "50",
+    // Change here when Google retires a model (it names the replacement in the error on the ad card).
+    "GEMINI_MODEL": "gemini-3.8-flash",
     // Which copy this is; the preview (env.preview) refuses to serve the live address.
     "HUB_ENV": "live"
   },
@@ -79,6 +81,7 @@
         "MEDIA_BUYER_EMAILS": "digitalbizcoms0024@gmail.com,adrian@kojeva.com",
         "GEMINI_DAILY_CAP": "10",
         "GEMINI_MIN_SPEND": "50",
+        "GEMINI_MODEL": "gemini-3.8-flash",
         "HUB_ENV": "preview"
       },
       "triggers": { "crons": [] }
