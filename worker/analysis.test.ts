@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CreativeAnalysis } from "../shared/analysis.ts";
 import { analyzeAsset, analyzeNew } from "./analysis.ts";
+import { bumpVersion } from "./cache.ts";
 import type { Env } from "./env.ts";
 import app from "./index.ts";
 import { accessFixture, TEST_TEAM } from "./testing/access.ts";
@@ -141,5 +142,14 @@ describe("Gemini creative analysis", () => {
     await env.DB.prepare("DELETE FROM creative_analyses").run();
     env.GEMINI_MIN_SPEND = "100";
     expect(await analyzeNew(env, env.DB, fakeApis(), noWait)).toBe(0);
+  });
+
+  it("lists the shown posts that still need analyzing, one per creative", async () => {
+    const pending = async () => ((await (await req("/api/analysis/pending?posts=p1,p2,p3")).json()) as { pending: string[] }).pending;
+    // p1 and p2 share a creative; p3 is a hidden Post ID ad.
+    expect(await pending()).toEqual(["p1"]);
+    await analyzeAsset(env, env.DB, "v:vid1", "cr1", "e", fakeApis(), noWait);
+    await bumpVersion(env.DB); // as the Analyze route does (write requests bump the data version)
+    expect(await pending()).toEqual([]);
   });
 });

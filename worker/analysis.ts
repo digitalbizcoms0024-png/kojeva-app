@@ -169,6 +169,44 @@ analysis.get("/posts/:id/analysis", async (c) => {
   return c.json({ enabled: !!c.env.GEMINI_API_KEY, analysis: result });
 });
 
+/**
+ * Of the posts given (?posts=a,b,c, in the order shown), those whose creative has no analysis yet, or
+ * whose last try failed: what Ad Rankings → Analyze top 10 works through (owner, Nov 9). Hidden
+ * "Post ID" ads are left out (nothing to analyze).
+ */
+analysis.get("/analysis/pending", async (c) => {
+  const db = c.env.DB;
+  const ids = (c.req.query("posts") ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 100);
+  const assetOfPost = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90);
+    const { results } = await db
+      .prepare(`SELECT post_id, asset_id FROM ads WHERE post_id IN (${chunk.map((_, k) => `?${k + 1}`).join(",")}) AND asset_id IS NOT NULL AND asset_id NOT LIKE 'p:%'`)
+      .bind(...chunk)
+      .all<{ post_id: string; asset_id: string }>();
+    for (const r of results) if (!assetOfPost.has(r.post_id)) assetOfPost.set(r.post_id, r.asset_id);
+  }
+  const assets = [...new Set(assetOfPost.values())];
+  const done = new Set<string>();
+  for (let i = 0; i < assets.length; i += 90) {
+    const chunk = assets.slice(i, i + 90);
+    const { results } = await db
+      .prepare(`SELECT asset_id FROM creative_analyses WHERE status != 'failed' AND asset_id IN (${chunk.map((_, k) => `?${k + 1}`).join(",")})`)
+      .bind(...chunk)
+      .all<{ asset_id: string }>();
+    for (const r of results) done.add(r.asset_id);
+  }
+  // One post per creative, so copies aren't analyzed twice.
+  const seen = new Set<string>();
+  const pending = ids.filter((id) => {
+    const a = assetOfPost.get(id);
+    if (!a || done.has(a) || seen.has(a)) return false;
+    seen.add(a);
+    return true;
+  });
+  return c.json({ enabled: !!c.env.GEMINI_API_KEY, pending });
+});
+
 /** Run (or re-run) Gemini on a post's creative. Editors only. */
 analysis.post("/posts/:id/analyze", requireAccess, async (c) => {
   const db = c.env.DB;
@@ -200,7 +238,7 @@ analysis.patch("/posts/:id/analysis", requireAccess, async (c) => {
     }
     if (typeof value !== "string") return c.json({ error: `"${key}" must be text.` }, 400);
     if (fixed && !fixed.includes(value)) return c.json({ error: `"${value}" isn't an option for ${key}: ${fixed.join(", ")}.` }, 400);
-    manual[key as TagKey] = fixed ? (value as (typeof TAG_OPTIONS)[FixedTag][number]) : value.trim().slice(0, 80);
+    manual[key as TagKey] = fixed ? (value as (typeof TAG_OPTIONS)[FixedTag][number]) : value.trim().slice(0, 120);
   }
   await db
     .prepare(

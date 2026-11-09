@@ -89,7 +89,7 @@ export function cleanTags(raw: Record<string, unknown>): CreativeTags {
     if (!out[key]) delete out[key];
   }
   for (const key of FREE_TAGS) {
-    const v = typeof raw[key] === "string" ? (raw[key] as string).trim().slice(0, 80) : "";
+    const v = typeof raw[key] === "string" ? (raw[key] as string).trim().slice(0, 120) : "";
     if (v) out[key] = v;
   }
   return out;

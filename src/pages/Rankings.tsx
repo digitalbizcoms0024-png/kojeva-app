@@ -1,4 +1,4 @@
-import { CreativeAnalysisPanel } from "../components/CreativeAnalysis.tsx";
+import { AnalyzeButton, AnalyzeTopButton, CardTabs, CreativeAnalysisPanel, useCreativeAnalysis } from "../components/CreativeAnalysis.tsx";
 import { FrequencyValue } from "../components/PodReach.tsx";
 import { useEffect, useRef, useState } from "react";
 import { Info } from "../glossary.tsx";
@@ -248,6 +248,7 @@ export function RankingsPage({
                 >
                   <Icon name="download" size={16} />
                 </button>
+                <AnalyzeTopButton postIds={items.map((p) => p.postId)} canEdit={meta.canEdit} />
               </div>
 
               {/* Row 2: what's applied (removable) and the totals. */}
@@ -678,6 +679,9 @@ function PostDetailPanel({ postId, range, targets, canEdit }: { postId: string; 
   const { data, error } = useApi<PostDetail>(`/api/posts/${encodeURIComponent(postId)}?${qs({ range })}`);
   const attr = useApi<AttributionResponse>(`/api/attribution?${qs({ range, level: "post", post: postId })}`);
   const click7 = attr.data?.rows[0]?.click7 ?? null;
+  // Analyze with Gemini sits at the top; Performance and the Gemini analysis are tabs (owner, Nov 9).
+  const ga = useCreativeAnalysis(postId);
+  const [tab, setTab] = useState<"perf" | "gemini">("perf");
   if (error) return <Empty>Couldn't load this ad: {error.message}</Empty>;
   if (!data || data.postId !== postId) return <Skeleton rows={8} />;
   const a = data.assignment;
@@ -691,6 +695,14 @@ function PostDetailPanel({ postId, range, targets, canEdit }: { postId: string; 
 
   return (
     <div className="flex flex-col gap-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <CardTabs tab={tab} setTab={setTab} ga={ga} />
+        <AnalyzeButton ga={ga} canEdit={canEdit} onStart={() => setTab("gemini")} />
+      </div>
+      {tab === "gemini" ? (
+        <CreativeAnalysisPanel ga={ga} canEdit={canEdit} />
+      ) : (
+        <PerformanceTab>
       <span className="flex flex-wrap gap-1.5">
         <Tag>{data.active ? "Active" : "Paused"}</Tag>
         <FatigueTag f={data.fatigue} />
@@ -814,8 +826,6 @@ function PostDetailPanel({ postId, range, targets, canEdit }: { postId: string; 
         </div>
       </div>
 
-      <CreativeAnalysisPanel postId={postId} canEdit={canEdit} />
-
       <div>
         <h3 className="mb-2 font-extrabold text-ink">Atria creative tags</h3>
         {data.atria ? (
@@ -837,8 +847,15 @@ function PostDetailPanel({ postId, range, targets, canEdit }: { postId: string; 
           <p className="text-sm text-ink-3">Not tagged by Atria yet. Atria tags creatives in order of spend; the nightly sync picks up new tags.</p>
         )}
       </div>
+        </PerformanceTab>
+      )}
     </div>
   );
+}
+
+/** The Performance tab's content, spaced like the card. */
+function PerformanceTab({ children }: { children: React.ReactNode }) {
+  return <div className="flex flex-col gap-5">{children}</div>;
 }
 
 /** An ad's details, sliding in from the right over the list (full screen on a phone). Esc or the backdrop closes it. */

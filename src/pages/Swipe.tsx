@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { MetaResponse, PostDetail, PostSummary, RankingsResponse } from "../../shared/api.ts";
 import { cpa, ctr, dailyFrequency, funnelBand, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
-import { CreativeAnalysisPanel } from "../components/CreativeAnalysis.tsx";
+import { AnalyzeButton, CardTabs, CreativeAnalysisPanel, useCreativeAnalysis } from "../components/CreativeAnalysis.tsx";
 import { AdPreviewFrame, type PreviewFormat } from "../components/AdPreview.tsx";
 import { freqText, FunnelTag } from "../components/PodReach.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
@@ -216,6 +216,8 @@ function Card({
   canEdit: boolean;
 }) {
   const detail = useApi<PostDetail>(`/api/posts/${encodeURIComponent(post.postId)}?${qs({ range })}`);
+  const ga = useCreativeAnalysis(post.postId);
+  const [tab, setTab] = useState<"perf" | "gemini">("perf");
   const d = detail.data?.postId === post.postId ? detail.data : null;
   const t = post.totals;
   const x = d?.extra;
@@ -243,6 +245,11 @@ function Card({
         />
       </div>
       <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-4 p-5 md:p-6">
+        {/* Analyze with Gemini at the top; Performance and the Gemini analysis are tabs (owner, Nov 9). */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <CardTabs tab={tab} setTab={setTab} ga={ga} />
+          <AnalyzeButton ga={ga} canEdit={canEdit} onStart={() => setTab("gemini")} />
+        </div>
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <PodChip podId={post.assignment.podId} coPodId={post.assignment.coPodId} source={post.assignment.podSource} />
@@ -260,6 +267,10 @@ function Card({
           </p>
         </div>
 
+        {tab === "gemini" ? (
+          <CreativeAnalysisPanel ga={ga} canEdit={canEdit} />
+        ) : (
+          <>
         <div className="grid grid-cols-2 gap-0.5 border-2 border-divider/60 bg-divider/60 lg:grid-cols-4">
           <Metric label="ROAS" note={`Target ${targets.targetRoas}`}>
             <RoasValue value={roas(t)} target={targets.targetRoas} />
@@ -307,9 +318,8 @@ function Card({
             </a>
           )}
         </div>
-
-        {/* Loaded only for the card on screen, not the ones preloaded either side. */}
-        {!hidden && <CreativeAnalysisPanel postId={post.postId} canEdit={canEdit} />}
+          </>
+        )}
 
         <div className="mt-auto flex flex-wrap gap-2">
           <a href={`#/rankings?post=${encodeURIComponent(post.postId)}`} className="btn btn-secondary">
