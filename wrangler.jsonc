@@ -36,6 +36,10 @@
     "ATRIA_CLIENT_ID": "52d224fd6c7660e512605f4d71331b55.access",
     // The media buyer's sign-ins: only they can call a below-target concept a winner (worker/calls.ts).
     "MEDIA_BUYER_EMAILS": "digitalbizcoms0024@gmail.com,adrian@kojeva.com",
+    // Gemini creative analysis (docs/ATRIA.md → Gemini): most ads analyzed per night, from this much
+    // spend ($). The key is the GEMINI_API_KEY secret, set in the dashboard. 10 suits the free tier.
+    "GEMINI_DAILY_CAP": "10",
+    "GEMINI_MIN_SPEND": "50",
     // Which copy this is; the preview (env.preview) refuses to serve the live address.
     "HUB_ENV": "live"
   },
@@ -73,6 +77,8 @@
         "ACCESS_AUD": "",
         "ATRIA_CLIENT_ID": "",
         "MEDIA_BUYER_EMAILS": "digitalbizcoms0024@gmail.com,adrian@kojeva.com",
+        "GEMINI_DAILY_CAP": "10",
+        "GEMINI_MIN_SPEND": "50",
         "HUB_ENV": "preview"
       },
       "triggers": { "crons": [] }

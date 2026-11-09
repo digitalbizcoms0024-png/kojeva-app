@@ -185,6 +185,8 @@ uses (its AI is branded "Raya").
    Workers & Pages → **kojeva-hub** → Settings → Variables and Secrets → **Add** → type **Secret**, name
    `GEMINI_API_KEY`, paste the key → Deploy. Do the same on **kojeva-hub-preview** to try it there first.
    (Or `npx wrangler secret put GEMINI_API_KEY`.)
-4. Optional plain variables: `GEMINI_MODEL` (default `gemini-2.5-flash`), `GEMINI_DAILY_CAP` (30),
-   `GEMINI_MIN_SPEND` (50, in dollars).
+4. `GEMINI_DAILY_CAP` (10, for the free tier) and `GEMINI_MIN_SPEND` (50, in dollars) are set in
+   `wrangler.jsonc`, not the dashboard: every deploy resets plain variables to that file (secrets are kept).
+   Optional there too: `GEMINI_MODEL` (default `gemini-2.5-flash`). The preview has no nightly job (no
+   cron), so there it runs only when someone presses Analyze.
 5. Treat the key like a password. If it leaks, delete it in AI Studio and create a new one.
