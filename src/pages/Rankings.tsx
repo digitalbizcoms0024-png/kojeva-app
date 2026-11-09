@@ -1,3 +1,4 @@
+import { CreativeAnalysisPanel } from "../components/CreativeAnalysis.tsx";
 import { FrequencyValue } from "../components/PodReach.tsx";
 import { useEffect, useRef, useState } from "react";
 import { Info } from "../glossary.tsx";
@@ -399,7 +400,7 @@ export function RankingsPage({
                   }
                 }}
               >
-                <PostDetailPanel postId={activeId} range={range} targets={meta.targets} />
+                <PostDetailPanel postId={activeId} range={range} targets={meta.targets} canEdit={meta.canEdit} />
               </AdDrawer>
             )}
           </>
@@ -673,7 +674,7 @@ const ATRIA_FIELDS = [
   ["key_message", "Key message"],
 ] as const;
 
-function PostDetailPanel({ postId, range, targets }: { postId: string; range: Range; targets: Targets }) {
+function PostDetailPanel({ postId, range, targets, canEdit }: { postId: string; range: Range; targets: Targets; canEdit: boolean }) {
   const { data, error } = useApi<PostDetail>(`/api/posts/${encodeURIComponent(postId)}?${qs({ range })}`);
   const attr = useApi<AttributionResponse>(`/api/attribution?${qs({ range, level: "post", post: postId })}`);
   const click7 = attr.data?.rows[0]?.click7 ?? null;
@@ -812,6 +813,8 @@ function PostDetailPanel({ postId, range, targets }: { postId: string; range: Ra
           </table>
         </div>
       </div>
+
+      <CreativeAnalysisPanel postId={postId} canEdit={canEdit} />
 
       <div>
         <h3 className="mb-2 font-extrabold text-ink">Atria creative tags</h3>

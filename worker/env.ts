@@ -20,6 +20,14 @@ export interface Env {
   ATRIA_CLIENT_ID?: string;
   /** Comma-separated emails of the media buyer, the only person who makes winner calls. */
   MEDIA_BUYER_EMAILS?: string;
+  /** Secret, optional: Google AI Studio API key for Gemini creative analysis. Analysis is off without it. */
+  GEMINI_API_KEY?: string;
+  /** Gemini model (default gemini-2.5-flash). */
+  GEMINI_MODEL?: string;
+  /** Most ads analyzed automatically per night (default 30). */
+  GEMINI_DAILY_CAP?: string;
+  /** Ads are analyzed automatically from this much spend, in dollars (default 50). */
+  GEMINI_MIN_SPEND?: string;
   /** "live" or "preview" (wrangler.jsonc env.preview): which copy of the hub this build is. */
   HUB_ENV?: string;
   /** The deployed Worker version (wrangler.jsonc version_metadata). Missing in tests and the preview. */

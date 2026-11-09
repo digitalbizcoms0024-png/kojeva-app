@@ -149,3 +149,42 @@ The map places ads that spent at least `MIN_MAP_SPEND_CENTS` ($50) in the select
 "Not on the map" is shown as spend (and its share of mapped spend), with the biggest unplaced ads,
 so small tests don't inflate it. Needs Tagging → Not on the coverage map lists the same ads: tick
 several and set a persona and awareness once to place them all (hand-set, so never overwritten).
+
+## Gemini creative analysis (owner, Nov 9)
+
+Gemini watches each ad (the video, with sound and on-screen text, or the static) with its copy and
+returns tags from fixed lists plus a readout. It runs **alongside Atria** and fills what Atria lacks:
+both show on the ad's card (Ad Rankings side card, Ad Swipe). Atria doesn't publish which AI model it
+uses (its AI is branded "Raya").
+
+- **Tags** (`shared/analysis.ts`, `TAG_OPTIONS`): asset type, visual format, messaging angle, hook tactic,
+  offer type, funnel stage, headline tactic, text hook, visual hook, theme, seasonality, emotion,
+  awareness level (fixed lists; anything else becomes "Other"), and persona, USP, desire (short phrases).
+- **Readout**: summary, hook, primary message, why it fits its awareness level, what Gemini saw,
+  spoken/on-screen proof, iteration ideas, transcript.
+- **One analysis per creative** (`creative_analyses`, keyed by asset), shared by every copy. Hand edits
+  (Edit tags) are kept in `manual` and always win, also after a re-analysis.
+- **When**: editors press Analyze with Gemini (`POST /api/posts/:id/analyze`, `requireAccess`), and the
+  nightly job, after the sync, analyzes new creatives with at least `GEMINI_MIN_SPEND` ($50) spent, biggest
+  first, up to `GEMINI_DAILY_CAP` (30) a night (`analyzeNew`). Off without `GEMINI_API_KEY`.
+- **Read-only on Meta**: the hub downloads the media from Meta's link (video `source`, image URL) and reads
+  the creative's copy; it changes nothing. Hidden "Post ID" ads have no media: shown as "Can't analyze".
+- Videos go through Gemini's Files API (streamed, deleted after); images are sent inline. The answer is
+  forced to a JSON schema (`RESPONSE_SCHEMA` in `worker/gemini.ts`). Tested against fake Meta and Gemini
+  responses (`worker/analysis.test.ts`); this sandbox can't reach either.
+
+### Setting it up (once)
+
+1. **Create a Gemini API key.** Go to Google AI Studio (aistudio.google.com) and sign in with the Google
+   account the business should own it. Open **Get API key** (left menu) → **Create API key**. Pick an
+   existing Google Cloud project or let it create one. Copy the key.
+2. **Turn on billing** (for more than the free tier's limits): in AI Studio, **Set up billing** on the key's
+   project, or link a billing account in Google Cloud Console → Billing. Add a **budget alert** there
+   (e.g. $20/month) so a spike emails you. A 30–60 s video costs about a cent or two with Gemini Flash.
+3. **Add it to the Worker as a secret** (never in chat, code or `wrangler.jsonc`): Cloudflare dashboard →
+   Workers & Pages → **kojeva-hub** → Settings → Variables and Secrets → **Add** → type **Secret**, name
+   `GEMINI_API_KEY`, paste the key → Deploy. Do the same on **kojeva-hub-preview** to try it there first.
+   (Or `npx wrangler secret put GEMINI_API_KEY`.)
+4. Optional plain variables: `GEMINI_MODEL` (default `gemini-2.5-flash`), `GEMINI_DAILY_CAP` (30),
+   `GEMINI_MIN_SPEND` (50, in dollars).
+5. Treat the key like a password. If it leaks, delete it in AI Studio and create a new one.
