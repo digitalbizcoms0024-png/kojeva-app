@@ -74,15 +74,25 @@ export async function videoSource(
     return null;
   });
   const list = (pages?.data ?? []).filter((p) => p.access_token).sort((a, b) => Number(b.id === pageId) - Number(a.id === pageId));
+  // A Page owned by a Business portfolio may be missing from the login's list yet still give its token
+  // when asked by id (when the Page was ticked for this token).
+  if (pageId && !list.some((p) => p.id === pageId)) {
+    const direct = await gc.get<{ id: string; access_token?: string }>(pageId, { fields: "id,access_token" }).catch((e: Error) => {
+      errors.push(`page ${pageId}: ${e.message}`);
+      return null;
+    });
+    if (direct?.access_token) list.unshift({ id: pageId, access_token: direct.access_token });
+  }
   for (const p of list) {
     const v = await clientFor(env, p.access_token!, fetcher)
       .get<{ source?: string; length?: number }>(videoId, { fields: "source,length" })
       .catch(() => null);
     if (v?.source) return { url: v.source, seconds: v.length ?? null, error: null };
   }
+  const seen = pages?.data?.length ?? 0;
   const hint = list.length
-    ? "None of the login's Pages could read it."
-    : "Reconnect Meta in Settings and allow Page access (pages_read_engagement) so the hub can read the Page's videos.";
+    ? `The login can open ${list.length} Page${list.length === 1 ? "" : "s"}, but none could read this video${pageId ? ` (it's on Page ${pageId})` : ""}.`
+    : `The Meta login can see ${seen} Page${seen === 1 ? "" : "s"} with access${pageId ? `, not Page ${pageId}` : ""}. Make a new token with pages_show_list and pages_read_engagement, tick this Page when Meta asks which Pages to allow (the person needs a role on the Page), and renew it in Settings.`;
   return { url: null, seconds: null, error: `Meta returned no video file. ${hint}${errors.length ? ` (${errors.join(" | ")})` : ""}` };
 }
 
@@ -121,4 +131,46 @@ export async function adMedia(env: Env, db: D1Database, adId: string, fetcher?: 
   } catch (e) {
     return { error: e instanceof GraphError || e instanceof Error ? e.message : String(e), status: 502 };
   }
+}
+
+/** Keys Meta's players use for the video file, best quality first. */
+const PLAYER_KEYS = ["playable_url_quality_hd", "browser_native_hd_url", "hd_src_no_ratelimit", "hd_src", "playable_url", "browser_native_sd_url", "sd_src_no_ratelimit", "sd_src"];
+
+/** Unescapes a URL found inside JSON or HTML on Meta's preview page. */
+function unescapeUrl(raw: string): string {
+  return raw
+    .replace(/\\\//g, "/")
+    .replace(/\\u0025/gi, "%")
+    .replace(/\\u0026/gi, "&")
+    .replace(/\\u003d/gi, "=")
+    .replace(/&amp;/g, "&");
+}
+
+/** The video file linked from a preview page's HTML: a known player key first, else any fbcdn .mp4 link. */
+export function videoUrlInPreviewHtml(html: string): string | null {
+  for (const key of PLAYER_KEYS) {
+    const m = new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`).exec(html);
+    if (m && /^https?:/.test(unescapeUrl(m[1]!))) return unescapeUrl(m[1]!);
+  }
+  const any = /https?:(?:\\?\/){2}[^"'\s<>]*?fbcdn[^"'\s<>]*?\.mp4[^"'\s<>]*/i.exec(html);
+  return any ? unescapeUrl(any[0]) : null;
+}
+
+/**
+ * Last resort for videos Meta's API won't hand over (owner, Nov 10): load the same Meta ad preview the
+ * card plays (adPreview, read-only) and take the video link from the page. Best effort: Meta doesn't
+ * always put one there, so null is normal.
+ */
+export async function videoFromPreview(env: Env, db: D1Database, postId: string, fetcher?: typeof fetch): Promise<{ url: string | null; error: string | null }> {
+  const f = fetcher ?? fetch;
+  const { adPreview } = await import("./preview.ts");
+  for (const format of ["MOBILE_FEED_STANDARD", "INSTAGRAM_STANDARD"] as const) {
+    const p = await adPreview(env, db, postId, format, fetcher);
+    if ("error" in p) return { url: null, error: `preview: ${p.error}` };
+    const page = await f(p.src, { headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36" } }).catch(() => null);
+    if (!page?.ok) continue;
+    const url = videoUrlInPreviewHtml(await page.text());
+    if (url) return { url, error: null };
+  }
+  return { url: null, error: "the ad preview had no video link either" };
 }

@@ -179,6 +179,10 @@ uses (its AI is branded "Raya").
   login to grant `pages_show_list` and `pages_read_engagement` (asked by Settings → Connect since Nov 10).
   Reconnect once to grant them: reconnecting replaces only the stored token, never the synced data. Until
   then such videos show "Can't analyze … Reconnect Meta". Analyze top 10 retries them; the nightly job doesn't.
+- **Last resort** (`videoFromPreview`, owner, Nov 10): when no API route gives the file, the hub loads Meta's own
+  ad preview (the page the card plays, via `/{ad}/previews`, read-only) and takes the video link from it
+  (`videoUrlInPreviewHtml`: Meta's player keys, else any fbcdn .mp4 link). Best effort: Meta doesn't always put
+  one there.
 - Videos go through Gemini's Files API (streamed, deleted after); images are sent inline. The answer is
   forced to a JSON schema (`RESPONSE_SCHEMA` in `worker/gemini.ts`). Tested against fake Meta and Gemini
   responses (`worker/analysis.test.ts`); this sandbox can't reach either.
