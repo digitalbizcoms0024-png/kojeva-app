@@ -182,8 +182,33 @@ describe("Gemini creative analysis", () => {
     await bumpVersion(env.DB);
     const r = (await (await req("/api/posts/p1/analysis")).json()) as { analysis: CreativeAnalysis };
     expect(r.analysis.status).toBe("no_media");
-    expect(r.analysis.error).toContain("Reconnect Meta in Settings");
+    expect(r.analysis.error).toContain("tick this Page");
     // Analyze top 10 retries it.
     expect(((await (await req("/api/analysis/pending?posts=p1")).json()) as { pending: string[] }).pending).toEqual(["p1"]);
+  });
+
+  it("asks for a Business-owned Page by id when it isn't in the login's list", async () => {
+    const base = fakeApis();
+    const byId = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (url.host === "graph.facebook.com") {
+        const token = url.searchParams.get("access_token");
+        if (url.pathname.endsWith("/vid1")) return Response.json(token === "page-token" ? { source: VIDEO_SRC } : { id: "vid1" });
+        if (url.pathname.endsWith("/advideos")) return Response.json({ data: [] });
+        if (url.pathname.endsWith("/me/accounts")) return Response.json({ data: [] });
+        if (url.pathname.endsWith("/776862388850901")) return Response.json({ id: "776862388850901", access_token: "page-token" });
+      }
+      return base(input, init);
+    }) as typeof fetch;
+    // The post id carries the Page id.
+    await env.DB.prepare("UPDATE ads SET post_id = 'p1' WHERE id = 'a1'").run();
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO posts (id, media_type) VALUES ('776862388850901_1', 'video')"),
+      env.DB.prepare("UPDATE ads SET post_id = '776862388850901_1' WHERE asset_id = 'v:vid1'"),
+    ]);
+    await analyzeAsset(env, env.DB, "v:vid1", "cr1", "e", byId, noWait);
+    await bumpVersion(env.DB);
+    const r = (await (await req("/api/posts/776862388850901_1/analysis")).json()) as { analysis: CreativeAnalysis };
+    expect(r.analysis.status).toBe("analyzed");
   });
 });

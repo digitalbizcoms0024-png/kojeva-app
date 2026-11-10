@@ -74,15 +74,25 @@ export async function videoSource(
     return null;
   });
   const list = (pages?.data ?? []).filter((p) => p.access_token).sort((a, b) => Number(b.id === pageId) - Number(a.id === pageId));
+  // A Page owned by a Business portfolio may be missing from the login's list yet still give its token
+  // when asked by id (when the Page was ticked for this token).
+  if (pageId && !list.some((p) => p.id === pageId)) {
+    const direct = await gc.get<{ id: string; access_token?: string }>(pageId, { fields: "id,access_token" }).catch((e: Error) => {
+      errors.push(`page ${pageId}: ${e.message}`);
+      return null;
+    });
+    if (direct?.access_token) list.unshift({ id: pageId, access_token: direct.access_token });
+  }
   for (const p of list) {
     const v = await clientFor(env, p.access_token!, fetcher)
       .get<{ source?: string; length?: number }>(videoId, { fields: "source,length" })
       .catch(() => null);
     if (v?.source) return { url: v.source, seconds: v.length ?? null, error: null };
   }
+  const seen = pages?.data?.length ?? 0;
   const hint = list.length
-    ? "None of the login's Pages could read it."
-    : "Reconnect Meta in Settings and allow Page access (pages_read_engagement) so the hub can read the Page's videos.";
+    ? `The login can open ${list.length} Page${list.length === 1 ? "" : "s"}, but none could read this video${pageId ? ` (it's on Page ${pageId})` : ""}.`
+    : `The Meta login can see ${seen} Page${seen === 1 ? "" : "s"} with access${pageId ? `, not Page ${pageId}` : ""}. Make a new token with pages_show_list and pages_read_engagement, tick this Page when Meta asks which Pages to allow (the person needs a role on the Page), and renew it in Settings.`;
   return { url: null, seconds: null, error: `Meta returned no video file. ${hint}${errors.length ? ` (${errors.join(" | ")})` : ""}` };
 }
 
