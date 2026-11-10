@@ -98,15 +98,15 @@ function Leaderboard({
             {`${week ?? 0} ${week === 1 ? "concept" : "concepts"} this week${r.live ? ` · ${r.live} testing now` : ""}`}
           </div>
         </td>
-        <td className="w-32 py-3 pr-12 text-right">
+        <td className="w-36 px-4 py-3 text-center">
           <div className="num text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</div>
           <ScoreBar score={s} targets={targets} />
         </td>
-        <td className="w-56 py-3 pr-6">
+        <td className="w-60 px-4 py-3 text-center">
           {r.hits ? (
             // One quiet line: scaled winners first (with their icon), then KPI winners.
             // Each tier opens those concepts in a side card, like the hit rate's count.
-            <span className="num flex flex-col items-start gap-0.5 text-sm">
+            <span className="num flex flex-col items-center gap-0.5 text-sm">
               {TIER_ORDER.filter((x) => r.tiers[x] > 0).map((x) => {
                 const label = `${r.tiers[x]} ${TIER_LABELS[x]}${r.tiers[x] === 1 ? "" : "s"}`;
                 return (
@@ -127,7 +127,7 @@ function Leaderboard({
             <span className="text-xs text-ink-3">{decided ? "No winners yet" : "—"}</span>
           )}
         </td>
-        <td className="w-28 py-3 pr-6 text-right">
+        <td className="w-32 px-4 py-3 text-center">
           <div className="num text-lg leading-none font-bold text-ink">{pct(r.hitRate, 0)}</div>
           <div className="num text-xs text-ink-3">
             {decided ? (
@@ -166,13 +166,13 @@ function Leaderboard({
           <tr className="border-b border-divider">
             <th className="py-2 font-normal">#</th>
             <th className="py-2 font-normal">Pod</th>
-            <th className="w-32 py-2 pr-12 text-right font-normal">
+            <th className="w-36 px-4 py-2 text-center font-normal">
               Score <Info id="podScore" />
             </th>
-            <th className="w-56 py-2 pr-6 font-normal">
+            <th className="w-60 px-4 py-2 text-center font-normal">
               Winners <Info id="winnerTiers" />
             </th>
-            <th className="w-28 py-2 pr-6 text-right font-normal">
+            <th className="w-32 px-4 py-2 text-center font-normal">
               Hit rate <Info id="hitRate" />
             </th>
             <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
@@ -215,7 +215,7 @@ const SCORE_PARTS = [
 function ScoreBar({ score, targets }: { score: PodScore; targets: Targets }) {
   const tip = SCORE_PARTS.map((p) => `${p.label} ${Math.round(score[p.key])} of ${targets[p.weight]}`).join(" · ");
   return (
-    <div className="mt-1.5 ml-auto flex h-1.5 w-24 bg-surface-2" title={tip} role="img" aria-label={tip}>
+    <div className="mx-auto mt-1.5 flex h-1.5 w-24 bg-surface-2" title={tip} role="img" aria-label={tip}>
       {SCORE_PARTS.map((p) => (
         <span key={p.key} className="h-full" style={{ width: `${score[p.key]}%`, background: p.color }} />
       ))}
