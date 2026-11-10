@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CreativeAnalysis } from "../shared/analysis.ts";
 import { analyzeAsset, analyzeNew } from "./analysis.ts";
+import { videoUrlInPreviewHtml } from "./meta/media.ts";
 import { bumpVersion } from "./cache.ts";
 import type { Env } from "./env.ts";
 import app from "./index.ts";
@@ -210,5 +211,35 @@ describe("Gemini creative analysis", () => {
     await bumpVersion(env.DB);
     const r = (await (await req("/api/posts/776862388850901_1/analysis")).json()) as { analysis: CreativeAnalysis };
     expect(r.analysis.status).toBe("analyzed");
+  });
+
+  it("falls back to the video link inside Meta's ad preview when the API gives no file", async () => {
+    const base = fakeApis();
+    const PREVIEW = "https://business.facebook.com/ads/api/preview_iframe.php?d=AQ1&t=AQ2";
+    const viaPreview = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (url.host === "graph.facebook.com") {
+        if (url.pathname.endsWith("/vid1")) return Response.json({ id: "vid1" });
+        if (url.pathname.endsWith("/advideos") || url.pathname.endsWith("/me/accounts")) return Response.json({ data: [] });
+        if (url.pathname.endsWith("/a1/previews"))
+          return Response.json({ data: [{ body: `<iframe src="${PREVIEW.replace("&", "&amp;")}" width="335" height="450"></iframe>` }] });
+      }
+      if (url.href === PREVIEW) return new Response(`<script>{"playable_url_quality_hd":"https:\\/\\/video.fbcdn.example\\/ad.mp4"}</script>`);
+      return base(input, init);
+    }) as typeof fetch;
+    await analyzeAsset(env, env.DB, "v:vid1", "cr1", "e", viaPreview, noWait);
+    await bumpVersion(env.DB);
+    const r = (await (await req("/api/posts/p1/analysis")).json()) as { analysis: CreativeAnalysis };
+    expect(r.analysis).toMatchObject({ status: "analyzed", media: "video" });
+  });
+});
+
+describe("videoUrlInPreviewHtml", () => {
+  it("takes the best player link, unescaped, or any fbcdn .mp4 link", () => {
+    expect(videoUrlInPreviewHtml(`{"sd_src":"https:\\/\\/v.fbcdn.net\\/sd.mp4","playable_url_quality_hd":"https:\\/\\/v.fbcdn.net\\/hd.mp4?a=1\\u0026b=2"}`)).toBe(
+      "https://v.fbcdn.net/hd.mp4?a=1&b=2",
+    );
+    expect(videoUrlInPreviewHtml(`<video src="https://video-ord5-1.xx.fbcdn.net/v/t42/x.mp4?oh=1&amp;oe=2">`)).toBe("https://video-ord5-1.xx.fbcdn.net/v/t42/x.mp4?oh=1&oe=2");
+    expect(videoUrlInPreviewHtml("<div>no video here</div>")).toBeNull();
   });
 });

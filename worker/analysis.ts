@@ -9,7 +9,7 @@ import { bumpVersion } from "./cache.ts";
 import type { AppEnv, Env } from "./env.ts";
 import { analyzeWithGemini, DEFAULT_GEMINI_MODEL, GeminiError } from "./gemini.ts";
 import { adImages, clientFor, getToken } from "./meta/sync.ts";
-import { pageOfPost, videoSource } from "./meta/media.ts";
+import { pageOfPost, videoFromPreview, videoSource } from "./meta/media.ts";
 import { getLatestDate, loadPostRangeTotals } from "./queries.ts";
 
 type Row = {
@@ -94,6 +94,12 @@ export async function analyzeAsset(env: Env, db: D1Database, assetId: string, cr
       const v = await videoSource(env, token, assetId.slice(2), pageOfPost(post?.post_id), fetcher);
       url = v.url;
       reason = v.error;
+      // Last resort: the video link inside Meta's own ad preview (what the card plays).
+      if (!url && post?.post_id) {
+        const p = await videoFromPreview(env, db, post.post_id, fetcher);
+        url = p.url;
+        if (!url && reason) reason = `${reason} · Also tried ${p.error}.`;
+      }
     } else url = (await adImages(gc, env.META_AD_ACCOUNT_ID, [assetId.slice(2)])).get(assetId.slice(2))?.url ?? null;
   } catch {
     url = null;
