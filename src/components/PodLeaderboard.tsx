@@ -1,7 +1,6 @@
 import { Info } from "../glossary.tsx";
-import type { LaunchesResponse, MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
+import type { MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { cpa, podScores, roas, TIER_LABELS, type PodScore, type Targets, type WinnerTier } from "../../shared/metrics.ts";
-import { useApi } from "../api.ts";
 import { shiftDay } from "./HeaderControls.tsx";
 import { Sparkline } from "./Sparkline.tsx";
 import { CpaValue, Icon, LoadError, RoasValue, SectionTitle } from "./ui.tsx";
@@ -26,7 +25,6 @@ export function PodLeaderboard({
   meta: MetaResponse;
   range: string;
 }) {
-  const launches = useApi<LaunchesResponse>("/api/launches?weeks=1");
   const tg = meta.targets;
   const sparkDays = meta.latestDate ? Array.from({ length: 7 }, (_, i) => shiftDay(meta.latestDate!, i - 6)) : [];
   const inhouse = new Set(meta.pods.filter((p) => p.inhouse).map((p) => p.id));
@@ -48,7 +46,7 @@ export function PodLeaderboard({
         }
       />
       <LoadError error={error} retry={retry} what="the pods" loading={!data} rows={6} />
-      <Leaderboard rows={ranked} targets={tg} sparkDays={sparkDays} launches={launches.data} range={range} />
+      <Leaderboard rows={ranked} targets={tg} sparkDays={sparkDays} range={range} />
     </section>
   );
 }
@@ -61,75 +59,73 @@ function Leaderboard({
   rows,
   targets,
   sparkDays,
-  launches,
   range,
 }: {
   rows: (PodRow & { score: PodScore })[];
   targets: Targets;
   sparkDays: string[];
-  launches: LaunchesResponse | null;
   range: string;
 }) {
+  // Scaled winners first (bold, with their icon), then KPI winners. Each opens those concepts.
+  const winners = (r: PodRow & { score: PodScore }, inline = false) =>
+    r.hits ? (
+      <span className={inline ? "flex flex-wrap gap-x-2 text-xs" : "flex flex-col items-start gap-0.5"}>
+        {TIER_ORDER.filter((x) => r.tiers[x] > 0).map((x) => {
+          const label = `${r.tiers[x]} ${TIER_LABELS[x]}${r.tiers[x] === 1 ? "" : "s"}`;
+          return (
+            <button
+              key={x}
+              type="button"
+              className={`inline-flex items-center gap-1 whitespace-nowrap hover:underline ${x === "kpi" ? "text-ink-2" : "font-bold text-ink"}`}
+              title={`See ${r.name}'s ${label}`}
+              onClick={() => openDrill({ title: `${r.name} · ${TIER_LABELS[x]}s`, range, filter: { pod: r.podId!, result: x } })}
+            >
+              {x !== "kpi" && <Icon name={x === "spend" ? "trend" : "star"} size={13} />}
+              {label}
+            </button>
+          );
+        })}
+      </span>
+    ) : inline ? null : (
+      <span className="text-ink-3">—</span>
+    );
+
+  // Text left, numbers right (tabular figures) so every column lines up row to row (owner, Nov 10).
   const line = (r: PodRow & { score: PodScore }, rank: number) => {
     const decided = r.hits + r.misses;
-    const week = launches?.rows.find((l) => l.podId === r.podId)?.counts[0] ?? null;
-    // The leader: first place with a score above 0.
+    // The leader: first place with a score above 0, marked by the trophy alone.
     const top = rank === 1 && r.score.score > 0;
     const s = r.score;
     return (
-      <tr key={r.podId} className={`border-b border-divider ${top ? "bg-accent-soft" : ""}`}>
-        <td className={`num w-8 py-3 align-middle font-bold ${top ? "pl-1 text-accent-ink" : "text-ink-3"}`}>
+      <tr key={r.podId} className="border-b border-divider last:border-b-0">
+        <td className="num w-8 py-3.5 pl-1 align-middle font-bold text-ink-3">
           {top ? (
-            <span className="inline-flex items-center gap-0.5" title="Top pod by score">
-              <Icon name="trophy" size={15} />
+            <span className="inline-flex text-accent-ink" title="Top pod by score">
+              <Icon name="trophy" size={16} />
               <span className="sr-only">1</span>
             </span>
           ) : (
             rank
           )}
         </td>
-        <td className="py-3 pr-3">
-          <a href="#/pods" className="inline-flex items-center gap-2 font-bold text-ink hover:underline">
+        <td className="py-3.5 pr-4">
+          <a href="#/pods" className="inline-flex items-center gap-2.5 font-bold text-ink hover:underline">
             <span className="size-2.5 shrink-0" style={{ background: `var(--pod-${r.podId})` }} aria-hidden />
             {r.name}
           </a>
-          {top && <span className="kicker ml-2 text-accent-ink">Top pod</span>}
-          <div className="text-xs text-ink-3">
-            {`${week ?? 0} ${week === 1 ? "concept" : "concepts"} this week${r.live ? ` · ${r.live} testing now` : ""}`}
+          {r.live > 0 && <div className="pl-5 text-xs whitespace-nowrap text-ink-3">{r.live} testing now</div>}
+          <div className="mt-1 pl-5 sm:hidden">{winners(r, true)}</div>
+        </td>
+        <td className="py-3.5 pr-4 sm:pr-6">
+          <div className="flex items-center gap-3.5">
+            <span className="num w-8 text-right text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</span>
+            <ScoreBar score={s} targets={targets} />
           </div>
         </td>
-        <td className="py-3 pr-3 text-right">
-          <div className="num text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</div>
-          <ScoreBar score={s} targets={targets} />
-        </td>
-        <td className="py-3 pr-3 pl-6">
-          {r.hits ? (
-            // One quiet line: scaled winners first (with their icon), then KPI winners.
-            // Each tier opens those concepts in a side card, like the hit rate's count.
-            <span className="num flex flex-col items-start gap-0.5 text-sm">
-              {TIER_ORDER.filter((x) => r.tiers[x] > 0).map((x) => {
-                const label = `${r.tiers[x]} ${TIER_LABELS[x]}${r.tiers[x] === 1 ? "" : "s"}`;
-                return (
-                  <button
-                    key={x}
-                    type="button"
-                    className={`inline-flex items-center gap-1 hover:underline ${x === "kpi" ? "text-ink-2" : "font-bold text-ink"}`}
-                    title={`See ${r.name}'s ${label}`}
-                    onClick={() => openDrill({ title: `${r.name} · ${TIER_LABELS[x]}s`, range, filter: { pod: r.podId!, result: x } })}
-                  >
-                    {x !== "kpi" && <Icon name={x === "spend" ? "trend" : "star"} size={13} />}
-                    {label}
-                  </button>
-                );
-              })}
-            </span>
-          ) : (
-            <span className="text-xs text-ink-3">{decided ? "No winners yet" : "—"}</span>
-          )}
-        </td>
-        <td className="py-3 pr-3 text-right">
+        <td className="hidden py-3.5 pr-6 sm:table-cell">{winners(r)}</td>
+        <td className="py-3.5 pr-4 text-right">
           <div className="num text-lg leading-none font-bold text-ink">{pct(r.hitRate, 0)}</div>
-          <div className="num text-xs text-ink-3">
+          <div className="num mt-0.5 text-xs text-ink-3">
             {decided ? (
               // The pod's hits in a side card, like a concept group (switch to misses there).
               <button
@@ -145,14 +141,14 @@ function Leaderboard({
             )}
           </div>
         </td>
-        <td className="hidden w-36 py-3 pr-3 md:table-cell">
+        <td className="hidden w-40 py-3.5 pr-4 pl-8 md:table-cell">
           <Sparkline values={r.spark} days={sparkDays} color={`var(--pod-${r.podId})`} label={r.name} />
         </td>
-        <td className="num py-3 pr-3 text-right text-ink">{money(r.totals.spendCents, { compact: true })}</td>
-        <td className="hidden py-3 pr-3 text-right sm:table-cell">
+        <td className="num hidden py-3.5 pr-4 text-right text-ink sm:table-cell">{money(r.totals.spendCents, { compact: true })}</td>
+        <td className="num hidden py-3.5 pr-4 text-right sm:table-cell">
           <CpaValue value={cpa(r.totals)} target={targets.targetCpa} warnMax={targets.cpaWarnMax} />
         </td>
-        <td className="hidden py-3 text-right sm:table-cell">
+        <td className="num hidden py-3.5 text-right sm:table-cell">
           <RoasValue value={roas(r.totals)} target={targets.targetRoas} />
         </td>
       </tr>
@@ -161,39 +157,37 @@ function Leaderboard({
   if (!rows.length) return null;
   return (
     <>
-      <table className="w-full text-sm">
-        <thead className="kicker text-left">
-          <tr className="border-b border-divider">
-            <th className="py-2 font-normal">#</th>
-            <th className="py-2 font-normal">Pod</th>
-            <th className="py-2 pr-3 text-right font-normal">
-              Score <Info id="podScore" />
-            </th>
-            <th className="py-2 pr-3 pl-6 font-normal">
-              Winners <Info id="winnerTiers" />
-            </th>
-            <th className="py-2 pr-3 text-right font-normal">
-              Hit rate <Info id="hitRate" />
-            </th>
-            <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
-            <th className="py-2 pr-3 text-right font-normal">Spend</th>
-            <th className="hidden py-2 pr-3 text-right font-normal sm:table-cell">CPA</th>
-            <th className="hidden py-2 text-right font-normal sm:table-cell">ROAS</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => line(r, i + 1))}
-        </tbody>
-      </table>
-      <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-3">
-        <span>Score out of 100, made of:</span>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="kicker text-left">
+            <tr className="border-b border-divider">
+              <th className="py-2.5 pl-1 font-normal">#</th>
+              <th className="py-2.5 pr-4 font-normal">Pod</th>
+              <th className="py-2.5 pr-4 font-normal whitespace-nowrap sm:w-56 sm:pr-6">
+                Score <Info id="podScore" />
+              </th>
+              <th className="hidden w-48 py-2.5 pr-6 font-normal sm:table-cell">
+                Winners <Info id="winnerTiers" />
+              </th>
+              <th className="w-28 py-2.5 pr-4 text-right font-normal whitespace-nowrap">
+                Hit rate <Info id="hitRate" />
+              </th>
+              <th className="hidden py-2.5 pr-4 pl-8 font-normal whitespace-nowrap md:table-cell">Spend, last 7 days</th>
+              <th className="hidden py-2.5 pr-4 text-right font-normal sm:table-cell">Spend</th>
+              <th className="hidden py-2.5 pr-4 text-right font-normal sm:table-cell">CPA</th>
+              <th className="hidden py-2.5 text-right font-normal sm:table-cell">ROAS</th>
+            </tr>
+          </thead>
+          <tbody>{rows.map((r, i) => line(r, i + 1))}</tbody>
+        </table>
+      </div>
+      <p className="mt-0 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-divider pt-3 text-xs text-ink-2">
+        <span>Score out of 100:</span>
         {SCORE_PARTS.map((p) => (
           <span key={p.key} className="inline-flex items-center gap-1.5">
-            <span className="h-1.5 w-3" style={{ background: p.color }} aria-hidden />
+            <span className="h-2 w-3.5" style={{ background: p.color }} aria-hidden />
             {p.label} (up to {targets[p.weight]}
-            {p.key === "hitRate"
-              ? ": Breakthroughs count most, then Spend winners; KPI winners alone earn at most 2/3"
-              : p.key === "roas" ? `, full at ${targets.targetRoas}+` : ", vs the top spender"})
+            {p.key === "roas" ? `, full at ${targets.targetRoas}+` : p.key === "spend" ? ", vs the top spender" : ""})
           </span>
         ))}
       </p>
@@ -211,14 +205,14 @@ const SCORE_PARTS = [
   { key: "roas", label: "ROAS", weight: "scoreWeightRoas", color: "var(--chart-bar)" },
 ] as const;
 
-/** A 100-point bar under the score: each part's points as a segment, the rest left empty. */
+/** A 100-point bar beside the score: each part's points as a segment (2px apart), the rest left empty. */
 function ScoreBar({ score, targets }: { score: PodScore; targets: Targets }) {
   const tip = SCORE_PARTS.map((p) => `${p.label} ${Math.round(score[p.key])} of ${targets[p.weight]}`).join(" · ");
   return (
-    <div className="mt-1.5 ml-auto flex h-1.5 w-24 bg-surface-2" title={tip} role="img" aria-label={tip}>
-      {SCORE_PARTS.map((p) => (
-        <span key={p.key} className="h-full" style={{ width: `${score[p.key]}%`, background: p.color }} />
-      ))}
+    <div className="hidden h-2 w-36 gap-0.5 bg-surface-2 sm:flex" title={tip} role="img" aria-label={tip}>
+      {SCORE_PARTS.map((p) =>
+        score[p.key] > 0.5 ? <span key={p.key} className="h-full" style={{ width: `${score[p.key]}%`, background: p.color }} /> : null,
+      )}
     </div>
   );
 }

@@ -778,7 +778,6 @@ app.onError((err, c) => {
 export const WARM_PATHS = [
   "/api/rankings?range=month&sort=spend&limit=5",
   "/api/pods?range=month",
-  "/api/launches?weeks=1",
   "/api/coverage?range=month",
   "/api/alerts?v=0",
   "/api/trends?range=month",
