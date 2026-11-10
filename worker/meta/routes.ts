@@ -107,7 +107,8 @@ connection.get("/facebook/start", (c) => {
   dialog.searchParams.set("client_id", c.env.META_APP_ID);
   dialog.searchParams.set("redirect_uri", callbackUrl(c.req.url));
   dialog.searchParams.set("state", state);
-  dialog.searchParams.set("scope", "ads_read");
+  // Read-only: ads, plus the Pages' own videos for Gemini analysis (ads run from Page posts; owner, Nov 10).
+  dialog.searchParams.set("scope", "ads_read,pages_show_list,pages_read_engagement");
   dialog.searchParams.set("response_type", "code");
   return c.redirect(dialog.toString());
 });

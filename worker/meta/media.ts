@@ -31,6 +31,61 @@ type Creative = {
 
 const CREATIVE_FIELDS = "body,title,image_url,thumbnail_url,video_id,object_story_spec,asset_feed_spec";
 
+/** The Page id in a post id ("776862388850901_122147…" → "776862388850901"), or null. */
+export function pageOfPost(postId: string | null | undefined): string | null {
+  const m = /^(\d+)_\d+$/.exec(postId ?? "");
+  return m ? m[1]! : null;
+}
+
+/**
+ * A downloadable link to a video (expires within hours), trying in turn: the video itself, the ad
+ * account's video library, and the Page's own access. Page-owned videos (ads run from Page posts)
+ * only come through the last, which needs the login to grant pages_show_list and
+ * pages_read_engagement (Settings → reconnect Meta; owner, Nov 10). All read-only.
+ */
+export async function videoSource(
+  env: Env,
+  token: string,
+  videoId: string,
+  pageId: string | null,
+  fetcher?: typeof fetch,
+): Promise<{ url: string | null; seconds: number | null; error: string | null }> {
+  const gc = clientFor(env, token, fetcher);
+  const errors: string[] = [];
+  const direct = await gc.get<{ source?: string; length?: number }>(videoId, { fields: "source,length" }).catch((e: Error) => {
+    errors.push(e.message);
+    return null;
+  });
+  if (direct?.source) return { url: direct.source, seconds: direct.length ?? null, error: null };
+  const lib = await gc
+    .get<{ data?: { id: string; source?: string; length?: number }[] }>(`${env.META_AD_ACCOUNT_ID}/advideos`, {
+      fields: "source,length",
+      filtering: JSON.stringify([{ field: "id", operator: "IN", value: [videoId] }]),
+    })
+    .catch((e: Error) => {
+      errors.push(`library: ${e.message}`);
+      return null;
+    });
+  const inLib = lib?.data?.find((x) => x.id === videoId && x.source);
+  if (inLib?.source) return { url: inLib.source, seconds: inLib.length ?? null, error: null };
+  // The Page's token (from the login's Pages) can read the Page's own videos.
+  const pages = await gc.get<{ data?: { id: string; access_token?: string }[] }>("me/accounts", { fields: "id,access_token", limit: "100" }).catch((e: Error) => {
+    errors.push(`pages: ${e.message}`);
+    return null;
+  });
+  const list = (pages?.data ?? []).filter((p) => p.access_token).sort((a, b) => Number(b.id === pageId) - Number(a.id === pageId));
+  for (const p of list) {
+    const v = await clientFor(env, p.access_token!, fetcher)
+      .get<{ source?: string; length?: number }>(videoId, { fields: "source,length" })
+      .catch(() => null);
+    if (v?.source) return { url: v.source, seconds: v.length ?? null, error: null };
+  }
+  const hint = list.length
+    ? "None of the login's Pages could read it."
+    : "Reconnect Meta in Settings and allow Page access (pages_read_engagement) so the hub can read the Page's videos.";
+  return { url: null, seconds: null, error: `Meta returned no video file. ${hint}${errors.length ? ` (${errors.join(" | ")})` : ""}` };
+}
+
 export async function adMedia(env: Env, db: D1Database, adId: string, fetcher?: typeof fetch): Promise<AdMedia | { error: string; status: 404 | 409 | 502 }> {
   const known = await db.prepare("SELECT id FROM ads WHERE id = ?1").bind(adId).first<{ id: string }>();
   if (!known) return { error: "No such ad in the hub.", status: 404 };
@@ -47,29 +102,11 @@ export async function adMedia(env: Env, db: D1Database, adId: string, fetcher?: 
     let videoSeconds: number | null = null;
     let videoError: string | null = null;
     if (videoId) {
-      // Page-owned videos can be hidden from an ads_read token; the ad account's video library
-      // often still has them. Neither is an error for this route.
-      const direct = await gc.get<{ source?: string; length?: number }>(videoId, { fields: "source,length" }).catch((e: Error) => {
-        videoError = e.message;
-        return null;
-      });
-      let v = direct?.source ? direct : null;
-      if (!v) {
-        const lib = await gc
-          .get<{ data?: { id: string; source?: string; length?: number }[] }>(`${env.META_AD_ACCOUNT_ID}/advideos`, {
-            fields: "source,length",
-            filtering: JSON.stringify([{ field: "id", operator: "IN", value: [videoId] }]),
-          })
-          .catch((e: Error) => {
-            videoError = `${videoError ?? ""} | library: ${e.message}`;
-            return null;
-          });
-        v = lib?.data?.find((x) => x.id === videoId && x.source) ?? null;
-      }
-      videoUrl = v?.source ?? null;
-      videoSeconds = v?.length ?? null;
-      if (videoUrl) videoError = null;
-      else videoError ??= "Meta returned no video file.";
+      const post = await db.prepare("SELECT post_id FROM ads WHERE id = ?1").bind(adId).first<{ post_id: string }>();
+      const v = await videoSource(env, token, videoId, pageOfPost(post?.post_id), fetcher);
+      videoUrl = v.url;
+      videoSeconds = v.seconds;
+      videoError = v.error;
     }
     return {
       adId,

@@ -9,6 +9,7 @@ import { bumpVersion } from "./cache.ts";
 import type { AppEnv, Env } from "./env.ts";
 import { analyzeWithGemini, DEFAULT_GEMINI_MODEL, GeminiError } from "./gemini.ts";
 import { adImages, clientFor, getToken } from "./meta/sync.ts";
+import { pageOfPost, videoSource } from "./meta/media.ts";
 import { getLatestDate, loadPostRangeTotals } from "./queries.ts";
 
 type Row = {
@@ -86,14 +87,19 @@ export async function analyzeAsset(env: Env, db: D1Database, assetId: string, cr
   const gc = clientFor(env, token, fetcher);
   const kind = assetId.startsWith("v:") ? "video" : "image";
   let url: string | null = null;
+  let reason: string | null = null;
   try {
-    if (kind === "video") url = (await gc.get<{ source?: string }>(assetId.slice(2), { fields: "source" })).source ?? null;
-    else url = (await adImages(gc, env.META_AD_ACCOUNT_ID, [assetId.slice(2)])).get(assetId.slice(2))?.url ?? null;
+    if (kind === "video") {
+      const post = await db.prepare("SELECT post_id FROM ads WHERE asset_id = ?1 LIMIT 1").bind(assetId).first<{ post_id: string }>();
+      const v = await videoSource(env, token, assetId.slice(2), pageOfPost(post?.post_id), fetcher);
+      url = v.url;
+      reason = v.error;
+    } else url = (await adImages(gc, env.META_AD_ACCOUNT_ID, [assetId.slice(2)])).get(assetId.slice(2))?.url ?? null;
   } catch {
     url = null;
   }
   if (!url) {
-    await save("no_media", { media: kind, error: `Meta didn't return the ${kind} for this ad.` });
+    await save("no_media", { media: kind, error: kind === "video" && reason ? reason : `Meta didn't return the ${kind} for this ad.` });
     return;
   }
   let copy: string | null = null;
@@ -191,7 +197,8 @@ analysis.get("/analysis/pending", async (c) => {
   for (let i = 0; i < assets.length; i += 90) {
     const chunk = assets.slice(i, i + 90);
     const { results } = await db
-      .prepare(`SELECT asset_id FROM creative_analyses WHERE status != 'failed' AND asset_id IN (${chunk.map((_, k) => `?${k + 1}`).join(",")})`)
+      // Only a finished analysis counts: failed tries and videos Meta wouldn't share (before Page access) are retried.
+      .prepare(`SELECT asset_id FROM creative_analyses WHERE status = 'analyzed' AND asset_id IN (${chunk.map((_, k) => `?${k + 1}`).join(",")})`)
       .bind(...chunk)
       .all<{ asset_id: string }>();
     for (const r of results) done.add(r.asset_id);

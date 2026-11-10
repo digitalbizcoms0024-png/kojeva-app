@@ -174,6 +174,11 @@ uses (its AI is branded "Raya").
   first, up to `GEMINI_DAILY_CAP` (30) a night (`analyzeNew`). Off without `GEMINI_API_KEY`.
 - **Read-only on Meta**: the hub downloads the media from Meta's link (video `source`, image URL) and reads
   the creative's copy; it changes nothing. Hidden "Post ID" ads have no media: shown as "Can't analyze".
+- **Videos owned by the Page** (ads run from Page posts) can't be downloaded with `ads_read`: Meta returns no
+  file. `videoSource` tries the video, the ad account's library, then the Page's own access, which needs the
+  login to grant `pages_show_list` and `pages_read_engagement` (asked by Settings → Connect since Nov 10).
+  Reconnect once to grant them: reconnecting replaces only the stored token, never the synced data. Until
+  then such videos show "Can't analyze … Reconnect Meta". Analyze top 10 retries them; the nightly job doesn't.
 - Videos go through Gemini's Files API (streamed, deleted after); images are sent inline. The answer is
   forced to a JSON schema (`RESPONSE_SCHEMA` in `worker/gemini.ts`). Tested against fake Meta and Gemini
   responses (`worker/analysis.test.ts`); this sandbox can't reach either.
