@@ -116,8 +116,10 @@ export function TaggingPage({ meta, onChanged, range }: { meta: MetaResponse; on
   const editorsFor = (podId: string | null) => meta.editors.filter((e) => !podId || !e.podId || e.podId === podId);
   const disabled = !meta.canEdit;
 
-  const covTotal = coverage.data?.rows.reduce((n, r) => n + r.totals.spendCents, 0) ?? 0;
-  const covMissing = coverage.data?.rows.find((r) => r.kind === "unassigned")?.totals.spendCents ?? 0;
+  // Promo-only spend (BFCM) never needs a pod, so it's left out of the share (owner, Nov 10).
+  const promo = meta.promoUncreditedCents ?? 0;
+  const covTotal = Math.max(0, (coverage.data?.rows.reduce((n, r) => n + r.totals.spendCents, 0) ?? 0) - promo);
+  const covMissing = Math.max(0, (coverage.data?.rows.find((r) => r.kind === "unassigned")?.totals.spendCents ?? 0) - promo);
   const covShare = covTotal > 0 ? 1 - covMissing / covTotal : null;
 
   const done = () => {

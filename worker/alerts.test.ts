@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadAlerts, loadSuggestions } from "./alerts.ts";
+import { untaggedSpend } from "./queries.ts";
+import { bumpStats } from "./cache.ts";
 import { testDb } from "./testing/db.ts";
 
 let db: D1Database;
@@ -121,5 +123,23 @@ describe("pod suggestions", () => {
     expect(await loadSuggestions(db, editors)).toEqual({
       p1: { podId: "shameer", confidence: "medium", reason: "Editor Priya is in the ad name" },
     });
+  });
+
+  it("leaves promo-only posts (BFCM) out of Needs a pod: count, spend, alert and suggestions", async () => {
+    await ad("p1", "a1", "Video 9");
+    await ad("bf", "b1", "14 Statics | Early Black Friday | Batch #5 Priya", { asset: "x" });
+    await ad("p2", "c1", "credited copy", { pod: "shameer", asset: "x" });
+    await db.prepare("UPDATE ads SET campaign_name = 'CBO | Promo | BFCM' WHERE id = 'b1'").run();
+    await db.prepare("UPDATE ads SET campaign_name = 'CBO | Internal Pod | Testing' WHERE id IN ('a1', 'c1')").run();
+    await day("a1", "2026-10-15", 100, 1);
+    await day("b1", "2026-10-15", 400, 3);
+    expect(await untaggedSpend(db, "2026-10-01", "2026-10-15")).toEqual({ posts: 1, spendCents: 10000, promoCents: 40000 });
+    const { alerts } = await loadAlerts(db);
+    expect(alerts.find((x) => x.id === "untagged")?.title).toBe("1 ad with $100 spend needs a pod");
+    expect(await loadSuggestions(db, [{ id: "e1", name: "Priya", podId: "shameer" }])).not.toHaveProperty("bf");
+    // A copy outside a promo campaign makes it an ordinary post again.
+    await ad("bf", "b2", "copy");
+    await bumpStats(db);
+    expect(await untaggedSpend(db, "2026-10-01", "2026-10-15")).toEqual({ posts: 2, spendCents: 50000, promoCents: 0 });
   });
 });

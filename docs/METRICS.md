@@ -135,6 +135,9 @@ order (spend default, ROAS, newest launch). Each card is `/api/posts/:id` for th
   before, the latest synced day (no automatic refresh: Sync now).
 - **Promo ad sets are not concepts** (`isPromoCampaign`: a campaign name part "Promo"), so they never count in a pod's
   hit rate, testing count or score, even when named after a pod ("Shameer | Black Friday | …").
+- **Promo-only posts stay off To review** (`loadPromoPosts`: every copy in a promo campaign): they aren't listed under
+  Needs a pod, counted in its badge or alert, or given suggestions, and their spend is left out of the "credited" share.
+  A post with any copy outside a promo campaign is listed as usual.
 - Calls on the usual targets (Settings → Targets), from the promo so far and the last 3 synced days (`bfcmAction`):
   **Too early** under $50 spent; **Cut** $100+ spent with no purchase, or ROAS under 1.0; **Scale** $100+ spent in the
   last 3 days at target (ROAS ≥ target or CPA ≤ target, as the hit rule says) and not slipping (last 3 days' ROAS at

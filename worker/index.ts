@@ -37,7 +37,7 @@ import { adPreview, PREVIEW_FORMATS, type PreviewFormat } from "./meta/preview.t
 import { runSync, utcDay } from "./meta/sync.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
 import { baseline, INSIGHT_DIMENSIONS, insightRows, MATRIX_DIMENSIONS, matrix, overview, valuesOf } from "./insights.ts";
-import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
+import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPosts, loadPromoPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
 import { loadBfcm } from "./bfcm.ts";
 import { analysis, analyzeNew } from "./analysis.ts";
@@ -160,7 +160,7 @@ app.get("/meta", async (c) => {
     db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'pods_start_detected'").first<{ value: string }>(),
     db.prepare("SELECT id, name, pod_id AS podId FROM editors ORDER BY name").all<Editor>(),
-    getLatestDate(db).then((l) => (l ? untaggedSpend(db, shiftDay(l, -29), l) : { posts: 0, spendCents: 0 })),
+    getLatestDate(db).then((l) => (l ? untaggedSpend(db, shiftDay(l, -29), l) : { posts: 0, spendCents: 0, promoCents: 0 })),
     loadPersonas(db),
     loadEditAccess(db),
   ]);
@@ -188,6 +188,7 @@ app.get("/meta", async (c) => {
     // The list itself is for editors only.
     editAccess: canEditWith(c.env, c.get("userEmail"), editAccess) ? editAccess : [],
     needsTagging: untagged.posts,
+    promoUncreditedCents: untagged.promoCents,
     personas,
   };
   return c.json(body);
@@ -234,7 +235,11 @@ app.get("/rankings", async (c) => {
     const ids = new Set(off.flatMap((h) => h.testPosts));
     items = items.filter((p) => ids.has(p.postId));
   } else items = items.filter((p) => p.totals.spendCents > 0);
-  if (pod === "unassigned") items = items.filter((p) => !p.assignment.podId);
+  if (pod === "unassigned") {
+    // Promo-only posts (BFCM) are never credited to a pod, so they don't need one (owner, Nov 10).
+    const promo = await loadPromoPosts(c.env.DB);
+    items = items.filter((p) => !p.assignment.podId && !promo.has(p.postId));
+  }
   else if (pod === "inhouse") {
     // The in-house pods: those ticked "In-house" in Settings (not the agency or partners like Trybe).
     const { results } = await c.env.DB.prepare("SELECT id FROM pods WHERE kind = 'pod' AND inhouse = 1").all<{ id: string }>();

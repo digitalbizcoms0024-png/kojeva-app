@@ -87,6 +87,8 @@ export interface MetaResponse {
   viewer: string | null;
   /** Posts with spend in the last 30 days that no pod or the agency is credited with. */
   needsTagging: number;
+  /** Spend in the last 30 days of uncredited promo-only posts (BFCM), which don't need a pod. */
+  promoUncreditedCents: number;
   /** Personas in display order (drafts, active and Claude's suggestions; dismissed ones left out). */
   personas: Persona[];
 }

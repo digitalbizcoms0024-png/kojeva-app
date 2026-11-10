@@ -1,5 +1,6 @@
 import type { Assignment, CallEvidence, ConceptCall, ConceptResult, PostSummary } from "../shared/api.ts";
 import { classify } from "../shared/classify.ts";
+import { isPromoCampaign } from "../shared/concepts.ts";
 import { memoize, memoizeMap } from "./cache.ts";
 import { loadFatigue } from "./fatigue.ts";
 import {
@@ -450,21 +451,50 @@ export function loadPostRangeTotals(db: D1Database, from: string, to: string): P
   return memoizeMap(db, `post-range-${from}-${to}`, () => postRangeTotals(db, from, to), { durable: true, scope: "stats" });
 }
 
-/** Posts with spend in [from, to] that no pod or the agency is credited with: count and spend. */
-export async function untaggedSpend(db: D1Database, from: string, to: string): Promise<{ posts: number; spendCents: number }> {
-  const [totals, tagged] = await Promise.all([
+/**
+ * Posts that run only in promo campaigns ("CBO | Promo | BFCM"): never concepts and never credited to a
+ * pod, so they stay off To review (owner, Nov 10). A post with any copy outside a promo campaign isn't one.
+ */
+export async function loadPromoPosts(db: D1Database): Promise<Set<string>> {
+  const ids = await memoize(
+    db,
+    "promo-posts",
+    async () => {
+      const { results } = await db.prepare("SELECT post_id, campaign_name FROM ads").all<{ post_id: string; campaign_name: string | null }>();
+      const promo = new Map<string, boolean>();
+      for (const r of results) promo.set(r.post_id, (promo.get(r.post_id) ?? true) && isPromoCampaign(r.campaign_name));
+      return [...promo].filter(([, p]) => p).map(([id]) => id);
+    },
+    { durable: true, scope: "stats" },
+  );
+  return new Set(ids);
+}
+
+/**
+ * Posts with spend in [from, to] that no pod or the agency is credited with: count and spend. Promo-only
+ * posts are left out of both and their spend is given apart (promoCents), so To review can leave it out
+ * of its coverage share too.
+ */
+export async function untaggedSpend(db: D1Database, from: string, to: string): Promise<{ posts: number; spendCents: number; promoCents: number }> {
+  const [totals, tagged, promo] = await Promise.all([
     loadPostRangeTotals(db, from, to),
     db.prepare("SELECT post_id FROM assignments WHERE pod_id IS NOT NULL").all<{ post_id: string }>(),
+    loadPromoPosts(db),
   ]);
   const credited = new Set(tagged.results.map((r) => r.post_id));
   let posts = 0;
   let spendCents = 0;
+  let promoCents = 0;
   for (const [postId, t] of totals) {
     if (t.spendCents <= 0 || credited.has(postId)) continue;
+    if (promo.has(postId)) {
+      promoCents += t.spendCents;
+      continue;
+    }
     posts++;
     spendCents += t.spendCents;
   }
-  return { posts, spendCents };
+  return { posts, spendCents, promoCents };
 }
 
 /** Every post with its totals in [from, to] and its initial-test verdict. */
