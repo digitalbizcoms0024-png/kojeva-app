@@ -16,7 +16,6 @@ function EvidenceTable({ e }: { e: CallEvidence }) {
       <td className="num py-1.5 text-right font-semibold text-ink">{since}</td>
     </tr>
   );
-  const inc = e.incremental;
   return (
     <div className="flex flex-col gap-2">
       <table className="w-full text-sm">
@@ -39,7 +38,6 @@ function EvidenceTable({ e }: { e: CallEvidence }) {
         This concept since launch: {money(e.since.concept.spendCents)} · {e.since.concept.purchases} purchases · {ratio(roas(e.since.concept))} ROAS ·{" "}
         {dollars(cpa(e.since.concept))} CPA
         {e.shareOfTestSpend != null && ` · ${pct(e.shareOfTestSpend, 0)} of test spend and ${pct(e.shareOfTestPurchases, 0)} of test purchases`}
-        {inc && inc.spendCents > 0 && ` · incremental ROAS ${ratio(inc.revenueCents / inc.spendCents)}`}
       </p>
       <p className="text-xs text-ink-3">
         A rise in the rest of the account while it ran supports the call but doesn't prove it: other ads and budgets changed too.

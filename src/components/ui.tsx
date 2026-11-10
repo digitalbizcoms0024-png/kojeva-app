@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { HitStatus } from "../../shared/metrics.ts";
-import { cpaBand, roasBand, type Band } from "../../shared/metrics.ts";
+import { cpaBand, roasBand, TIER_LABELS, type Band, type WinnerTier } from "../../shared/metrics.ts";
 import { podById } from "../../shared/taxonomy.ts";
 import { dollars, ratio } from "../format.ts";
 
@@ -30,6 +30,8 @@ const ICONS = {
   search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-4.3-4.3",
   panel: "M3 4h18v16H3zM9 4v16",
   filter: "M3 5h18l-7 8v6l-4 2v-8z",
+  trend: "M3 17l6-6 4 4 8-8M15 7h6v6",
+  star: "M12 2l3 7h7l-5.5 4.5L18.5 21 12 16.5 5.5 21l2-7.5L2 9h7z",
   trophy: "M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3",
   help: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01",
 } as const;
@@ -177,18 +179,25 @@ export function RoasValue({ value, target, className }: { value: number | null; 
 }
 
 const HIT_STYLE: Record<HitStatus, { cls: string; label: string }> = {
-  hit: { cls: "bg-good-soft text-good", label: "✓ Hit" },
-  late_hit: { cls: "bg-good-soft text-good", label: "✓ Late hit" },
-  winner: { cls: "bg-good-soft text-good", label: "✓ Hit (call)" },
+  hit: { cls: "bg-good-soft text-good", label: "✓ KPI winner" },
+  late_hit: { cls: "bg-good-soft text-good", label: "✓ KPI winner (late)" },
+  winner: { cls: "bg-good-soft text-good", label: "✓ KPI winner (call)" },
   super_winner: { cls: "bg-good-soft text-good", label: "✓ Super hit (call)" },
-  miss: { cls: "bg-surface-2 text-ink-2", label: "✕ Miss" },
+  miss: { cls: "bg-surface-2 text-ink-2", label: "✕ Loser" },
   testing: { cls: "bg-accent-soft text-accent-ink", label: "◷ Testing" },
   ineligible: { cls: "bg-surface-2 text-ink-3", label: "No ad at $100" },
 };
 
-export function HitBadge({ status, stillRunning }: { status: HitStatus | null; stillRunning?: boolean }) {
+/** The result badge; a winner that scaled also shows its tier (Spend winner, Breakthrough). */
+export function HitBadge({ status, stillRunning, tier }: { status: HitStatus | null; stillRunning?: boolean; tier?: WinnerTier | null }) {
   if (!status) return null;
   const s = HIT_STYLE[status];
+  if (tier && tier !== "kpi")
+    return (
+      <span className="inline-flex items-center gap-1">
+        <TierBadge tier={tier} />
+      </span>
+    );
   return (
     <span className={`px-1.5 py-px text-xs font-semibold whitespace-nowrap ${s.cls}`} title={
         status === "late_hit"
@@ -443,5 +452,23 @@ export function ViewOnlyNote({ canEdit, accessProtected }: { canEdit: boolean; a
         ? "You have view-only access, so changes here are off. Ask someone on the edit list (Settings → Who can edit) to add you."
         : "Editing is off until Cloudflare Access is set up for this app."}
     </p>
+  );
+}
+
+const TIER_STYLE: Record<WinnerTier, { icon: IconName; className: string }> = {
+  kpi: { icon: "check", className: "border border-ink text-ink" },
+  spend: { icon: "trend", className: "border border-ink bg-ink text-page" },
+  breakthrough: { icon: "star", className: "border border-accent-ink bg-accent-ink text-white" },
+};
+
+/** A winner tier as a small labelled chip (with a count on the leaderboard). Icon + words: never color alone. */
+export function TierBadge({ tier, count, short = false }: { tier: WinnerTier; count?: number; short?: boolean }) {
+  const s = TIER_STYLE[tier];
+  const label = short ? { kpi: "KPI", spend: "Spend", breakthrough: "Breakthrough" }[tier] : TIER_LABELS[tier];
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-bold whitespace-nowrap ${s.className}`}>
+      <Icon name={s.icon} size={12} />
+      {count != null ? `${count} ${label}` : label}
+    </span>
   );
 }

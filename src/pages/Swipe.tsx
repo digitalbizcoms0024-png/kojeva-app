@@ -255,7 +255,7 @@ function Card({
             <PodChip podId={post.assignment.podId} coPodId={post.assignment.coPodId} source={post.assignment.podSource} />
             <Tag tone={post.active ? "neutral" : "outline"}>{post.active ? "Active" : "Paused"}</Tag>
             <Tag tone="outline">{format}</Tag>
-            <HitBadge status={post.hit} />
+            <HitBadge status={post.hit} tier={post.tier} />
           </div>
           <h2 className="text-2xl font-extrabold tracking-[-0.01em] break-words text-ink">{post.name}</h2>
           {post.adsetName && <p className="text-sm text-ink-2">Tested in: {post.adsetName}</p>}

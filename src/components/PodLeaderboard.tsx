@@ -1,16 +1,16 @@
 import { Info } from "../glossary.tsx";
 import type { LaunchesResponse, MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
-import { cpa, podScores, roas, type PodScore, type Targets } from "../../shared/metrics.ts";
+import { cpa, podScores, roas, tierPoints, type PodScore, type Targets, type WinnerTier } from "../../shared/metrics.ts";
 import { useApi } from "../api.ts";
 import { shiftDay } from "./HeaderControls.tsx";
 import { Sparkline } from "./Sparkline.tsx";
-import { CpaValue, Icon, LoadError, RoasValue, SectionTitle } from "./ui.tsx";
+import { CpaValue, Icon, LoadError, RoasValue, SectionTitle, TierBadge } from "./ui.tsx";
 import { money, pct, shortDate } from "../format.ts";
 import { openDrill } from "../drill.ts";
 
 /**
  * The pod leaderboard, on the Dashboard and at the top of the Pods page: the pods ranked by pod score
- * (hit rate, spend, ROAS; weights in Settings → Targets), then spend. In-house pods only: never
+ * (winners by tier, spend, ROAS; weights in Settings → Targets), then spend. In-house pods only: never
  * Agency, nor partners like Trybe (owner, Oct 28). The score is measured among the pods shown.
  */
 export function PodLeaderboard({
@@ -44,7 +44,7 @@ export function PodLeaderboard({
         title="Pod leaderboard"
         right={
           data &&
-          `Ranked by pod score (hit rate ${tg.scoreWeightHitRate} · spend ${tg.scoreWeightSpend} · ROAS ${tg.scoreWeightRoas}) · ${data.from === "2000-01-01" ? "All time" : `${shortDate(data.from)} – ${shortDate(data.to)}`} · Meta`
+          `Ranked by pod score (winners ${tg.scoreWeightHitRate} · spend ${tg.scoreWeightSpend} · ROAS ${tg.scoreWeightRoas}) · ${data.from === "2000-01-01" ? "All time" : `${shortDate(data.from)} – ${shortDate(data.to)}`} · Meta`
         }
       />
       <LoadError error={error} retry={retry} what="the pods" loading={!data} rows={6} />
@@ -102,6 +102,23 @@ function Leaderboard({
           <div className="num text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</div>
           <ScoreBar score={s} targets={targets} />
         </td>
+        <td className="py-3 pr-3">
+          {r.hits ? (
+            <>
+              <div className="flex flex-wrap gap-1">
+                {TIER_ORDER.filter((x) => r.tiers[x] > 0).map((x) => (
+                  <TierBadge key={x} tier={x} count={r.tiers[x]} short />
+                ))}
+              </div>
+              <div className="num mt-1 text-xs text-ink-3">
+                {tierPoints(r.tiers)} {tierPoints(r.tiers) === 1 ? "point" : "points"}
+                {r.tiers.spend + r.tiers.breakthrough === 0 ? " · KPI only (up to 2/3)" : ""}
+              </div>
+            </>
+          ) : (
+            <span className="text-xs text-ink-3">{decided ? "No winners yet" : "—"}</span>
+          )}
+        </td>
         <td className="py-3 pr-3 text-right">
           <div className="num text-lg leading-none font-bold text-ink">{pct(r.hitRate, 0)}</div>
           <div className="num text-xs text-ink-3">
@@ -144,8 +161,11 @@ function Leaderboard({
             <th className="py-2 pr-3 text-right font-normal">
               Score <Info id="podScore" />
             </th>
+            <th className="py-2 pr-3 font-normal">
+              Winners <Info id="winnerTiers" />
+            </th>
             <th className="py-2 pr-3 text-right font-normal">
-              Hit rate <Info id="hitRate" />
+              Winner rate <Info id="hitRate" />
             </th>
             <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
             <th className="py-2 pr-3 text-right font-normal">Spend</th>
@@ -163,7 +183,9 @@ function Leaderboard({
           <span key={p.key} className="inline-flex items-center gap-1.5">
             <span className="h-1.5 w-3" style={{ background: p.color }} aria-hidden />
             {p.label} (up to {targets[p.weight]}
-            {p.key === "hitRate" ? `, full at ${targets.scoreFullHitRate}%+ on ${targets.scoreMinDecided}+ decided` : p.key === "roas" ? `, full at ${targets.targetRoas}+` : ", vs the top spender"})
+            {p.key === "hitRate"
+              ? `, full at ${targets.scoreFullWinnerPoints} points per decided concept on ${targets.scoreMinDecided}+ decided; KPI 1, Spend 3, Breakthrough 6; KPI-only up to 2/3`
+              : p.key === "roas" ? `, full at ${targets.targetRoas}+` : ", vs the top spender"})
           </span>
         ))}
       </p>
@@ -171,9 +193,12 @@ function Leaderboard({
   );
 }
 
+/** Tiers from highest, as chips on the leaderboard. */
+const TIER_ORDER: WinnerTier[] = ["breakthrough", "spend", "kpi"];
+
 /** The score's three parts, in the bar's order, in neutral shades (pod and status colors are reserved). */
 const SCORE_PARTS = [
-  { key: "hitRate", label: "Hit rate", weight: "scoreWeightHitRate", color: "var(--ink)" },
+  { key: "hitRate", label: "Winners", weight: "scoreWeightHitRate", color: "var(--ink)" },
   { key: "spend", label: "Spend", weight: "scoreWeightSpend", color: "var(--ink-3)" },
   { key: "roas", label: "ROAS", weight: "scoreWeightRoas", color: "var(--chart-bar)" },
 ] as const;

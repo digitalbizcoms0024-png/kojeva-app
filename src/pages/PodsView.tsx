@@ -6,6 +6,7 @@ import { conceptHref } from "../components/ConceptDrawer.tsx";
 import { openDrill } from "../drill.ts";
 import { LaunchCadence } from "../components/LaunchCadence.tsx";
 import { PodLeaderboard } from "../components/PodLeaderboard.tsx";
+import { Graduating } from "../components/Graduating.tsx";
 import { PodReach } from "../components/PodReach.tsx";
 import { PodSpend, type SpendView } from "../components/PodSpend.tsx";
 import { shiftDay } from "../components/HeaderControls.tsx";
@@ -207,6 +208,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
         </div>
         {/* Leaderboard, spend by pod, hit rate by pod, strategists, launches (owner, Oct 28). */}
         <PodLeaderboard data={pods.data} error={pods.error} retry={pods.retry} meta={meta} range={range} />
+        <Graduating concepts={concepts.data?.rows ?? []} targets={t} podIds={shown.map((r) => r.podId!)} />
         <PodSpend range={range} latest={meta.latestDate} targets={t} inhouseIds={inhouseIds} view={view} />
         <PodReach rows={pods.data?.rows} error={pods.error} retry={pods.retry} targets={t} shown={shown.map((r) => r.podId!)} />
         <SectionTitle
@@ -434,7 +436,7 @@ export function ConceptsTable({
                     <RoasValue value={roas(k.window)} target={targets.targetRoas} />
                   </td>
                   <td className="py-2.5">
-                    <HitBadge status={k.status} stillRunning={k.stillRunning} />
+                    <HitBadge status={k.status} stillRunning={k.stillRunning} tier={k.tier} />
                     {k.lateWindow && (
                       <div className="num mt-0.5 text-[11px] text-ink-3">
                         {shortDate(k.lateWindow.from)} – {shortDate(k.lateWindow.to)} · CPA {dollars(cpa(k.lateWindow.totals))} · ROAS{" "}

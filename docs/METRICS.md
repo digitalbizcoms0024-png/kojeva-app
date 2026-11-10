@@ -47,13 +47,30 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   no ads at all). Its stored days are kept. The judging code is in the rules fingerprint
   (`worker/rules.ts`), so a deploy that changes it recomputes without a sync.
 - **Hit rate** = hits ÷ (hits + misses).
-- **Pod score** (Dashboard leaderboard order; `podScores` in `shared/metrics.ts`, owner, Oct 28), out of 100:
-  hit rate (`scoreWeightHitRate`: pod's hit rate ÷ `scoreFullHitRate` 20%, capped at 1, so every pod at
-  20% or above gets full points and a pod's points don't depend on the others; × decided ÷ `scoreMinDecided`
-  (5) below 5 decided concepts, owner Oct 28, after Ali ranked 2nd on 1 hit in 2) + spend (`scoreWeightSpend`, 40: pod's
-  spend in the period ÷ biggest pod's) + ROAS (`scoreWeightRoas`, 20: pod's ROAS ÷ target ROAS, capped at
-  1, × min(1, spend ÷ `scoreRoasMinSpend` $300)). In-house pods only (never Agency or partners like Trybe), on the Dashboard and the top of the Pods page; ties go to spend. Weights in
-  Settings → Targets (must add up to 100).
+- **Winner tiers** (owner, Nov 10; `winnerTier` in `shared/metrics.ts`): a concept that won its test (hit,
+  late hit or Hit (call)) is a **KPI winner**. It graduates to a **Spend winner** once every copy of the
+  creatives tested in it (same video/image `asset_id`, else the same post, in any ad set: its test plus
+  scaling, cost cap and graveyard copies; `loadCopyTotals` in `worker/queries.ts`, once per sync) has spent
+  `spendWinnerMinSpend` ($5,000) since launch, and to a **Breakthrough** at `breakthroughMinSpend` ($20,000),
+  while still near KPI on those copies since launch: ROAS ≥ `tierHoldRoas` (1.5) or CPA ≤ `tierHoldCpa` ($16).
+  Judged on totals since launch, so a winner that fades drops back a tier (owner, Nov 10). A Super hit (call)
+  is at least a Spend winner. A concept that missed is a **Loser** (status `miss`, shown "✕ Loser").
+  Thresholds in Settings → Targets → Winner tiers. Real check (Nov 10): Shameer Static 3 | Negative
+  Marketing #2, $14,271 across test and Cost Cap copy at ROAS 1.72 → Spend winner; Harris AI UGC | Concept 7,
+  $6,303 at ROAS 1.49 / CPA $19.45 → KPI winner.
+- **Winner rate** (the leaderboard's old "hit rate") = winners of any tier ÷ (winners + losers).
+- **Pod score** (Dashboard leaderboard order; `podScores` in `shared/metrics.ts`), out of 100, weights in
+  Settings → Targets (live: 50 / 20 / 30):
+  - **Winners** (`scoreWeightHitRate`; replaced the plain hit rate Nov 10): points per decided concept, KPI
+    winner 1, Spend winner 3, Breakthrough 6 (`TIER_POINTS`), ÷ `scoreFullWinnerPoints` (0.6) × the weight,
+    capped at the weight. KPI winners alone earn at most 2/3 of it (`KPI_ONLY_SHARE`), so full points take
+    winners that scaled (owner: 3/9 all KPI must count less than 3/9 with a Breakthrough and a Spend winner).
+    × decided ÷ `scoreMinDecided` (5) below 5 decided concepts.
+  - **Spend** (`scoreWeightSpend`): pod's spend in the period ÷ biggest pod's.
+  - **ROAS** (`scoreWeightRoas`): pod's ROAS ÷ target ROAS, capped at 1, × min(1, spend ÷ `scoreRoasMinSpend`).
+  In-house pods only (never Agency or partners); ties go to spend. Oct 12 – Nov 10 under the new score:
+  Shameer 87 (was 99), Harris 65 (87), POD 0 48 (58), Dhia 41 (54), Ali 40 (73), Caicos 4 (4).
+  The Pods page lists winners **close to graduating** (spend across copies vs the next tier).
 - **Testing now** (pod leaderboard, Pods page; owner, Oct 28): every concept with an ad switched on in
   Meta (not paused at any level, archived, deleted or disapproved), spending or not, whatever its result
   so far, as of the last sync. It counts concepts, not ads. "Testing" alone is narrower: still inside
@@ -135,6 +152,9 @@ order (spend default, ROAS, newest launch). Each card is `/api/posts/:id` for th
   before, the latest synced day (no automatic refresh: Sync now).
 - **Promo ad sets are not concepts** (`isPromoCampaign`: a campaign name part "Promo"), so they never count in a pod's
   hit rate, testing count or score, even when named after a pod ("Shameer | Black Friday | …").
+- **Promo-only posts stay off To review** (`loadPromoPosts`: every copy in a promo campaign): they aren't listed under
+  Needs a pod, counted in its badge or alert, or given suggestions, and their spend is left out of the "credited" share.
+  A post with any copy outside a promo campaign is listed as usual.
 - Calls on the usual targets (Settings → Targets), from the promo so far and the last 3 synced days (`bfcmAction`):
   **Too early** under $50 spent; **Cut** $100+ spent with no purchase, or ROAS under 1.0; **Scale** $100+ spent in the
   last 3 days at target (ROAS ≥ target or CPA ≤ target, as the hit rule says) and not slipping (last 3 days' ROAS at
@@ -167,8 +187,8 @@ rule, Oct 2026). Only the media buyer makes the call (`MEDIA_BUYER_EMAILS`), tie
   winner from `superWinnerMinSpend` ($5,000). The media buyer sets these in Settings → Targets.
 - **Evidence** (concept card): the whole account in the 7 days before the concept's first spend vs its
   first 14 days (Meta ROAS, CPA, purchases a day), also without the concept's own results ("did the rest
-  improve?"), the MOF/BOF ads (product- and most-aware), the concept's share of test spend and purchases,
-  and its Meta incremental ROAS. It's a before/after comparison, not proof.
+  improve?"), the MOF/BOF ads (product- and most-aware), and the concept's share of test spend and
+  purchases. It's a before/after comparison, not proof.
 - **The call** needs a one-line reason and stores the evidence as it was. Syncs never change it; the
   media buyer can undo it. A called concept's status is `winner` / `super_winner` and counts as a hit
   everywhere (`isHit`), labelled "(call)". MER can't be shown: the hub has Meta numbers only.
@@ -248,20 +268,12 @@ whose hit rate beats the average; up to 4 shown, highest floor first. **No hits 
 with ≥ 3 decided tests and 0 hits, most test spend first (top 3). All of it comes from the cached concept
 results, so it adds no `ad_daily` reads.
 
-## Incrementality (`/api/attribution`, Incrementality page)
-Meta's 7-day click and incremental attribution on the same Meta spend, side by side, as in Ads Manager's
-Compare attribution settings (checked against it in Oct 2026). The ad set's own setting (`purchases` /
-`revenue_cents`, used everywhere else; hit rate and targets stay on it) is kept in the API (`standard`) but
-not shown on the page.
-- **7-day click**: purchases within 7 days of a click (`purchases_7dc`, `revenue_7dc_cents`).
-- **Incremental**: Meta's modelled estimate of purchases that wouldn't have happened without the ad (`purchases_inc_milli` ÷ 1000, `revenue_inc_cents`). Can be fractional.
-
-Both come from a second insights request per sync with `action_attribution_windows=["7d_click","incrementality"]` (`worker/meta/sync.ts` → `syncAttributionWindows`). It only updates existing `ad_daily` rows whose values changed. If Meta refuses it, the sync still succeeds and its message says "7-day click / incremental not available". Missing stays NULL and shows "—", never 0.
-
-- **Incremental CPA** = spend ÷ incremental purchases; **incremental ROAS** = incremental revenue ÷ spend (`attributedCpa`, `attributedRoas`). No good/bad colors: the targets are set on the ad sets' own attribution setting.
-- **Incremental share** = incremental purchases ÷ 7-day-click purchases (`incrementalShare`), or null when either is missing or 7-day click is 0. Low share = the ad mostly reached people who'd have bought anyway. It can pass 100%: Meta's incremental model also credits purchases 7-day click doesn't count (e.g. after a view).
-- **Coverage** = spend on ad-days that have incremental data ÷ all spend; shown when below 100% (e.g. before the backfill).
-- History: run Settings → Backfill 90 days once after deploying. It rewrites ~90 days of rows, so do it on a quiet day for D1 writes.
+## Incrementality (removed, Nov 10 2026)
+The 7-day click / incremental comparison was dropped (owner, Nov 10): its page had left the menu with Triple
+Whale, and its second insights request per sync pushed syncs past Cloudflare's 50-subrequest limit, so it had
+stopped updating. The sync no longer requests it; the old `ad_daily` columns (`purchases_7dc`,
+`revenue_7dc_cents`, `purchases_inc_milli`, `revenue_inc_cents`) stay in the schema but are no longer written
+or shown.
 
 ## Coverage map (`worker/coverage.ts`, `/api/coverage`)
 Personas down the side, the five awareness levels across the top. Defaults to the last 7 days.

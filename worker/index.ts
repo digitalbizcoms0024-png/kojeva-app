@@ -1,9 +1,6 @@
 import { Hono } from "hono";
 import type {
   AlertsResponse,
-  AttributionLevel,
-  AttributionResponse,
-  AttributionRow,
   ConceptDetail,
   ConceptsResponse,
   Editor,
@@ -21,7 +18,7 @@ import type {
   TrendGrain,
   TrendsResponse,
 } from "../shared/api.ts";
-import { OFF_STATUSES, ZERO_TOTALS, addTotals, cpa, ctr, dailyFrequency, funnelBand, hitRate, isHit, roas, type Totals } from "../shared/metrics.ts";
+import { OFF_STATUSES, ZERO_TOTALS, addTotals, countTiers, cpa, ctr, dailyFrequency, funnelBand, hitRate, isHit, roas, type Totals } from "../shared/metrics.ts";
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { creditsPod, GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware, internalReadHeaders } from "./access.ts";
@@ -37,7 +34,7 @@ import { adPreview, PREVIEW_FORMATS, type PreviewFormat } from "./meta/preview.t
 import { runSync, utcDay } from "./meta/sync.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
 import { baseline, INSIGHT_DIMENSIONS, insightRows, MATRIX_DIMENSIONS, matrix, overview, valuesOf } from "./insights.ts";
-import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
+import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPosts, loadPromoPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
 import { loadBfcm } from "./bfcm.ts";
 import { analysis, analyzeNew } from "./analysis.ts";
@@ -160,7 +157,7 @@ app.get("/meta", async (c) => {
     db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'pods_start_detected'").first<{ value: string }>(),
     db.prepare("SELECT id, name, pod_id AS podId FROM editors ORDER BY name").all<Editor>(),
-    getLatestDate(db).then((l) => (l ? untaggedSpend(db, shiftDay(l, -29), l) : { posts: 0, spendCents: 0 })),
+    getLatestDate(db).then((l) => (l ? untaggedSpend(db, shiftDay(l, -29), l) : { posts: 0, spendCents: 0, promoCents: 0 })),
     loadPersonas(db),
     loadEditAccess(db),
   ]);
@@ -188,6 +185,7 @@ app.get("/meta", async (c) => {
     // The list itself is for editors only.
     editAccess: canEditWith(c.env, c.get("userEmail"), editAccess) ? editAccess : [],
     needsTagging: untagged.posts,
+    promoUncreditedCents: untagged.promoCents,
     personas,
   };
   return c.json(body);
@@ -234,7 +232,11 @@ app.get("/rankings", async (c) => {
     const ids = new Set(off.flatMap((h) => h.testPosts));
     items = items.filter((p) => ids.has(p.postId));
   } else items = items.filter((p) => p.totals.spendCents > 0);
-  if (pod === "unassigned") items = items.filter((p) => !p.assignment.podId);
+  if (pod === "unassigned") {
+    // Promo-only posts (BFCM) are never credited to a pod, so they don't need one (owner, Nov 10).
+    const promo = await loadPromoPosts(c.env.DB);
+    items = items.filter((p) => !p.assignment.podId && !promo.has(p.postId));
+  }
   else if (pod === "inhouse") {
     // The in-house pods: those ticked "In-house" in Settings (not the agency or partners like Trybe).
     const { results } = await c.env.DB.prepare("SELECT id FROM pods WHERE kind = 'pod' AND inhouse = 1").all<{ id: string }>();
@@ -455,7 +457,8 @@ app.get("/pods", async (c) => {
   const rows: PodRow[] = groups.map((g) => {
     const mine = posts.filter((p) => creditsPod(p.assignment, g.podId));
     const launched = mine.filter((p) => p.firstSpend && p.firstSpend >= range.from && p.firstSpend <= range.to);
-    const statuses = inRange.filter((k) => creditsPod(k, g.podId)).map((k) => k.status);
+    const mineConcepts = inRange.filter((k) => creditsPod(k, g.podId));
+    const statuses = mineConcepts.map((k) => k.status);
     const editors = new Map<string, PodRow["editors"][number]>();
     for (const p of mine) {
       const key = p.assignment.editorId ?? "";
@@ -478,6 +481,7 @@ app.get("/pods", async (c) => {
       hits: statuses.filter(isHit).length,
       lateHits: statuses.filter((s) => s === "late_hit").length,
       misses: statuses.filter((s) => s === "miss").length,
+      tiers: countTiers(mineConcepts.map((k) => k.tier)),
       testing: statuses.filter((s) => s === "testing").length,
       live: onByPod[g.podId ?? ""] ?? 0,
       hitRate: hitRate(statuses),
@@ -609,78 +613,6 @@ app.get("/trends", async (c) => {
     grain,
     pod,
     points: meta.results.map((r) => ({ start: String(r.b), totals: toTotals(r) })),
-  };
-  return c.json(body);
-});
-
-const ATTR_SQL = `
-  COALESCE(SUM(d.spend_cents), 0) AS spend_cents,
-  COALESCE(SUM(d.purchases), 0) AS purchases,
-  COALESCE(SUM(d.revenue_cents), 0) AS revenue_cents,
-  COUNT(d.purchases_7dc) AS n7, SUM(d.purchases_7dc) AS p7, SUM(d.revenue_7dc_cents) AS r7,
-  COUNT(d.purchases_inc_milli) AS ni, SUM(d.purchases_inc_milli) AS pi, SUM(d.revenue_inc_cents) AS ri,
-  COALESCE(SUM(CASE WHEN d.purchases_inc_milli IS NOT NULL THEN d.spend_cents END), 0) AS covered`;
-
-function toAttributionRow(r: Record<string, unknown>, key: string, label: string, podId: string | null): AttributionRow {
-  const n = (k: string) => Number(r[k] ?? 0);
-  return {
-    key,
-    label,
-    podId,
-    spendCents: n("spend_cents"),
-    standard: { purchases: n("purchases"), revenueCents: n("revenue_cents") },
-    click7: n("n7") > 0 ? { purchases: n("p7"), revenueCents: n("r7") } : null,
-    incremental: n("ni") > 0 ? { purchases: n("pi") / 1000, revenueCents: n("ri") } : null,
-    coveredSpendCents: n("covered"),
-  };
-}
-
-/**
- * Standard vs 7-day click vs incremental attribution on the same Meta spend, for the account and
- * by pod, concept or post (?level=pod|concept|post; posts limited to the top 200 by spend).
- */
-app.get("/attribution", async (c) => {
-  const db = c.env.DB;
-  const range = await resolveRange(db, (k) => c.req.query(k));
-  if (!range) return c.json({ error: "Invalid custom date range" }, 400);
-  const levels: AttributionLevel[] = ["pod", "concept", "post"];
-  const level = levels.find((l) => l === c.req.query("level")) ?? "pod";
-  const group = { pod: "s.pod_id", concept: "a.concept_id", post: "a.post_id" }[level];
-  // ?post= narrows the post level to one post (the Rankings detail panel).
-  const post = level === "post" ? (c.req.query("post") ?? null) : null;
-  const [total, grouped, labels] = await Promise.all([
-    db.prepare(`SELECT ${ATTR_SQL} FROM ad_daily d WHERE d.date BETWEEN ?1 AND ?2`).bind(range.from, range.to).first<Record<string, unknown>>(),
-    // SUM() in HAVING/ORDER BY on purpose: SQLite reads a bare spend_cents there as one row's
-    // column, not the alias, which dropped any group with a zero-spend day.
-    db
-      .prepare(
-        `SELECT ${group} AS k, MAX(s.pod_id) AS pod_id, ${ATTR_SQL}
-         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id LEFT JOIN assignments s ON s.post_id = a.post_id
-         WHERE d.date BETWEEN ?1 AND ?2 ${level === "concept" ? "AND a.concept_id IS NOT NULL" : ""} ${post ? "AND a.post_id = ?3" : ""}
-         GROUP BY k HAVING SUM(d.spend_cents) > 0 ORDER BY SUM(d.spend_cents) DESC ${level === "post" ? "LIMIT 200" : ""}`,
-      )
-      .bind(...(post ? [range.from, range.to, post] : [range.from, range.to]))
-      .all<Record<string, unknown>>(),
-    level === "concept"
-      ? db.prepare("SELECT id AS k, label, pod_id FROM concepts").all<{ k: string; label: string; pod_id: string }>()
-      : level === "post"
-        ? db
-            .prepare(
-              "SELECT p.id AS k, (SELECT x.name FROM ads x WHERE x.post_id = p.id ORDER BY x.created_time, x.id LIMIT 1) AS label, NULL AS pod_id FROM posts p",
-            )
-            .all<{ k: string; label: string; pod_id: string | null }>()
-        : db.prepare("SELECT id AS k, name AS label, id AS pod_id FROM pods").all<{ k: string; label: string; pod_id: string }>(),
-  ]);
-  const names = new Map(labels.results.map((l) => [l.k, l.label]));
-  const body: AttributionResponse = {
-    ...range,
-    level,
-    total: toAttributionRow(total ?? {}, "total", "Whole account", null),
-    rows: grouped.results.map((r) => {
-      const key = r.k == null ? "none" : String(r.k);
-      const podId = r.pod_id == null ? null : String(r.pod_id);
-      return toAttributionRow(r, key, r.k == null ? "Unassigned" : (names.get(key) ?? key), podId);
-    }),
   };
   return c.json(body);
 });

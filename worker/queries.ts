@@ -1,16 +1,19 @@
 import type { Assignment, CallEvidence, ConceptCall, ConceptResult, PostSummary } from "../shared/api.ts";
 import { classify } from "../shared/classify.ts";
+import { isPromoCampaign } from "../shared/concepts.ts";
 import { memoize, memoizeMap } from "./cache.ts";
 import { loadFatigue } from "./fatigue.ts";
 import {
   addTotals,
   DEFAULT_TARGETS,
   hitStatus,
+  isHit,
   judgingWindowEnd,
   judgeTurnedOff,
   OFF_STATUSES,
   lateHitWindow,
   winnerCandidate,
+  winnerTier,
   type HitStatus,
   type Targets,
   type Totals,
@@ -333,7 +336,13 @@ async function conceptLabels(db: D1Database): Promise<Row[]> {
 
 /** Concepts' labels and tags (per edit) joined to their numbers (per sync). */
 async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
-  const [latest, numbers, targets, calls] = await Promise.all([getLatestDate(db), loadConceptNumbers(db), getTargets(db), loadCalls(db)]);
+  const [latest, numbers, targets, calls, copies] = await Promise.all([
+    getLatestDate(db),
+    loadConceptNumbers(db),
+    getTargets(db),
+    loadCalls(db),
+    loadCopyTotals(db),
+  ]);
   const meta = { results: await conceptLabels(db) };
   const base = meta.results.flatMap((r) => {
     const n = numbers[String(r.id)];
@@ -382,6 +391,8 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
       window,
       allTime,
       status,
+      tier: winnerTier(status, copies[String(r.id)] ?? null, targets),
+      copies: isHit(status) ? (copies[String(r.id)] ?? null) : null,
       call: status === measured ? null : call,
       candidate: status === "miss" ? winnerCandidate({ status, allTime, firstSpend, lastSpend }, targets) : null,
       lateWindow,
@@ -391,6 +402,54 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
       stillRunning: lastSpend != null && latest != null && lastSpend >= shiftDay(latest, -2),
     };
   });
+}
+
+/**
+ * Each concept's totals since launch across every copy of the creatives tested in it: the same video or
+ * image (`asset_id`, else the same post) in any ad set, testing ads included (winner tiers). Only for
+ * concepts that won by the numbers or spent enough to be called a winner. Per sync (stats version); the
+ * days of those ads only, read by key.
+ */
+export function loadCopyTotals(db: D1Database): Promise<Record<string, Totals>> {
+  return memoize(db, "copy-totals", () => computeCopyTotals(db), { durable: true, scope: "stats" });
+}
+
+async function computeCopyTotals(db: D1Database): Promise<Record<string, Totals>> {
+  const [numbers, targets] = await Promise.all([loadConceptNumbers(db), getTargets(db)]);
+  const wanted = new Set(
+    Object.entries(numbers)
+      .filter(([, n]) => n.status === "hit" || n.lateWindow || n.allTime.spendCents >= targets.winnerMinSpend * 100)
+      .map(([id]) => id),
+  );
+  if (wanted.size === 0) return {};
+  const { results: ads } = await db
+    .prepare("SELECT id, post_id, asset_id, concept_id FROM ads")
+    .all<{ id: string; post_id: string; asset_id: string | null; concept_id: string | null }>();
+  const creative = (a: { asset_id: string | null; post_id: string }) => a.asset_id ?? `post:${a.post_id}`;
+  const conceptsOf = new Map<string, Set<string>>(); // creative → concepts it was tested in
+  for (const a of ads) {
+    if (!a.concept_id || !wanted.has(a.concept_id)) continue;
+    conceptsOf.set(creative(a), (conceptsOf.get(creative(a)) ?? new Set()).add(a.concept_id));
+  }
+  const adsOf = new Map<string, string[]>(); // concept → every copy's ad id
+  for (const a of ads)
+    for (const k of conceptsOf.get(creative(a)) ?? []) adsOf.set(k, [...(adsOf.get(k) ?? []), a.id]);
+  const ids = [...new Set([...adsOf.values()].flat())];
+  const perAd = new Map<string, Totals>();
+  for (let i = 0; i < ids.length; i += 90) {
+    const chunk = ids.slice(i, i + 90);
+    const { results } = await db
+      .prepare(
+        `SELECT a.id AS ad_id, ${TOTALS_SQL} FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
+         WHERE a.id IN (${chunk.map((_, j) => `?${j + 1}`).join(",")}) GROUP BY a.id`,
+      )
+      .bind(...chunk)
+      .all<Row>();
+    for (const r of results) perAd.set(String(r.ad_id), toTotals(r));
+  }
+  const out: Record<string, Totals> = {};
+  for (const [k, list] of adsOf) out[k] = list.reduce((acc, id) => addTotals(acc, perAd.get(id) ?? ZERO_TOTALS), ZERO_TOTALS);
+  return out;
 }
 
 /** Totals over each post's first `windowDays` days of spend, plus how many days have been observed. */
@@ -450,27 +509,57 @@ export function loadPostRangeTotals(db: D1Database, from: string, to: string): P
   return memoizeMap(db, `post-range-${from}-${to}`, () => postRangeTotals(db, from, to), { durable: true, scope: "stats" });
 }
 
-/** Posts with spend in [from, to] that no pod or the agency is credited with: count and spend. */
-export async function untaggedSpend(db: D1Database, from: string, to: string): Promise<{ posts: number; spendCents: number }> {
-  const [totals, tagged] = await Promise.all([
+/**
+ * Posts that run only in promo campaigns ("CBO | Promo | BFCM"): never concepts and never credited to a
+ * pod, so they stay off To review (owner, Nov 10). A post with any copy outside a promo campaign isn't one.
+ */
+export async function loadPromoPosts(db: D1Database): Promise<Set<string>> {
+  const ids = await memoize(
+    db,
+    "promo-posts",
+    async () => {
+      const { results } = await db.prepare("SELECT post_id, campaign_name FROM ads").all<{ post_id: string; campaign_name: string | null }>();
+      const promo = new Map<string, boolean>();
+      for (const r of results) promo.set(r.post_id, (promo.get(r.post_id) ?? true) && isPromoCampaign(r.campaign_name));
+      return [...promo].filter(([, p]) => p).map(([id]) => id);
+    },
+    { durable: true, scope: "stats" },
+  );
+  return new Set(ids);
+}
+
+/**
+ * Posts with spend in [from, to] that no pod or the agency is credited with: count and spend. Promo-only
+ * posts are left out of both and their spend is given apart (promoCents), so To review can leave it out
+ * of its coverage share too.
+ */
+export async function untaggedSpend(db: D1Database, from: string, to: string): Promise<{ posts: number; spendCents: number; promoCents: number }> {
+  const [totals, tagged, promo] = await Promise.all([
     loadPostRangeTotals(db, from, to),
     db.prepare("SELECT post_id FROM assignments WHERE pod_id IS NOT NULL").all<{ post_id: string }>(),
+    loadPromoPosts(db),
   ]);
   const credited = new Set(tagged.results.map((r) => r.post_id));
   let posts = 0;
   let spendCents = 0;
+  let promoCents = 0;
   for (const [postId, t] of totals) {
     if (t.spendCents <= 0 || credited.has(postId)) continue;
+    if (promo.has(postId)) {
+      promoCents += t.spendCents;
+      continue;
+    }
     posts++;
     spendCents += t.spendCents;
   }
-  return { posts, spendCents };
+  return { posts, spendCents, promoCents };
 }
 
 /** Every post with its totals in [from, to] and its initial-test verdict. */
 export async function loadPosts(db: D1Database, from: string, to: string, opts: { postId?: string; concepts?: ConceptResult[] } = {}): Promise<PostSummary[]> {
   const [targets, latest, concepts] = await Promise.all([getTargets(db), getLatestDate(db), opts.concepts ?? loadConcepts(db)]);
   const conceptStatus = new Map(concepts.map((c) => [c.conceptId, c.status]));
+  const conceptTier = new Map(concepts.map((c) => [c.conceptId, c.tier]));
   const [base, ranged, windows, fatigueByPost] = await Promise.all([
     // Labels and tags: once per edit. The numbers: once per sync (stats version, see cache.ts).
     opts.postId ? loadPostBase(db, opts.postId) : memoize(db, "post-base", () => loadPostBase(db), { durable: true }),
@@ -487,9 +576,11 @@ export async function loadPosts(db: D1Database, from: string, to: string, opts: 
     const w = windows.get(postId);
     // A post's badge shows how the concept it was tested in did.
     const hit: HitStatus | null = r.concept_id == null ? null : (conceptStatus.get(String(r.concept_id)) ?? null);
+    const tier = r.concept_id == null ? null : (conceptTier.get(String(r.concept_id)) ?? null);
     const launched = r.launched == null ? null : String(r.launched).slice(0, 10);
     return {
       postId,
+      tier,
       name: String(r.name ?? postId),
       adsetName: r.adset_name == null ? null : String(r.adset_name),
       mediaType: String(r.media_type),

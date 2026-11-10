@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_TARGETS,
+  winnerTier,
+  ZERO_TIERS,
+  type TierCounts,
   podScores,
   judgeTurnedOff,
   ZERO_TOTALS,
@@ -223,51 +226,91 @@ describe("attribution comparison", () => {
 });
 
 describe("podScores", () => {
-  // The leaderboard on Oct 27 (hit rate, spend, ROAS from Meta), with the owner's weights 50 / 20 / 30.
-  const t = { ...DEFAULT_TARGETS, scoreWeightHitRate: 50, scoreWeightSpend: 20, scoreWeightRoas: 30 };
-  const pod = (hitRate: number | null, spend: number, roasX: number, decided = 10) => ({
-    hitRate,
+  // The owner's weights 50 / 20 / 30 and ROAS minimum $1,000 (Nov 10).
+  const t = { ...DEFAULT_TARGETS, scoreWeightHitRate: 50, scoreWeightSpend: 20, scoreWeightRoas: 30, scoreRoasMinSpend: 1000 };
+  const pod = (tiers: Partial<TierCounts>, decided: number, spend: number, roasX: number) => ({
+    tiers: { ...ZERO_TIERS, ...tiers },
     decided,
     totals: { ...ZERO_TOTALS, spendCents: spend * 100, revenueCents: Math.round(spend * 100 * roasX) },
   });
-  const rows = [pod(0.5, 8400, 1.45, 4 + 2), pod(3 / 48, 27000, 0.94, 48), pod(2 / 24, 12200, 0.9, 24), pod(0, 540, 1.2, 1), pod(null, 27, 0.92, 0)];
 
-  it("gives full hit-rate points from 20%, spend against the biggest pod, ROAS against the target", () => {
-    const [shameer, harris, dhia, ali, caicos] = podScores(rows, t);
-    expect(shameer!.hitRate).toBe(50); // 50% is past 20%: capped at full points
-    expect(harris!.hitRate).toBeCloseTo((3 / 48 / 0.2) * 50); // 15.6
-    expect(dhia!.hitRate).toBeCloseTo((2 / 24 / 0.2) * 50); // 20.8
-    expect(shameer!.spend).toBeCloseTo((8400 / 27000) * 20);
-    expect(harris!.spend).toBeCloseTo(20);
-    expect(shameer!.roas).toBeCloseTo((1.45 / 1.7) * 30);
-    expect([shameer, harris, dhia, ali].map((s) => Math.round(s!.score))).toEqual([82, 52, 46, 22]);
-    // Caicos: nothing decided, $27 of the $300 ROAS minimum.
-    expect(caicos!.hitRate).toBe(0);
-    expect(caicos!.roas).toBeCloseTo((0.92 / 1.7) * (27 / 300) * 30);
+  it("scores the leaderboard of Oct 12 – Nov 10 by winner tiers", () => {
+    // The Pods page that day (spend, ROAS, decided) with each pod's winners by tier.
+    const rows = [
+      pod({ spend: 1, kpi: 2 }, 11, 22100, 1.66), // Shameer: Negative Marketing #2 scaled to $14K
+      pod({ kpi: 3 }, 9, 14500, 1.38), // Harris
+      pod({ kpi: 1 }, 5, 1900, 1.21), // Ali
+      pod({ kpi: 2 }, 3, 1600, 1.53), // POD 0
+      pod({ kpi: 1 }, 3, 3100, 1.22), // Dhia
+      pod({}, 0, 230, 0.82), // Caicos
+    ];
+    const [shameer, harris, ali, pod0, dhia, caicos] = podScores(rows, t);
+    expect(shameer!.hitRate).toBeCloseTo((5 / 11 / 0.6) * 50); // 37.9
+    expect(harris!.hitRate).toBeCloseTo((3 / 9 / 0.6) * 50); // 27.8
+    // POD 0: 2 KPI in 3 is past full points, but KPI alone stops at 2/3, then 3 of 5 decided.
+    expect(pod0!.hitRate).toBeCloseTo(50 * (2 / 3) * (3 / 5)); // 20
+    expect([shameer, harris, ali, pod0, dhia, caicos].map((s) => Math.round(s!.score))).toEqual([87, 65, 40, 48, 41, 4]);
   });
 
-  it("scales hit-rate points down below 5 decided concepts (the leaderboard on Oct 28)", () => {
-    // Ali: 1 hit in 2 decided, 50%: past the 20% standard, but only 2 of the 5 concepts needed.
-    const [ali, harris] = podScores([pod(0.5, 653, 1.41, 2), pod(0.1, 27200, 0.95, 50)], { ...t, scoreRoasMinSpend: 1000 });
-    expect(ali!.hitRate).toBeCloseTo(50 * (2 / 5));
-    expect(harris!.hitRate).toBeCloseTo(25);
-    expect(Math.round(ali!.score)).toBe(37);
-    expect(Math.round(harris!.score)).toBe(62);
-    // 0 turns the guard off.
-    expect(podScores([pod(0.5, 653, 1.41, 2)], { ...t, scoreMinDecided: 0 })[0]!.hitRate).toBe(50);
+  it("counts the type of winner, not just how many", () => {
+    // 3 winners in 9 decided each: all KPI vs one of every tier.
+    const [kpi, mixed] = podScores([pod({ kpi: 3 }, 9, 1000, 1), pod({ kpi: 1, spend: 1, breakthrough: 1 }, 9, 1000, 1)], t);
+    expect(kpi!.hitRate).toBeCloseTo(27.8, 1);
+    expect(mixed!.hitRate).toBe(50);
+    // KPI winners alone never reach full points, however many.
+    expect(podScores([pod({ kpi: 9 }, 9, 1000, 1)], t)[0]!.hitRate).toBeCloseTo(50 * (2 / 3));
+    // One Spend winner on top of them does.
+    expect(podScores([pod({ kpi: 8, spend: 1 }, 9, 1000, 1)], t)[0]!.hitRate).toBe(50);
   });
 
-  it("doesn't move a pod's hit-rate points when another pod does better", () => {
-    const alone = podScores([pod(0.1, 1000, 1)], t)[0]!.hitRate;
-    const beside = podScores([pod(0.1, 1000, 1), pod(0.9, 1000, 1)], t)[0]!.hitRate;
-    expect(alone).toBeCloseTo(25);
-    expect(beside).toBeCloseTo(25);
+  it("doesn't move a pod's winners points when another pod does better", () => {
+    const alone = podScores([pod({ kpi: 1 }, 10, 1000, 1)], t)[0]!.hitRate;
+    const beside = podScores([pod({ kpi: 1 }, 10, 1000, 1), pod({ breakthrough: 5 }, 10, 1000, 1)], t)[0]!.hitRate;
+    expect(alone).toBeCloseTo(beside);
   });
 
   it("caps ROAS at the target and gives nothing for missing numbers", () => {
-    const [top, none] = podScores([pod(0, 1000, 3), { hitRate: null, decided: 0, totals: ZERO_TOTALS }], DEFAULT_TARGETS);
+    const [top, none] = podScores([pod({}, 0, 1000, 3), { tiers: ZERO_TIERS, decided: 0, totals: ZERO_TOTALS }], DEFAULT_TARGETS);
     expect(top).toMatchObject({ hitRate: 0, spend: 40, roas: 20, score: 60 });
     expect(none).toMatchObject({ hitRate: 0, spend: 0, roas: 0, score: 0 });
+  });
+});
+
+describe("winnerTier", () => {
+  const t = DEFAULT_TARGETS;
+  const copies = (spend: number, roasX: number, purchases = 0) => ({
+    ...ZERO_TOTALS,
+    spendCents: spend * 100,
+    revenueCents: Math.round(spend * 100 * roasX),
+    purchases,
+  });
+
+  it("is null unless the concept won", () => {
+    expect(winnerTier("miss", copies(30000, 2), t)).toBeNull();
+    expect(winnerTier("testing", null, t)).toBeNull();
+  });
+
+  it("graduates on spend across all copies while near KPI (real concepts, Nov 10)", () => {
+    // Shameer Static 3 | Negative Marketing #2: $8,452 in test + $5,819 Cost Cap copy, ROAS 1.72.
+    expect(winnerTier("late_hit", copies(14271, 1.72, 789), t)).toBe("spend");
+    // Harris AI UGC | Concept 7: $6,303 at ROAS 1.49 and CPA $19.45: not near KPI, stays a KPI winner.
+    expect(winnerTier("late_hit", copies(6303, 1.49, 324), t)).toBe("kpi");
+    // Shameer Negative Marketing #3: $3,114, not yet $5,000.
+    expect(winnerTier("hit", copies(3114, 2.06, 204), t)).toBe("kpi");
+    expect(winnerTier("hit", copies(20000, 1.5), t)).toBe("breakthrough");
+  });
+
+  it("counts CPA as near KPI too, and drops a winner that faded", () => {
+    // ROAS 1.2 but CPA $15: still near KPI.
+    expect(winnerTier("hit", copies(6000, 1.2, 400), t)).toBe("spend");
+    // Scaled to $25K but faded to ROAS 1.3 and CPA $25: back to KPI winner.
+    expect(winnerTier("hit", copies(25000, 1.3, 1000), t)).toBe("kpi");
+  });
+
+  it("keeps a super-hit call at least a Spend winner", () => {
+    expect(winnerTier("super_winner", copies(4000, 1.1, 100), t)).toBe("spend");
+    expect(winnerTier("super_winner", copies(21000, 1.6, 900), t)).toBe("breakthrough");
+    expect(winnerTier("winner", null, t)).toBe("kpi");
   });
 });
 

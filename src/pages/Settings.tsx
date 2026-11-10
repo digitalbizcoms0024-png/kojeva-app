@@ -335,7 +335,11 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
   const [wSpendS, setWSpendS] = useState(String(t.scoreWeightSpend));
   const [wRoasS, setWRoasS] = useState(String(t.scoreWeightRoas));
   const [roasMin, setRoasMin] = useState(String(t.scoreRoasMinSpend));
-  const [fullHit, setFullHit] = useState(String(t.scoreFullHitRate));
+  const [fullPts, setFullPts] = useState(String(t.scoreFullWinnerPoints));
+  const [tierSpend, setTierSpend] = useState(String(t.spendWinnerMinSpend));
+  const [tierBreak, setTierBreak] = useState(String(t.breakthroughMinSpend));
+  const [tierRoas, setTierRoas] = useState(String(t.tierHoldRoas));
+  const [tierCpa, setTierCpa] = useState(String(t.tierHoldCpa));
   const [minDecided, setMinDecided] = useState(String(t.scoreMinDecided));
   const [freqTop, setFreqTop] = useState(String(t.freqTopMax));
   const [freqMid, setFreqMid] = useState(String(t.freqMiddleMax));
@@ -361,7 +365,11 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
           scoreWeightSpend: Number(wSpendS),
           scoreWeightRoas: Number(wRoasS),
           scoreRoasMinSpend: Number(roasMin),
-          scoreFullHitRate: Number(fullHit),
+          scoreFullWinnerPoints: Number(fullPts),
+          spendWinnerMinSpend: Number(tierSpend),
+          breakthroughMinSpend: Number(tierBreak),
+          tierHoldRoas: Number(tierRoas),
+          tierHoldCpa: Number(tierCpa),
           scoreMinDecided: Number(minDecided),
           freqTopMax: Number(freqTop),
           freqMiddleMax: Number(freqMid),
@@ -479,14 +487,15 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
       </div>
       <h3 className="mt-6 mb-1 font-extrabold text-ink">Pod leaderboard score</h3>
       <p className="mb-3 max-w-[90ch] text-sm text-ink-3">
-        The Dashboard ranks pods by a score out of 100. Hit rate is measured against the standard below (full points at or above it,
-        once the pod has enough decided concepts; fewer earn a share);
+        The Dashboard ranks pods by a score out of 100. Winners: each decided concept earns points by its tier (KPI winner 1, Spend winner
+        3, Breakthrough 6), and a pod gets full points at the points per decided concept below, once it has enough decided concepts (fewer
+        earn a share). KPI winners alone earn at most 2/3 of the winners points: the rest takes winners that scaled. Then
         spend against the pod that spent most; ROAS against the target ROAS (full points at or above it), scaled down for pods that
         spent under the minimum below. The three weights must add up to 100
         {weightSum !== 100 && <strong className="text-ink"> (now {weightSum})</strong>}.
       </p>
       <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-7">
-        <Labeled label="Hit rate (points)">
+        <Labeled label="Winners (points)">
           <input id="s-hit" type="number" min="0" max="100" step="5" value={wHit} onChange={(e) => setWHit(e.target.value)} className={field} disabled={!meta.canEdit} />
         </Labeled>
         <Labeled label="Spend (points)">
@@ -495,14 +504,34 @@ function TargetsCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () => voi
         <Labeled label="ROAS (points)">
           <input id="s-roas" type="number" min="0" max="100" step="5" value={wRoasS} onChange={(e) => setWRoasS(e.target.value)} className={field} disabled={!meta.canEdit} />
         </Labeled>
-        <Labeled label="Full hit-rate points from (%)">
-          <input id="s-fullhit" type="number" min="1" max="100" step="1" value={fullHit} onChange={(e) => setFullHit(e.target.value)} className={field} disabled={!meta.canEdit} />
+        <Labeled label="Full winners points from (points per decided)">
+          <input id="s-fullpts" type="number" min="0.05" max="10" step="0.05" value={fullPts} onChange={(e) => setFullPts(e.target.value)} className={field} disabled={!meta.canEdit} />
         </Labeled>
         <Labeled label="…and from (decided concepts)" hint="0 turns this off">
           <input id="s-mindecided" type="number" min="0" max="100" step="1" value={minDecided} onChange={(e) => setMinDecided(e.target.value)} className={field} disabled={!meta.canEdit} />
         </Labeled>
         <Labeled label="Full ROAS points from ($ spend)">
           <input id="s-roasmin" type="number" min="0" step="50" value={roasMin} onChange={(e) => setRoasMin(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+      </div>
+      <h3 className="mt-6 mb-1 font-extrabold text-ink">Winner tiers</h3>
+      <p className="mb-3 max-w-[90ch] text-sm text-ink-3">
+        A concept that hits in testing is a KPI winner. It becomes a Spend winner, then a Breakthrough, once every copy of its creatives
+        (scaling, cost cap, graveyard and its test) has spent these amounts since launch while still near KPI: ROAS at least the first number
+        or CPA at most the second. Judged on totals since launch, so a winner that fades drops back a tier.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-4 lg:grid-cols-7">
+        <Labeled label="Spend winner from ($)">
+          <input id="t-tspend" type="number" min="1" step="500" value={tierSpend} onChange={(e) => setTierSpend(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+        <Labeled label="Breakthrough from ($)">
+          <input id="t-tbreak" type="number" min="1" step="1000" value={tierBreak} onChange={(e) => setTierBreak(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+        <Labeled label="…while ROAS at least">
+          <input id="t-troas" type="number" min="0.1" step="0.05" value={tierRoas} onChange={(e) => setTierRoas(e.target.value)} className={field} disabled={!meta.canEdit} />
+        </Labeled>
+        <Labeled label="…or CPA at most ($)">
+          <input id="t-tcpa" type="number" min="0.01" step="0.5" value={tierCpa} onChange={(e) => setTierCpa(e.target.value)} className={field} disabled={!meta.canEdit} />
         </Labeled>
       </div>
       <h3 className="mt-6 mb-1 font-extrabold text-ink">Funnel by frequency</h3>

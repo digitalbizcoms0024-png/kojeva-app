@@ -10,7 +10,7 @@ import { confirmed, loadPersonas } from "./personas.ts";
 import { loadFatigue } from "./fatigue.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
 import { memoize } from "./cache.ts";
-import { getLatestDate, getTargets, loadConcepts, shiftDay, untaggedSpend } from "./queries.ts";
+import { getLatestDate, getTargets, loadConcepts, loadPromoPosts, shiftDay, untaggedSpend } from "./queries.ts";
 
 /** Share of a week's spend in a single persona × awareness cell that raises an alert. */
 export const CONCENTRATION = 0.6;
@@ -253,6 +253,8 @@ export async function loadSuggestions(db: D1Database, editors: Editor[]): Promis
     const ed = hits[0]!;
     out[r.post_id] = { podId: ed.podId!, confidence: "medium", reason: `Editor ${ed.name} is in the ad name` };
   }
+  // Promo-only posts (BFCM) don't need a pod.
+  for (const id of await loadPromoPosts(db)) delete out[id];
   return out;
 }
 

@@ -97,10 +97,18 @@ export interface Targets {
   scoreWeightRoas: number;
   /** A pod's ROAS part is scaled down below this much spend ($) in the period. */
   scoreRoasMinSpend: number;
-  /** A pod at this hit rate (%) or above gets the full hit-rate points. */
-  scoreFullHitRate: number;
+  /** A pod with this many winner points per decided concept gets the full winners points (see `podScores`). */
+  scoreFullWinnerPoints: number;
   /** …once it has this many decided concepts; fewer earn a share (2 of 5 → 2/5). */
   scoreMinDecided: number;
+  /** A KPI winner becomes a Spend winner at this spend ($) across all its copies… */
+  spendWinnerMinSpend: number;
+  /** …and a Breakthrough at this spend ($)… */
+  breakthroughMinSpend: number;
+  /** …while still near KPI since launch: ROAS at least this… */
+  tierHoldRoas: number;
+  /** …or CPA at most this ($). */
+  tierHoldCpa: number;
   /** Average daily frequency up to this is top of funnel (new eyeballs)… */
   freqTopMax: number;
   /** …up to this middle; above it bottom. */
@@ -124,42 +132,100 @@ export const DEFAULT_TARGETS: Targets = {
   scoreWeightSpend: 40,
   scoreWeightRoas: 20,
   scoreRoasMinSpend: 300,
-  scoreFullHitRate: 20,
+  scoreFullWinnerPoints: 0.6,
   scoreMinDecided: 5,
+  spendWinnerMinSpend: 5000,
+  breakthroughMinSpend: 20000,
+  tierHoldRoas: 1.5,
+  tierHoldCpa: 16,
   freqTopMax: 1.15,
   freqMiddleMax: 1.25,
 };
 
+/**
+ * Winner tiers (owner, Nov 10): a KPI winner is a concept that hit in testing (any hit, late hit or
+ * call); it graduates to a Spend winner at `spendWinnerMinSpend` ($5,000) and to a Breakthrough at
+ * `breakthroughMinSpend` ($20,000), counting every copy of its creatives (scaling, cost cap,
+ * graveyard), while still near KPI since launch on those copies: ROAS ≥ `tierHoldRoas` (1.5) or CPA ≤
+ * `tierHoldCpa` ($16). Judged on totals since launch, so a winner that fades drops back a tier.
+ */
+export type WinnerTier = "kpi" | "spend" | "breakthrough";
+
+/** Points per winner in the pod score's winners part. */
+export const TIER_POINTS: Record<WinnerTier, number> = { kpi: 1, spend: 3, breakthrough: 6 };
+/** KPI winners alone earn at most this share of the winners part (owner, Nov 10): the rest needs scale. */
+export const KPI_ONLY_SHARE = 2 / 3;
+
+export const TIER_LABELS: Record<WinnerTier, string> = { kpi: "KPI winner", spend: "Spend winner", breakthrough: "Breakthrough" };
+
+/**
+ * A concept's tier: null unless it won. `copies` is its totals since launch across every copy of its
+ * creatives (null when unknown: it stays a KPI winner). A super-hit call is at least a Spend winner
+ * (the media buyer's call; syncs never change it).
+ */
+export function winnerTier(status: HitStatus, copies: Totals | null, t: Targets): WinnerTier | null {
+  if (!isHit(status)) return null;
+  const floor: WinnerTier = status === "super_winner" ? "spend" : "kpi";
+  if (!copies) return floor;
+  const r = roas(copies);
+  const c = cpa(copies);
+  const holds = (r != null && r >= t.tierHoldRoas) || (c != null && c <= t.tierHoldCpa);
+  if (holds && copies.spendCents >= t.breakthroughMinSpend * 100) return "breakthrough";
+  if (holds && copies.spendCents >= t.spendWinnerMinSpend * 100) return "spend";
+  return floor;
+}
+
+export type TierCounts = Record<WinnerTier, number>;
+export const ZERO_TIERS: TierCounts = { kpi: 0, spend: 0, breakthrough: 0 };
+
+export function countTiers(tiers: (WinnerTier | null)[]): TierCounts {
+  const out = { ...ZERO_TIERS };
+  for (const x of tiers) if (x) out[x]++;
+  return out;
+}
+
+export function tierPoints(c: TierCounts): number {
+  return c.kpi * TIER_POINTS.kpi + c.spend * TIER_POINTS.spend + c.breakthrough * TIER_POINTS.breakthrough;
+}
+
 export interface PodScore {
   /** 0–100: the three parts added up. */
   score: number;
+  /** The winners part (was the hit-rate part; `scoreWeightHitRate` is its weight). */
   hitRate: number;
   spend: number;
   roas: number;
 }
 
 /**
- * The pod leaderboard's score (owner, Oct 28), out of 100:
- * - hit rate: the pod's hit rate ÷ `scoreFullHitRate` (20%), capped at 1, × `scoreWeightHitRate`
- *   (no decided concepts: 0). Measured against that standard, not the best pod (owner, Oct 28), so a
- *   pod's points don't move with another pod's lucky run. Scaled down by decided ÷ `scoreMinDecided`
- *   (5) below that many decided concepts, so 1 hit in 2 can't earn as much as 10 in 50;
+ * The pod leaderboard's score, out of 100:
+ * - winners (owner, Nov 10; replaced the plain hit rate): points per decided concept (KPI winner 1,
+ *   Spend winner 3, Breakthrough 6) ÷ `scoreFullWinnerPoints` (0.6), × `scoreWeightHitRate`, capped
+ *   at that weight. KPI winners alone earn at most `KPI_ONLY_SHARE` (2/3) of it, so full points take
+ *   winners that scaled. Measured against that standard, not the best pod, and scaled down by
+ *   decided ÷ `scoreMinDecided` (5) below that many decided concepts;
  * - spend: the pod's spend in the period ÷ the biggest pod's, × `scoreWeightSpend` (whose ads take budget);
  * - ROAS: the pod's ROAS ÷ target ROAS, capped at 1, × `scoreWeightRoas`, scaled down by
  *   spend ÷ `scoreRoasMinSpend` below that spend, so a few lucky dollars can't earn full marks.
  * Compared among the rows passed in (the pods, never Agency).
  */
-export function podScores(rows: { hitRate: number | null; decided: number; totals: Totals }[], t: Targets): PodScore[] {
-  const fullRate = t.scoreFullHitRate / 100;
+export function podScores(rows: { tiers: TierCounts; decided: number; totals: Totals }[], t: Targets): PodScore[] {
   const maxSpend = Math.max(0, ...rows.map((r) => r.totals.spendCents));
+  const w = t.scoreWeightHitRate;
   return rows.map((r) => {
     const evidence = t.scoreMinDecided > 0 ? Math.min(1, r.decided / t.scoreMinDecided) : 1;
-    const hitRate = fullRate > 0 ? Math.min(1, (r.hitRate ?? 0) / fullRate) * evidence * t.scoreWeightHitRate : 0;
+    let winners = 0;
+    if (r.decided > 0 && t.scoreFullWinnerPoints > 0) {
+      const part = (points: number) => (points / r.decided / t.scoreFullWinnerPoints) * w;
+      const kpi = Math.min(part(r.tiers.kpi * TIER_POINTS.kpi), w * KPI_ONLY_SHARE);
+      const scaled = part(r.tiers.spend * TIER_POINTS.spend + r.tiers.breakthrough * TIER_POINTS.breakthrough);
+      winners = Math.min(w, kpi + scaled) * evidence;
+    }
     const spend = maxSpend > 0 ? (r.totals.spendCents / maxSpend) * t.scoreWeightSpend : 0;
     const x = roas(r.totals);
     const guard = t.scoreRoasMinSpend > 0 ? Math.min(1, r.totals.spendCents / 100 / t.scoreRoasMinSpend) : 1;
     const roasPart = x != null && t.targetRoas > 0 ? Math.min(1, x / t.targetRoas) * guard * t.scoreWeightRoas : 0;
-    return { score: hitRate + spend + roasPart, hitRate, spend, roas: roasPart };
+    return { score: winners + spend + roasPart, hitRate: winners, spend, roas: roasPart };
   });
 }
 
