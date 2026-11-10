@@ -18,7 +18,7 @@ import type {
   TrendGrain,
   TrendsResponse,
 } from "../shared/api.ts";
-import { OFF_STATUSES, ZERO_TOTALS, addTotals, cpa, ctr, dailyFrequency, funnelBand, hitRate, isHit, roas, type Totals } from "../shared/metrics.ts";
+import { OFF_STATUSES, ZERO_TOTALS, addTotals, countTiers, cpa, ctr, dailyFrequency, funnelBand, hitRate, isHit, roas, type Totals } from "../shared/metrics.ts";
 import { DEFAULT_ATTRIBUTION, type AttributionSettings } from "../shared/attribution.ts";
 import { creditsPod, GROUPS } from "../shared/taxonomy.ts";
 import { accessConfigured, accessMiddleware, internalReadHeaders } from "./access.ts";
@@ -457,7 +457,8 @@ app.get("/pods", async (c) => {
   const rows: PodRow[] = groups.map((g) => {
     const mine = posts.filter((p) => creditsPod(p.assignment, g.podId));
     const launched = mine.filter((p) => p.firstSpend && p.firstSpend >= range.from && p.firstSpend <= range.to);
-    const statuses = inRange.filter((k) => creditsPod(k, g.podId)).map((k) => k.status);
+    const mineConcepts = inRange.filter((k) => creditsPod(k, g.podId));
+    const statuses = mineConcepts.map((k) => k.status);
     const editors = new Map<string, PodRow["editors"][number]>();
     for (const p of mine) {
       const key = p.assignment.editorId ?? "";
@@ -480,6 +481,7 @@ app.get("/pods", async (c) => {
       hits: statuses.filter(isHit).length,
       lateHits: statuses.filter((s) => s === "late_hit").length,
       misses: statuses.filter((s) => s === "miss").length,
+      tiers: countTiers(mineConcepts.map((k) => k.tier)),
       testing: statuses.filter((s) => s === "testing").length,
       live: onByPod[g.podId ?? ""] ?? 0,
       hitRate: hitRate(statuses),

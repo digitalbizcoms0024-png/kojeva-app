@@ -1,6 +1,6 @@
 // Response shapes shared by the Worker API and the React app.
 import type { Fatigue } from "./fatigue.ts";
-import type { AttributedTotals, FunnelBand, HitStatus, Targets, Totals } from "./metrics.ts";
+import type { AttributedTotals, FunnelBand, HitStatus, Targets, TierCounts, Totals, WinnerTier } from "./metrics.ts";
 
 /** week / month = the last 7 / 30 synced days; mtd = from the 1st of the latest synced day's month. */
 export type RangeKey = "week" | "14d" | "month" | "mtd" | "all" | "custom";
@@ -140,6 +140,8 @@ export interface PostSummary {
   assignment: Assignment;
   totals: Totals;
   hit: HitStatus | null;
+  /** The winner tier of the concept it was tested in (see ConceptResult.tier). */
+  tier: WinnerTier | null;
   /** Atria's tags for the post's creative, by category (theme, core_desire, …); null if untagged. */
   atria: Record<string, string[]> | null;
   /** Last 3 days vs the first week; null when not spending, too new, or nothing flagged. */
@@ -198,6 +200,8 @@ export interface PodRow {
   hits: number;
   lateHits: number;
   misses: number;
+  /** Winners by tier (hits above, split by how far they scaled). */
+  tiers: TierCounts;
   /** Concepts launched in the period whose judging window is still open (about their first 3 days). */
   testing: number;
   /** Concepts testing now: an ad in the concept is switched on in Meta, spending or not, whatever its result. */
@@ -235,6 +239,10 @@ export interface ConceptResult {
   allTime: Totals;
   /** "late_hit" when a day-3 miss later hit target over a rolling window (see lateWindow); "winner" / "super_winner" when the media buyer called it (see call). */
   status: HitStatus;
+  /** Winner tier (KPI winner, Spend winner, Breakthrough); null unless it won. See `winnerTier`. */
+  tier: WinnerTier | null;
+  /** Winners only: totals since launch across every copy of its creatives (the tier's spend and ROAS). */
+  copies: Totals | null;
   /** The media buyer's winner call on a miss, if any. */
   call: ConceptCall | null;
   /** A miss close enough to target, on enough spend, to be worth a call (winnerCandidate); null once called. */
@@ -560,6 +568,9 @@ export interface ReportConcept {
   label: string;
   adsetName: string;
   status: HitStatus;
+  /** Winner tier and the totals since launch across every copy behind it (see ConceptResult). */
+  tier: WinnerTier | null;
+  copies: ReportFigures | null;
   call: ConceptCall | null;
   candidate: "winner" | "super_winner" | null;
   firstSpend: string;

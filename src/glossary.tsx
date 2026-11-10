@@ -23,6 +23,7 @@ export type TermId =
   | "costPerAtc"
   | "dailyFrequency"
   | "podScore"
+  | "winnerTiers"
   | "hit"
   | "miss"
   | "lateHit"
@@ -74,7 +75,12 @@ export function terms(t: Targets): Record<TermId, Term> {
     podScore: {
       group: "Testing",
       term: "Pod score",
-      text: `Out of 100: how the pod leaderboard ranks the in-house pods. Hit rate, up to ${t.scoreWeightHitRate} points: full points at ${t.scoreFullHitRate}% or above, a share below (${t.scoreFullHitRate / 2}% earns half)${t.scoreMinDecided > 0 ? `, and less for pods with fewer than ${t.scoreMinDecided} decided concepts (2 decided earns 2/${t.scoreMinDecided}), so a lucky hit on a few tests can't top the board` : ""}. Spend, up to ${t.scoreWeightSpend}: the pod's spend as a share of the biggest pod's. ROAS, up to ${t.scoreWeightRoas}: full points at the ${t.targetRoas} target or above, a share below, and less for pods that spent under $${t.scoreRoasMinSpend}. The bar under the score shows the three parts. Change them in Settings → Targets.`,
+      text: `Out of 100: how the pod leaderboard ranks the in-house pods. Winners, up to ${t.scoreWeightHitRate} points: each decided concept earns points by its tier (KPI winner 1, Spend winner 3, Breakthrough 6), and a pod gets full points at ${t.scoreFullWinnerPoints} points per decided concept. KPI winners alone earn at most 2/3 of these points, so full points take winners that scaled${t.scoreMinDecided > 0 ? `; pods with fewer than ${t.scoreMinDecided} decided concepts earn a share (2 decided earns 2/${t.scoreMinDecided})` : ""}. Spend, up to ${t.scoreWeightSpend}: the pod's spend as a share of the biggest pod's. ROAS, up to ${t.scoreWeightRoas}: full points at the ${t.targetRoas} target or above, a share below, and less for pods that spent under $${t.scoreRoasMinSpend}. The bar under the score shows the three parts. Change them in Settings → Targets.`,
+    },
+    winnerTiers: {
+      group: "Testing",
+      term: "Winner tiers",
+      text: `A concept that hits in testing is a KPI winner. It becomes a Spend winner once every copy of its creatives (its test plus scaling, cost cap and graveyard copies) has spent $${t.spendWinnerMinSpend.toLocaleString("en-US")} since launch, and a Breakthrough at $${t.breakthroughMinSpend.toLocaleString("en-US")}, while still near KPI since launch: ROAS ${t.tierHoldRoas}+ or CPA $${t.tierHoldCpa} or less. A winner that fades drops back a tier. A super-hit call is at least a Spend winner.`,
     },
     outboundCpc: {
       group: "Numbers",

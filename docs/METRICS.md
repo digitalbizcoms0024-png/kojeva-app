@@ -47,13 +47,30 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   no ads at all). Its stored days are kept. The judging code is in the rules fingerprint
   (`worker/rules.ts`), so a deploy that changes it recomputes without a sync.
 - **Hit rate** = hits ÷ (hits + misses).
-- **Pod score** (Dashboard leaderboard order; `podScores` in `shared/metrics.ts`, owner, Oct 28), out of 100:
-  hit rate (`scoreWeightHitRate`: pod's hit rate ÷ `scoreFullHitRate` 20%, capped at 1, so every pod at
-  20% or above gets full points and a pod's points don't depend on the others; × decided ÷ `scoreMinDecided`
-  (5) below 5 decided concepts, owner Oct 28, after Ali ranked 2nd on 1 hit in 2) + spend (`scoreWeightSpend`, 40: pod's
-  spend in the period ÷ biggest pod's) + ROAS (`scoreWeightRoas`, 20: pod's ROAS ÷ target ROAS, capped at
-  1, × min(1, spend ÷ `scoreRoasMinSpend` $300)). In-house pods only (never Agency or partners like Trybe), on the Dashboard and the top of the Pods page; ties go to spend. Weights in
-  Settings → Targets (must add up to 100).
+- **Winner tiers** (owner, Nov 10; `winnerTier` in `shared/metrics.ts`): a concept that won its test (hit,
+  late hit or Hit (call)) is a **KPI winner**. It graduates to a **Spend winner** once every copy of the
+  creatives tested in it (same video/image `asset_id`, else the same post, in any ad set: its test plus
+  scaling, cost cap and graveyard copies; `loadCopyTotals` in `worker/queries.ts`, once per sync) has spent
+  `spendWinnerMinSpend` ($5,000) since launch, and to a **Breakthrough** at `breakthroughMinSpend` ($20,000),
+  while still near KPI on those copies since launch: ROAS ≥ `tierHoldRoas` (1.5) or CPA ≤ `tierHoldCpa` ($16).
+  Judged on totals since launch, so a winner that fades drops back a tier (owner, Nov 10). A Super hit (call)
+  is at least a Spend winner. A concept that missed is a **Loser** (status `miss`, shown "✕ Loser").
+  Thresholds in Settings → Targets → Winner tiers. Real check (Nov 10): Shameer Static 3 | Negative
+  Marketing #2, $14,271 across test and Cost Cap copy at ROAS 1.72 → Spend winner; Harris AI UGC | Concept 7,
+  $6,303 at ROAS 1.49 / CPA $19.45 → KPI winner.
+- **Winner rate** (the leaderboard's old "hit rate") = winners of any tier ÷ (winners + losers).
+- **Pod score** (Dashboard leaderboard order; `podScores` in `shared/metrics.ts`), out of 100, weights in
+  Settings → Targets (live: 50 / 20 / 30):
+  - **Winners** (`scoreWeightHitRate`; replaced the plain hit rate Nov 10): points per decided concept, KPI
+    winner 1, Spend winner 3, Breakthrough 6 (`TIER_POINTS`), ÷ `scoreFullWinnerPoints` (0.6) × the weight,
+    capped at the weight. KPI winners alone earn at most 2/3 of it (`KPI_ONLY_SHARE`), so full points take
+    winners that scaled (owner: 3/9 all KPI must count less than 3/9 with a Breakthrough and a Spend winner).
+    × decided ÷ `scoreMinDecided` (5) below 5 decided concepts.
+  - **Spend** (`scoreWeightSpend`): pod's spend in the period ÷ biggest pod's.
+  - **ROAS** (`scoreWeightRoas`): pod's ROAS ÷ target ROAS, capped at 1, × min(1, spend ÷ `scoreRoasMinSpend`).
+  In-house pods only (never Agency or partners); ties go to spend. Oct 12 – Nov 10 under the new score:
+  Shameer 87 (was 99), Harris 65 (87), POD 0 48 (58), Dhia 41 (54), Ali 40 (73), Caicos 4 (4).
+  The Pods page lists winners **close to graduating** (spend across copies vs the next tier).
 - **Testing now** (pod leaderboard, Pods page; owner, Oct 28): every concept with an ad switched on in
   Meta (not paused at any level, archived, deleted or disapproved), spending or not, whatever its result
   so far, as of the last sync. It counts concepts, not ads. "Testing" alone is narrower: still inside

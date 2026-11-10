@@ -93,7 +93,7 @@ export function ConceptDrawer({
             {k && (
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <PodChip podId={k.podId} coPodId={k.coPodId} />
-                <HitBadge status={k.status} stillRunning={k.stillRunning} />
+                <HitBadge status={k.status} stillRunning={k.stillRunning} tier={k.tier} />
                 <span className="text-xs text-ink-3">{k.adsetName}</span>
               </div>
             )}

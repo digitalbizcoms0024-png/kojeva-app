@@ -538,7 +538,7 @@ function RankCard({ post, rank, targets, active, onSelect }: { post: PostSummary
             {post.copies > 1 && <span>· {post.copies} copies</span>}
             <Tag tone={post.active ? "neutral" : "outline"}>{post.active ? "Active" : "Paused"}</Tag>
             <FatigueTag f={post.fatigue} />
-            <HitBadge status={post.hit} />
+            <HitBadge status={post.hit} tier={post.tier} />
           </div>
           <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-2 border-t border-divider pt-2 2xl:grid-cols-6">
             <Metric label="Spend">{money(post.totals.spendCents)}</Metric>
@@ -629,7 +629,7 @@ function RankTable({
                       <PodChip podId={p.assignment.podId} coPodId={p.assignment.coPodId} source={p.assignment.podSource} />
                       {!p.active && <Tag tone="outline">Paused</Tag>}
                       <FatigueTag f={p.fatigue} />
-                      <HitBadge status={p.hit} />
+                      <HitBadge status={p.hit} tier={p.tier} />
                     </span>
                   </span>
                 </button>

@@ -106,6 +106,8 @@ export async function buildReport(db: D1Database, from: string, to: string): Pro
       label: k.label,
       adsetName: k.adsetName,
       status: k.status,
+      tier: k.tier,
+      copies: k.copies ? figures(k.copies) : null,
       // The media buyer's winner call (status "winner" / "super_winner"), with its evidence.
       call: k.call,
       candidate: k.candidate,

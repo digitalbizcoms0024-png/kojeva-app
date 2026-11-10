@@ -170,7 +170,14 @@ function checkTargets(t: Partial<Targets>): Problem {
     if (weights.reduce<number>((a, w) => a + (w ?? 0), 0) !== 100) return "The score weights must add up to 100.";
   }
   if (t.scoreRoasMinSpend !== undefined && !num(t.scoreRoasMinSpend, 0, 1_000_000)) return "The score's ROAS minimum spend must be 0 or more.";
-  if (t.scoreFullHitRate !== undefined && !num(t.scoreFullHitRate, 1, 100)) return "Full hit-rate points must start at a hit rate from 1% to 100%.";
+  if (t.scoreFullWinnerPoints !== undefined && !num(t.scoreFullWinnerPoints, 0.05, 10))
+    return "Full winners points must start between 0.05 and 10 points per decided concept.";
+  if (t.spendWinnerMinSpend !== undefined && !num(t.spendWinnerMinSpend, 1, 10_000_000)) return "Spend winner spend must be a positive amount.";
+  if (t.breakthroughMinSpend !== undefined && !num(t.breakthroughMinSpend, 1, 100_000_000)) return "Breakthrough spend must be a positive amount.";
+  if (t.spendWinnerMinSpend !== undefined && t.breakthroughMinSpend !== undefined && t.breakthroughMinSpend <= t.spendWinnerMinSpend)
+    return "Breakthrough spend must be above Spend winner spend.";
+  if (t.tierHoldRoas !== undefined && !num(t.tierHoldRoas, 0.1, 20)) return "The tier ROAS must be between 0.1 and 20.";
+  if (t.tierHoldCpa !== undefined && !num(t.tierHoldCpa, 0.01, 10_000)) return "The tier CPA must be a positive amount.";
   if (t.scoreMinDecided !== undefined && !(Number.isInteger(t.scoreMinDecided) && num(t.scoreMinDecided, 0, 100)))
     return "Decided concepts for full hit-rate points must be a whole number from 0 to 100.";
   for (const k of ["freqTopMax", "freqMiddleMax"] as const)
@@ -218,7 +225,9 @@ editing.put("/settings", requireAccess, async (c) => {
     await mergeSetting(db, "targets", body.targets, by);
     // Hit results and fatigue depend on the targets; the ranking minimum and the pod score are applied
     // per request (score in the app), so they alone need no recompute.
-    const perRequest = ["rankMinSpendPerDay", "scoreWeightHitRate", "scoreWeightSpend", "scoreWeightRoas", "scoreRoasMinSpend", "scoreFullHitRate", "scoreMinDecided", "freqTopMax", "freqMiddleMax"];
+    const perRequest = ["rankMinSpendPerDay", "scoreWeightHitRate", "scoreWeightSpend", "scoreWeightRoas", "scoreRoasMinSpend", "scoreFullWinnerPoints", "scoreMinDecided", "freqTopMax", "freqMiddleMax",
+      // Tiers are worked out per request from the stored copy totals (loadCopyTotals).
+      "spendWinnerMinSpend", "breakthroughMinSpend", "tierHoldRoas", "tierHoldCpa"];
     if (Object.keys(body.targets).some((k) => !perRequest.includes(k))) await bumpStats(db);
   }
   if (body.attribution) {
