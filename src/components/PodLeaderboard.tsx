@@ -1,6 +1,6 @@
 import { Info } from "../glossary.tsx";
 import type { LaunchesResponse, MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
-import { cpa, podScores, roas, tierPoints, type PodScore, type Targets, type WinnerTier } from "../../shared/metrics.ts";
+import { cpa, podScores, roas, TIER_LABELS, type PodScore, type Targets, type WinnerTier } from "../../shared/metrics.ts";
 import { useApi } from "../api.ts";
 import { shiftDay } from "./HeaderControls.tsx";
 import { Sparkline } from "./Sparkline.tsx";
@@ -104,15 +104,13 @@ function Leaderboard({
         </td>
         <td className="py-3 pr-3">
           {r.hits ? (
-            // One quiet line: scaled winners first (with their icon), then KPI winners; points in the tooltip.
-            <span
-              className="num inline-flex flex-wrap items-center gap-x-2 text-sm"
-              title={`${tierPoints(r.tiers)} ${tierPoints(r.tiers) === 1 ? "point" : "points"}${r.tiers.spend + r.tiers.breakthrough === 0 ? " · KPI winners only: up to 2/3 of the winners points" : ""}`}
-            >
+            // One quiet line: scaled winners first (with their icon), then KPI winners.
+            <span className="num inline-flex flex-wrap items-center gap-x-2 text-sm">
               {TIER_ORDER.filter((x) => r.tiers[x] > 0).map((x) => (
                 <span key={x} className={`inline-flex items-center gap-0.5 ${x === "kpi" ? "text-ink-2" : "font-bold text-ink"}`}>
                   {x !== "kpi" && <Icon name={x === "spend" ? "trend" : "star"} size={13} />}
-                  {r.tiers[x]} {TIER_SHORT[x]}
+                  {r.tiers[x]} {TIER_LABELS[x]}
+                  {r.tiers[x] === 1 ? "" : "s"}
                 </span>
               ))}
             </span>
@@ -166,7 +164,7 @@ function Leaderboard({
               Winners <Info id="winnerTiers" />
             </th>
             <th className="py-2 pr-3 text-right font-normal">
-              Winner rate <Info id="hitRate" />
+              Hit rate <Info id="hitRate" />
             </th>
             <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
             <th className="py-2 pr-3 text-right font-normal">Spend</th>
@@ -185,7 +183,7 @@ function Leaderboard({
             <span className="h-1.5 w-3" style={{ background: p.color }} aria-hidden />
             {p.label} (up to {targets[p.weight]}
             {p.key === "hitRate"
-              ? `, full at ${targets.scoreFullWinnerPoints} points per decided concept on ${targets.scoreMinDecided}+ decided; KPI 1, Spend 3, Breakthrough 6; KPI-only up to 2/3`
+              ? ": Breakthroughs count most, then Spend winners; KPI winners alone earn at most 2/3"
               : p.key === "roas" ? `, full at ${targets.targetRoas}+` : ", vs the top spender"})
           </span>
         ))}
@@ -193,8 +191,6 @@ function Leaderboard({
     </>
   );
 }
-
-const TIER_SHORT = { kpi: "KPI", spend: "Spend", breakthrough: "Breakthrough" } as const;
 
 /** Tiers from highest, on the leaderboard. */
 const TIER_ORDER: WinnerTier[] = ["breakthrough", "spend", "kpi"];

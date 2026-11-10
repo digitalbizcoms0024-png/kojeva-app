@@ -58,7 +58,8 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   Thresholds in Settings → Targets → Winner tiers. Real check (Nov 10): Shameer Static 3 | Negative
   Marketing #2, $14,271 across test and Cost Cap copy at ROAS 1.72 → Spend winner; Harris AI UGC | Concept 7,
   $6,303 at ROAS 1.49 / CPA $19.45 → KPI winner.
-- **Winner rate** (the leaderboard's old "hit rate") = winners of any tier ÷ (winners + losers).
+- **Hit rate** (leaderboard) = winners of any tier ÷ (winners + losers). The leaderboard's Winners column
+  names the tiers in words ("1 Spend winner · 2 KPI winners"); the points are only used inside the score.
 - **Pod score** (Dashboard leaderboard order; `podScores` in `shared/metrics.ts`), out of 100, weights in
   Settings → Targets (live: 50 / 20 / 30):
   - **Winners** (`scoreWeightHitRate`; replaced the plain hit rate Nov 10): points per decided concept, KPI
