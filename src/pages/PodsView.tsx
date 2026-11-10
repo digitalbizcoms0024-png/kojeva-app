@@ -291,9 +291,17 @@ export function ConceptsTable({
   const [pod, setPod] = useState(filter.pod ?? "");
   const [result, setResult] = useState(filter.result ?? "");
   const { data: all, error, retry } = useApi<ConceptsResponse>(`/api/concepts?${qs({ ...filter, result: undefined, range, pod })}`);
-  const keep = (s: ConceptsResponse["rows"][number]["status"]) =>
-    !result || (result === "hits" ? isHit(s) : result === "ineligible" ? s === "ineligible" : s === result);
-  const data = all && { ...all, rows: all.rows.filter((k) => keep(k.status)) };
+  // "kpi" / "spend" / "breakthrough": winners of that tier (the leaderboard's Winners links).
+  const keep = (k: ConceptsResponse["rows"][number]) =>
+    !result ||
+    (result === "hits"
+      ? isHit(k.status)
+      : result === "kpi" || result === "spend" || result === "breakthrough"
+        ? k.tier === result
+        : result === "ineligible"
+          ? k.status === "ineligible"
+          : k.status === result);
+  const data = all && { ...all, rows: all.rows.filter(keep) };
   return (
     <section>
       <SectionTitle
@@ -307,6 +315,9 @@ export function ConceptsTable({
               options={[
                 { value: "", label: "All" },
                 { value: "hits", label: "Hits & late hits" },
+                { value: "breakthrough", label: "Breakthroughs" },
+                { value: "spend", label: "Spend winners" },
+                { value: "kpi", label: "KPI winners" },
                 { value: "miss", label: "Misses" },
                 { value: "testing", label: "Testing" },
                 { value: "ineligible", label: "Not at $100 yet" },
