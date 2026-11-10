@@ -170,8 +170,8 @@ rule, Oct 2026). Only the media buyer makes the call (`MEDIA_BUYER_EMAILS`), tie
   winner from `superWinnerMinSpend` ($5,000). The media buyer sets these in Settings → Targets.
 - **Evidence** (concept card): the whole account in the 7 days before the concept's first spend vs its
   first 14 days (Meta ROAS, CPA, purchases a day), also without the concept's own results ("did the rest
-  improve?"), the MOF/BOF ads (product- and most-aware), the concept's share of test spend and purchases,
-  and its Meta incremental ROAS. It's a before/after comparison, not proof.
+  improve?"), the MOF/BOF ads (product- and most-aware), and the concept's share of test spend and
+  purchases. It's a before/after comparison, not proof.
 - **The call** needs a one-line reason and stores the evidence as it was. Syncs never change it; the
   media buyer can undo it. A called concept's status is `winner` / `super_winner` and counts as a hit
   everywhere (`isHit`), labelled "(call)". MER can't be shown: the hub has Meta numbers only.
@@ -251,20 +251,12 @@ whose hit rate beats the average; up to 4 shown, highest floor first. **No hits 
 with ≥ 3 decided tests and 0 hits, most test spend first (top 3). All of it comes from the cached concept
 results, so it adds no `ad_daily` reads.
 
-## Incrementality (`/api/attribution`, Incrementality page)
-Meta's 7-day click and incremental attribution on the same Meta spend, side by side, as in Ads Manager's
-Compare attribution settings (checked against it in Oct 2026). The ad set's own setting (`purchases` /
-`revenue_cents`, used everywhere else; hit rate and targets stay on it) is kept in the API (`standard`) but
-not shown on the page.
-- **7-day click**: purchases within 7 days of a click (`purchases_7dc`, `revenue_7dc_cents`).
-- **Incremental**: Meta's modelled estimate of purchases that wouldn't have happened without the ad (`purchases_inc_milli` ÷ 1000, `revenue_inc_cents`). Can be fractional.
-
-Both come from a second insights request per sync with `action_attribution_windows=["7d_click","incrementality"]` (`worker/meta/sync.ts` → `syncAttributionWindows`). It only updates existing `ad_daily` rows whose values changed. If Meta refuses it, the sync still succeeds and its message says "7-day click / incremental not available". Missing stays NULL and shows "—", never 0.
-
-- **Incremental CPA** = spend ÷ incremental purchases; **incremental ROAS** = incremental revenue ÷ spend (`attributedCpa`, `attributedRoas`). No good/bad colors: the targets are set on the ad sets' own attribution setting.
-- **Incremental share** = incremental purchases ÷ 7-day-click purchases (`incrementalShare`), or null when either is missing or 7-day click is 0. Low share = the ad mostly reached people who'd have bought anyway. It can pass 100%: Meta's incremental model also credits purchases 7-day click doesn't count (e.g. after a view).
-- **Coverage** = spend on ad-days that have incremental data ÷ all spend; shown when below 100% (e.g. before the backfill).
-- History: run Settings → Backfill 90 days once after deploying. It rewrites ~90 days of rows, so do it on a quiet day for D1 writes.
+## Incrementality (removed, Nov 10 2026)
+The 7-day click / incremental comparison was dropped (owner, Nov 10): its page had left the menu with Triple
+Whale, and its second insights request per sync pushed syncs past Cloudflare's 50-subrequest limit, so it had
+stopped updating. The sync no longer requests it; the old `ad_daily` columns (`purchases_7dc`,
+`revenue_7dc_cents`, `purchases_inc_milli`, `revenue_inc_cents`) stay in the schema but are no longer written
+or shown.
 
 ## Coverage map (`worker/coverage.ts`, `/api/coverage`)
 Personas down the side, the five awareness levels across the top. Defaults to the last 7 days.

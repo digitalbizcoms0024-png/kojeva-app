@@ -2,15 +2,15 @@ import { AnalyzeButton, AnalyzeTopButton, CardTabs, CreativeAnalysisPanel, useCr
 import { FrequencyValue } from "../components/PodReach.tsx";
 import { useEffect, useRef, useState } from "react";
 import { Info } from "../glossary.tsx";
-import type { AttributionResponse, MetaResponse, PodsResponse, PostDetail, PostSummary, RankingsResponse, SortKey } from "../../shared/api.ts";
-import { attributedCpa, attributedRoas, cpa, ctr, roas, type Targets, type Totals } from "../../shared/metrics.ts";
+import type { MetaResponse, PodsResponse, PostDetail, PostSummary, RankingsResponse, SortKey } from "../../shared/api.ts";
+import { cpa, ctr, roas, type Targets, type Totals } from "../../shared/metrics.ts";
 import { ANGLES, FORMATS } from "../../shared/taxonomy.ts";
 import { qs, useApi } from "../api.ts";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { PlayableThumb } from "../components/AdPreview.tsx";
 import { DailyCharts } from "../components/DailyCharts.tsx";
 import { CpaValue, Icon, Empty, HitBadge, PageHeader, PodChip, RoasValue, Segmented, Select, Tabs, Tag, Thumb, LoadError, Pager, SearchBox, Skeleton, useLockBodyScroll } from "../components/ui.tsx";
-import { dollars, downloadCsv, int, money, pct, plain, plainDollars, ratio, shortDate } from "../format.ts";
+import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
 import { podById } from "../../shared/taxonomy.ts";
 import { EditorsTab, PodsTable } from "./PodsView.tsx";
 
@@ -677,8 +677,6 @@ const ATRIA_FIELDS = [
 
 function PostDetailPanel({ postId, range, targets, canEdit }: { postId: string; range: Range; targets: Targets; canEdit: boolean }) {
   const { data, error } = useApi<PostDetail>(`/api/posts/${encodeURIComponent(postId)}?${qs({ range })}`);
-  const attr = useApi<AttributionResponse>(`/api/attribution?${qs({ range, level: "post", post: postId })}`);
-  const click7 = attr.data?.rows[0]?.click7 ?? null;
   // Analyze with Gemini sits at the top; Performance and the Gemini analysis are tabs (owner, Nov 9).
   const ga = useCreativeAnalysis(postId);
   const [tab, setTab] = useState<"perf" | "gemini">("perf");
@@ -776,11 +774,6 @@ function PostDetailPanel({ postId, range, targets, canEdit }: { postId: string; 
           <Cell label="Daily frequency">
             <FrequencyValue totals={data.totals} targets={targets} />
           </Cell>
-        </div>
-        <div className="mt-0.5 grid grid-cols-2 gap-0.5 border-2 border-t-0 border-divider bg-divider sm:grid-cols-3">
-          <Cell label="Purch. · 7-day click">{click7 ? int(click7.purchases) : "—"}</Cell>
-          <Cell label="CPA · 7-day click">{dollars(attributedCpa(click7, data.totals.spendCents))}</Cell>
-          <Cell label="ROAS · 7-day click">{ratio(attributedRoas(click7, data.totals.spendCents))}</Cell>
         </div>
         <div className="num mt-2 text-xs text-ink-3">
           All time: {money(data.allTime.spendCents)} spend · {int(data.allTime.purchases)} purchases · ROAS {roas(data.allTime)?.toFixed(2) ?? "—"}

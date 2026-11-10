@@ -537,8 +537,6 @@ export interface CallEvidence {
   /** The concept's share of all testing spend and purchases since it launched (0–1). */
   shareOfTestSpend: number | null;
   shareOfTestPurchases: number | null;
-  /** Meta's incremental attribution for the concept since launch; null if not synced. */
-  incremental: { spendCents: number; purchases: number; revenueCents: number } | null;
   computedAt: string;
 }
 

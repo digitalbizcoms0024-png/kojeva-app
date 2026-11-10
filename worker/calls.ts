@@ -61,7 +61,7 @@ export async function callEvidence(db: D1Database, conceptId: string): Promise<C
   const own = (
     await db
       .prepare(
-        `SELECT d.date, d.spend_cents, d.impressions, d.link_clicks, d.purchases, d.revenue_cents, d.purchases_inc_milli, d.revenue_inc_cents
+        `SELECT d.date, d.spend_cents, d.impressions, d.link_clicks, d.purchases, d.revenue_cents
          FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id WHERE a.concept_id = ?1`,
       )
       .bind(conceptId)
@@ -91,16 +91,6 @@ export async function callEvidence(db: D1Database, conceptId: string): Promise<C
   const s = windowOf(since, true);
 
   const testSince = rows.filter((r) => Number(r.after) && Number(r.test)).reduce((acc, r) => addTotals(acc, toTotals(r)), ZERO_TOTALS);
-  const inc = own.some((d) => d.revenue_inc_cents != null)
-    ? own.reduce<{ spendCents: number; purchases: number; revenueCents: number }>(
-        (acc, d) => ({
-          spendCents: acc.spendCents + Number(d.spend_cents ?? 0),
-          purchases: acc.purchases + Number(d.purchases_inc_milli ?? 0) / 1000,
-          revenueCents: acc.revenueCents + Number(d.revenue_inc_cents ?? 0),
-        }),
-        { spendCents: 0, purchases: 0, revenueCents: 0 },
-      )
-    : null;
 
   return {
     conceptId,
@@ -108,7 +98,6 @@ export async function callEvidence(db: D1Database, conceptId: string): Promise<C
     since: s,
     shareOfTestSpend: testSince.spendCents > 0 ? s.concept.spendCents / testSince.spendCents : null,
     shareOfTestPurchases: testSince.purchases > 0 ? s.concept.purchases / testSince.purchases : null,
-    incremental: inc,
     computedAt: new Date().toISOString(),
   };
 }

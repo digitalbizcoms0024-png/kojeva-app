@@ -63,9 +63,9 @@ attribution, same purchase event) within 1%; copies are grouped by post; 2,000+ 
 - Late hits (rolling 7-day second look for day-3 misses still spending), Spend by pod for the selected range, concepts
   launched per Monday–Sunday week per pod, and a Custom date range.
 
-## Incrementality ✅ (built; confirmed on first live sync)
-- Standard vs 7-day click vs Meta's incremental attribution per pod, concept and ad, on its own page and in the ad detail.
-  Report only (hit rate stays on standard). Needs a one-time 90-day backfill after deploy.
+## Incrementality ✖ (removed Nov 10 2026)
+- Was: 7-day click vs Meta's incremental attribution on its own page and in the ad detail. Dropped with its
+  sync request (subrequest limit, page no longer in the menu). See docs/METRICS.md.
 
 ## Coverage map ✅ (built; needs the persona list confirmed)
 - Persona × awareness grid of running ads with spend share, CPA/ROAS, offer share and each cell's concept
