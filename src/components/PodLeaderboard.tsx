@@ -102,17 +102,26 @@ function Leaderboard({
           <div className="num text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</div>
           <ScoreBar score={s} targets={targets} />
         </td>
-        <td className="py-3 pr-3">
+        <td className="py-3 pr-3 pl-6">
           {r.hits ? (
             // One quiet line: scaled winners first (with their icon), then KPI winners.
-            <span className="num inline-flex flex-wrap items-center gap-x-2 text-sm">
-              {TIER_ORDER.filter((x) => r.tiers[x] > 0).map((x) => (
-                <span key={x} className={`inline-flex items-center gap-0.5 ${x === "kpi" ? "text-ink-2" : "font-bold text-ink"}`}>
-                  {x !== "kpi" && <Icon name={x === "spend" ? "trend" : "star"} size={13} />}
-                  {r.tiers[x]} {TIER_LABELS[x]}
-                  {r.tiers[x] === 1 ? "" : "s"}
-                </span>
-              ))}
+            // Each tier opens those concepts in a side card, like the hit rate's count.
+            <span className="num flex flex-col items-start gap-0.5 text-sm">
+              {TIER_ORDER.filter((x) => r.tiers[x] > 0).map((x) => {
+                const label = `${r.tiers[x]} ${TIER_LABELS[x]}${r.tiers[x] === 1 ? "" : "s"}`;
+                return (
+                  <button
+                    key={x}
+                    type="button"
+                    className={`inline-flex items-center gap-1 hover:underline ${x === "kpi" ? "text-ink-2" : "font-bold text-ink"}`}
+                    title={`See ${r.name}'s ${label}`}
+                    onClick={() => openDrill({ title: `${r.name} · ${TIER_LABELS[x]}s`, range, filter: { pod: r.podId!, result: x } })}
+                  >
+                    {x !== "kpi" && <Icon name={x === "spend" ? "trend" : "star"} size={13} />}
+                    {label}
+                  </button>
+                );
+              })}
             </span>
           ) : (
             <span className="text-xs text-ink-3">{decided ? "No winners yet" : "—"}</span>
@@ -160,7 +169,7 @@ function Leaderboard({
             <th className="py-2 pr-3 text-right font-normal">
               Score <Info id="podScore" />
             </th>
-            <th className="py-2 pr-3 font-normal">
+            <th className="py-2 pr-3 pl-6 font-normal">
               Winners <Info id="winnerTiers" />
             </th>
             <th className="py-2 pr-3 text-right font-normal">
