@@ -4,7 +4,7 @@ import { cpa, podScores, roas, tierPoints, type PodScore, type Targets, type Win
 import { useApi } from "../api.ts";
 import { shiftDay } from "./HeaderControls.tsx";
 import { Sparkline } from "./Sparkline.tsx";
-import { CpaValue, Icon, LoadError, RoasValue, SectionTitle, TierBadge } from "./ui.tsx";
+import { CpaValue, Icon, LoadError, RoasValue, SectionTitle } from "./ui.tsx";
 import { money, pct, shortDate } from "../format.ts";
 import { openDrill } from "../drill.ts";
 
@@ -104,17 +104,18 @@ function Leaderboard({
         </td>
         <td className="py-3 pr-3">
           {r.hits ? (
-            <>
-              <div className="flex flex-wrap gap-1">
-                {TIER_ORDER.filter((x) => r.tiers[x] > 0).map((x) => (
-                  <TierBadge key={x} tier={x} count={r.tiers[x]} short />
-                ))}
-              </div>
-              <div className="num mt-1 text-xs text-ink-3">
-                {tierPoints(r.tiers)} {tierPoints(r.tiers) === 1 ? "point" : "points"}
-                {r.tiers.spend + r.tiers.breakthrough === 0 ? " · KPI only (up to 2/3)" : ""}
-              </div>
-            </>
+            // One quiet line: scaled winners first (with their icon), then KPI winners; points in the tooltip.
+            <span
+              className="num inline-flex flex-wrap items-center gap-x-2 text-sm"
+              title={`${tierPoints(r.tiers)} ${tierPoints(r.tiers) === 1 ? "point" : "points"}${r.tiers.spend + r.tiers.breakthrough === 0 ? " · KPI winners only: up to 2/3 of the winners points" : ""}`}
+            >
+              {TIER_ORDER.filter((x) => r.tiers[x] > 0).map((x) => (
+                <span key={x} className={`inline-flex items-center gap-0.5 ${x === "kpi" ? "text-ink-2" : "font-bold text-ink"}`}>
+                  {x !== "kpi" && <Icon name={x === "spend" ? "trend" : "star"} size={13} />}
+                  {r.tiers[x]} {TIER_SHORT[x]}
+                </span>
+              ))}
+            </span>
           ) : (
             <span className="text-xs text-ink-3">{decided ? "No winners yet" : "—"}</span>
           )}
@@ -193,7 +194,9 @@ function Leaderboard({
   );
 }
 
-/** Tiers from highest, as chips on the leaderboard. */
+const TIER_SHORT = { kpi: "KPI", spend: "Spend", breakthrough: "Breakthrough" } as const;
+
+/** Tiers from highest, on the leaderboard. */
 const TIER_ORDER: WinnerTier[] = ["breakthrough", "spend", "kpi"];
 
 /** The score's three parts, in the bar's order, in neutral shades (pod and status colors are reserved). */
