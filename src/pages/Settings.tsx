@@ -52,7 +52,8 @@ function TokenForm(props: {
           <a className="link" href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer">
             Graph API Explorer
           </a>
-          , pick the app, choose <b>User token</b>, add <code>ads_read</code>, click <b>Generate Access Token</b>.
+          , pick the app, choose <b>User token</b>, add <code>ads_read</code>, <code>pages_show_list</code> and{" "}
+          <code>pages_read_engagement</code>, click <b>Generate Access Token</b>.
         </li>
         <li>Copy the token and paste it here within a few minutes. The hub swaps it for a 60-day token and stores it encrypted.</li>
       </ol>
@@ -1078,7 +1079,8 @@ export function SettingsPage({ meta, onSynced }: { meta: MetaResponse; onSynced:
                 )}
               </div>
               <p className="mb-4 text-sm text-ink-3">
-                Spend, purchases, ROAS (Meta) and creatives. Read-only (<code>ads_read</code>). Syncs every night and re-pulls the last 7 days, since Meta keeps
+                Spend, purchases, ROAS (Meta) and creatives. Read-only (<code>ads_read</code>, plus <code>pages_read_engagement</code> so Gemini can watch videos posted on the Page; reconnect once to
+                grant it, nothing already synced is lost). Syncs every night and re-pulls the last 7 days, since Meta keeps
                 revising recent results.
                 {meta.lastSync?.message && ` Last message: ${meta.lastSync.message}.`}
               </p>

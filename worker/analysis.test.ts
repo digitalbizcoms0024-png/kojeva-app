@@ -152,4 +152,38 @@ describe("Gemini creative analysis", () => {
     await bumpVersion(env.DB); // as the Analyze route does (write requests bump the data version)
     expect(await pending()).toEqual([]);
   });
+
+  it("reads a Page-owned video through the Page's access when the ad token can't", async () => {
+    const calls: string[] = [];
+    const base = fakeApis(goodAnswer(), calls);
+    const viaPage = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (url.host === "graph.facebook.com") {
+        const token = url.searchParams.get("access_token");
+        if (url.pathname.endsWith("/vid1")) return Response.json(token === "page-token" ? { source: VIDEO_SRC } : { id: "vid1" });
+        if (url.pathname.endsWith("/advideos")) return Response.json({ data: [] });
+        if (url.pathname.endsWith("/me/accounts")) return Response.json({ data: [{ id: "776862388850901", access_token: "page-token" }] });
+      }
+      return base(input, init);
+    }) as typeof fetch;
+    await analyzeAsset(env, env.DB, "v:vid1", "cr1", "e", viaPage, noWait);
+    await bumpVersion(env.DB);
+    const r = (await (await req("/api/posts/p1/analysis")).json()) as { analysis: CreativeAnalysis };
+    expect(r.analysis.status).toBe("analyzed");
+  });
+
+  it("says to reconnect with Page access when no route gives the video", async () => {
+    const none = (async (input: string | URL | Request) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (url.pathname.endsWith("/advideos") || url.pathname.endsWith("/me/accounts")) return Response.json({ data: [] });
+      return Response.json({ id: "vid1" });
+    }) as typeof fetch;
+    await analyzeAsset(env, env.DB, "v:vid1", "cr1", "e", none, noWait);
+    await bumpVersion(env.DB);
+    const r = (await (await req("/api/posts/p1/analysis")).json()) as { analysis: CreativeAnalysis };
+    expect(r.analysis.status).toBe("no_media");
+    expect(r.analysis.error).toContain("Reconnect Meta in Settings");
+    // Analyze top 10 retries it.
+    expect(((await (await req("/api/analysis/pending?posts=p1")).json()) as { pending: string[] }).pending).toEqual(["p1"]);
+  });
 });
