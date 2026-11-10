@@ -98,11 +98,11 @@ function Leaderboard({
             {`${week ?? 0} ${week === 1 ? "concept" : "concepts"} this week${r.live ? ` · ${r.live} testing now` : ""}`}
           </div>
         </td>
-        <td className="py-3 pr-3 text-right">
+        <td className="w-32 py-3 pr-12 text-right">
           <div className="num text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</div>
           <ScoreBar score={s} targets={targets} />
         </td>
-        <td className="py-3 pr-3 pl-6">
+        <td className="w-56 py-3 pr-6">
           {r.hits ? (
             // One quiet line: scaled winners first (with their icon), then KPI winners.
             // Each tier opens those concepts in a side card, like the hit rate's count.
@@ -127,7 +127,7 @@ function Leaderboard({
             <span className="text-xs text-ink-3">{decided ? "No winners yet" : "—"}</span>
           )}
         </td>
-        <td className="py-3 pr-3 text-right">
+        <td className="w-28 py-3 pr-6 text-right">
           <div className="num text-lg leading-none font-bold text-ink">{pct(r.hitRate, 0)}</div>
           <div className="num text-xs text-ink-3">
             {decided ? (
@@ -166,13 +166,13 @@ function Leaderboard({
           <tr className="border-b border-divider">
             <th className="py-2 font-normal">#</th>
             <th className="py-2 font-normal">Pod</th>
-            <th className="py-2 pr-3 text-right font-normal">
+            <th className="w-32 py-2 pr-12 text-right font-normal">
               Score <Info id="podScore" />
             </th>
-            <th className="py-2 pr-3 pl-6 font-normal">
+            <th className="w-56 py-2 pr-6 font-normal">
               Winners <Info id="winnerTiers" />
             </th>
-            <th className="py-2 pr-3 text-right font-normal">
+            <th className="w-28 py-2 pr-6 text-right font-normal">
               Hit rate <Info id="hitRate" />
             </th>
             <th className="hidden py-2 pr-3 font-normal md:table-cell">Spend, last 7 days</th>
