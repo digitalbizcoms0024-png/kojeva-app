@@ -149,9 +149,17 @@ app.get("/meta", async (c) => {
       .prepare("SELECT source, finished_at, status, message FROM sync_runs ORDER BY id DESC LIMIT 1")
       .first<{ source: string; finished_at: string | null; status: string; message: string | null }>(),
     db
-      .prepare("SELECT id, code, name, color, kind, prefix, slot, inhouse, members FROM pods ORDER BY kind DESC, name")
-      .all<Omit<MetaResponse["pods"][number], "inhouse" | "members"> & { inhouse: number; members: string | null }>()
-      .then((r) => ({ results: r.results.map((p) => ({ ...p, inhouse: Number(p.inhouse) === 1, members: parseMembers(p.members) })) })),
+      .prepare("SELECT id, code, name, color, kind, prefix, slot, inhouse, members, active, left_on FROM pods ORDER BY kind DESC, name")
+      .all<Omit<MetaResponse["pods"][number], "inhouse" | "members" | "active" | "leftOn"> & { inhouse: number; members: string | null; active: number; left_on: string | null }>()
+      .then((r) => ({
+        results: r.results.map(({ left_on, ...p }) => ({
+          ...p,
+          inhouse: Number(p.inhouse) === 1,
+          members: parseMembers(p.members),
+          active: Number(p.active) !== 0,
+          leftOn: left_on,
+        })),
+      })),
     db.prepare("SELECT 1 AS x FROM sync_runs WHERE source = 'meta' AND status = 'ok' LIMIT 1").first(),
     db.prepare("SELECT expires_at FROM meta_connections WHERE id = 1").first<{ expires_at: string | null }>(),
     db.prepare("SELECT value FROM settings WHERE key = 'attribution'").first<{ value: string }>(),

@@ -74,7 +74,10 @@ export interface MetaResponse {
   latestDate: string | null;
   targets: Targets;
   /** Built-in pods, pods added in Settings (with their ad set prefix and color slot), then the agency. */
-  pods: { id: string; code: string; name: string; color: string; kind: "pod" | "agency"; prefix: string | null; slot: number | null; inhouse: boolean; members: string[] }[];
+  pods: { id: string; code: string; name: string; color: string; kind: "pod" | "agency"; prefix: string | null; slot: number | null; inhouse: boolean; members: string[];
+    /** False for a former pod (left Kojeva): its data stays, it leaves the leaderboard from leftOn and can't be given new ads. */
+    active: boolean;
+    leftOn: string | null }[];
   attribution: { agencyPrefixes: string[]; podsStartDate: string | null; detected: boolean };
   editors: Editor[];
   /** Whether the signed-in viewer can make changes: Access is on and they're on the edit list (or it's empty). */

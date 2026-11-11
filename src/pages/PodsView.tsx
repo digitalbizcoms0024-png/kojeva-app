@@ -12,7 +12,7 @@ import { PodSpend, type SpendView } from "../components/PodSpend.tsx";
 import { shiftDay } from "../components/HeaderControls.tsx";
 import { HeaderControls, type Range } from "../components/HeaderControls.tsx";
 import { addTotals, cpa, isHit, roas, ZERO_TOTALS, type Targets } from "../../shared/metrics.ts";
-import { ANGLES, AWARENESS, FORMATS, GROUPS, podById } from "../../shared/taxonomy.ts";
+import { ANGLES, AWARENESS, FORMATS, GROUPS, podActiveOn, podById } from "../../shared/taxonomy.ts";
 import { byStrategist } from "../../shared/strategists.ts";
 import { CpaValue, CsvButton, Empty, HitBadge, Icon, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Select, LoadError, Skeleton } from "../components/ui.tsx";
 import { dollars, downloadCsv, int, money, pct, plain, plainDollars, shortDate } from "../format.ts";
@@ -176,7 +176,8 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
   const unassigned = rows.find((r) => r.kind === "unassigned");
   // In-house (default): only Kojeva's own pods, in every section; All adds partners (Trybe) and the agency.
   const [view, setView] = useState<SpendView>("inhouse");
-  const inhouseIds = meta.pods.filter((p) => p.inhouse).map((p) => p.id);
+  // In-house: active pods (former ones only for ranges ending before they left); All adds the rest.
+  const inhouseIds = meta.pods.filter((p) => p.inhouse && podActiveOn(p, pods.data?.to ?? meta.latestDate)).map((p) => p.id);
   const shown = view === "inhouse" ? inHouse.filter((r) => r.podId != null && inhouseIds.includes(r.podId)) : inHouse;
   const topRate = Math.max(...shown.map((r) => r.hitRate ?? -1));
   const columns = [...shown, ...(view === "all" && agency && (agency.totals.spendCents > 0 || agency.concepts > 0) ? [agency] : [])];
@@ -187,7 +188,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
       <PageHeader
         title="Pods"
         subtitle={`${meta.pods
-          .filter((p) => p.kind === "pod" && (view === "all" || p.inhouse))
+          .filter((p) => p.kind === "pod" && (view === "all" || inhouseIds.includes(p.id)))
           .map((p) => p.name)
           .join(" vs ")} · hit rate per concept`}
       >

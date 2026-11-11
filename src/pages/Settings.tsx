@@ -683,11 +683,34 @@ function AttributionCard({ meta, onSaved }: { meta: MetaResponse; onSaved: () =>
         An ad's pod comes from the strategist named in its ad set ("IH | Harris | …", "Shameer | Static 3 | …"). Ad sets starting with an agency code are the
         agency's, and so is anything launched before the pods started. Ads you tag by hand keep their pod.
       </p>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
         {meta.pods.map((p) => (
-          <span key={p.id} className="flex items-center gap-2">
+          <span key={p.id} className={`flex items-center gap-2 ${p.active ? "" : "opacity-70"}`}>
             <PodChip podId={p.id} />
-            <span className="num text-xs text-ink-3">{p.prefix ? `ad sets with "${p.prefix}"` : p.code}</span>
+            <span className="num text-xs text-ink-3">
+              {p.prefix ? `ad sets with "${p.prefix}"` : p.code}
+              {p.members.length > 0 && ` · ${p.members.join(", ")}`}
+              {!p.active && p.leftOn && ` · former, left ${p.leftOn}`}
+            </span>
+            {p.kind === "pod" && (
+              // A former pod keeps its data; it leaves the leaderboard and can't be given new ads (owner, Nov 11).
+              <label className="inline-flex items-center gap-1 text-xs text-ink-2">
+                <input
+                  type="checkbox"
+                  checked={p.active}
+                  disabled={busy || !meta.canEdit}
+                  onChange={(e) =>
+                    void run(
+                      `/api/pods/${p.id}`,
+                      "PATCH",
+                      { active: e.target.checked },
+                      e.target.checked ? `${p.name} is active again.` : `${p.name} is now a former pod; its data stays.`,
+                    )
+                  }
+                />
+                Active
+              </label>
+            )}
           </span>
         ))}
       </div>

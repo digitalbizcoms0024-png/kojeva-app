@@ -96,6 +96,8 @@ describe("added pods", () => {
     expect((await add("A", "X")).status).toBe(400); // too short
     expect((await add("Glow", "GLOW")).status).toBe(201);
     expect((await add("Bloom", "BLOOM")).status).toBe(201);
+    expect((await add("Reef", "REEF")).status).toBe(201);
+    expect((await add("Dune", "DUNE")).status).toBe(201);
     const full = await add("Spark", "SPARK");
     expect(full.status).toBe(400);
     expect(((await full.json()) as { error: string }).error).toMatch(/colors/);
@@ -182,5 +184,32 @@ describe("added pods", () => {
     expect((await p3()).coPodId).toBe("trybe"); // hand-set: a sync keeps it
     expect((await patch({ coPodId: null })).status).toBe(200);
     expect((await p3()).coPodId).toBeNull();
+  });
+});
+
+describe("former pods and POD 0 split by person (owner, Nov 11)", () => {
+  it("re-credits a member's ad sets to their own pod as soon as the members change", async () => {
+    await env.DB.prepare(
+      "INSERT INTO ads (id, post_id, name, adset_id, adset_name, status, created_time) VALUES ('4', 'p2', 'Static 1', 's4', 'Pod 0 | Reika | Statics', 'ACTIVE', '2026-10-05T00:00:00Z')",
+    ).run();
+    expect((await call("/api/pods", { method: "POST", body: JSON.stringify({ name: "POD 0", prefix: "POD0" }) })).status).toBe(201);
+    expect((await call("/api/pods", { method: "POST", body: JSON.stringify({ name: "POD 1", prefix: "POD1" }) })).status).toBe(201);
+    expect(await podOf("p2")).toBe("pod-0");
+    expect((await call("/api/pods/pod-1", { method: "PATCH", body: JSON.stringify({ members: ["Reika"] }) })).status).toBe(200);
+    expect(await podOf("p2")).toBe("pod-1");
+  });
+
+  it("marks a pod former from today, keeps its data, and can bring it back", async () => {
+    // The migration made Harris and Dhia former pods (Nov 10); their ads stay theirs.
+    let meta = await json<MetaResponse>(call("/api/meta"));
+    expect(meta.pods.find((p) => p.id === "harris")).toMatchObject({ active: false, leftOn: "2026-11-10" });
+    expect(meta.pods.find((p) => p.id === "shameer")).toMatchObject({ active: true, leftOn: null });
+    expect(await podOf("p3")).toBe("harris");
+    expect((await call("/api/pods/shameer", { method: "PATCH", body: JSON.stringify({ active: false }) })).status).toBe(200);
+    meta = await json<MetaResponse>(call("/api/meta"));
+    expect(meta.pods.find((p) => p.id === "shameer")).toMatchObject({ active: false, leftOn: new Date().toISOString().slice(0, 10) });
+    expect((await call("/api/pods/shameer", { method: "PATCH", body: JSON.stringify({ active: true }) })).status).toBe(200);
+    expect((await json<MetaResponse>(call("/api/meta"))).pods.find((p) => p.id === "shameer")).toMatchObject({ active: true, leftOn: null });
+    expect((await call("/api/pods/shameer", { method: "PATCH", body: JSON.stringify({ active: "no" }) })).status).toBe(400);
   });
 });

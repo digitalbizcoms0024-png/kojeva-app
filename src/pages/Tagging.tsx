@@ -109,10 +109,15 @@ export function TaggingPage({ meta, onChanged, range }: { meta: MetaResponse; on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, view === "suggestions" ? sugg.data : null]);
 
-  const pods = meta.pods;
+  // Former pods (left Kojeva) take no new ads; a row already tagged to one still shows it.
+  const pods = meta.pods.filter((p) => p.active);
   const podOptions = [{ value: "", label: "No pod" }, ...pods.map((p) => ({ value: p.id, label: p.name }))];
+  const podOptionsFor = (current: string | null) => {
+    const former = current ? meta.pods.find((p) => p.id === current && !p.active) : undefined;
+    return former ? [...podOptions, { value: former.id, label: `${former.name} (former)` }] : podOptions;
+  };
   // Partners (pods that aren't in-house) can be credited beside a pod (owner, Oct 29).
-  const partners = meta.pods.filter((p) => p.kind === "pod" && !p.inhouse);
+  const partners = meta.pods.filter((p) => p.kind === "pod" && !p.inhouse && p.active);
   const editorsFor = (podId: string | null) => meta.editors.filter((e) => !podId || !e.podId || e.podId === podId);
   const disabled = !meta.canEdit;
 
@@ -514,7 +519,7 @@ export function TaggingPage({ meta, onChanged, range }: { meta: MetaResponse; on
                           disabled={disabled}
                           onChange={(e) => patchRow(r, { podId: e.target.value || null })}
                         >
-                          {podOptions.map((o) => (
+                          {podOptionsFor(a.podId).map((o) => (
                             <option key={o.value} value={o.value}>
                               {o.label}
                             </option>

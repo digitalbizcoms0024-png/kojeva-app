@@ -140,3 +140,35 @@ describe("a pod and a partner in one ad set (owner, Oct 29)", () => {
     expect(podsFromAdSetName("POD0 | Andrei | Ali")).toBeNull();
   });
 });
+
+describe("POD 0 split by person (owner, Nov 11)", () => {
+  // POD 0 is Andrei's; Reika and Adrian have POD 1 and POD 2. Their ad sets follow them, old ones too.
+  const trybe = { id: "trybe", code: "TRYBE", name: "Trybe", color: "#6250d6", prefix: "TRYBE", slot: 0, inhouse: false };
+  const pod0 = { id: "pod-0", code: "POD", name: "POD 0", color: "#eb6834", prefix: "POD0", slot: 2, inhouse: true, members: ["Andrei"] };
+  const pod1 = { id: "pod-1", code: "PD1", name: "POD 1", color: "#0f5c8c", prefix: "POD1", slot: 3, inhouse: true, members: ["Reika"] };
+  const pod2 = { id: "pod-2", code: "PD2", name: "POD 2", color: "#7d6a00", prefix: "POD2", slot: 4, inhouse: true, members: ["Adrian"] };
+  beforeEach(() => setAddedPods([trybe, pod0, pod1, pod2]));
+  afterEach(() => setAddedPods([]));
+
+  it("credits the person named, over the old POD 0 prefix", () => {
+    // Real ad set names from POD 0 (Oct 2026).
+    expect(podFromAdSetName("Pod 0 | Adrian | Static | Listicle Statics")).toBe("PD2");
+    expect(podFromAdSetName("Pod 0 | Andrei | Native Ad | Slept Eight Hours, Still Puffy")).toBe("POD");
+    expect(podFromAdSetName("Pod 0 | Reika | UGC | Morning Routine")).toBe("PD1");
+  });
+
+  it("takes the new names: the pod prefix, or the person alone", () => {
+    expect(podFromAdSetName("Pod 1 | Reika | Statics")).toBe("PD1");
+    expect(podFromAdSetName("Adrian | Statics | Listicle")).toBe("PD2");
+    expect(podFromAdSetName("Pod 2 | Statics")).toBe("PD2");
+    // POD 0 without a name stays POD 0's.
+    expect(podFromAdSetName("Pod 0 | Statics")).toBe("POD");
+  });
+
+  it("leaves other pods and partners as they were", () => {
+    expect(podsFromAdSetName("Shameer | Trybe | UGC | 60 Sec Video Demo")).toEqual({ main: "SHA", partner: "TRYBE" });
+    expect(podFromAdSetName("IH | Harris | KOJEVA 3")).toBe("HAR");
+    // Two in-house pods named: a human decides.
+    expect(podsFromAdSetName("Shameer | Reika | Static")).toBeNull();
+  });
+});

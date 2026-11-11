@@ -2,6 +2,7 @@ import { Info } from "../glossary.tsx";
 import type { MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { cpa, podScores, roas, TIER_LABELS, type PodScore, type Targets, type WinnerTier } from "../../shared/metrics.ts";
 import { shiftDay } from "./HeaderControls.tsx";
+import { podActiveOn } from "../../shared/taxonomy.ts";
 import { Sparkline } from "./Sparkline.tsx";
 import { CpaValue, Icon, LoadError, RoasValue, SectionTitle } from "./ui.tsx";
 import { money, pct, shortDate } from "../format.ts";
@@ -27,7 +28,8 @@ export function PodLeaderboard({
 }) {
   const tg = meta.targets;
   const sparkDays = meta.latestDate ? Array.from({ length: 7 }, (_, i) => shiftDay(meta.latestDate!, i - 6)) : [];
-  const inhouse = new Set(meta.pods.filter((p) => p.inhouse).map((p) => p.id));
+  // In-house pods active for the range (former pods only for ranges that end before they left).
+  const inhouse = new Set(meta.pods.filter((p) => p.inhouse && podActiveOn(p, data?.to ?? meta.latestDate)).map((p) => p.id));
   const podRows = (data?.rows ?? []).filter((r) => r.kind === "pod" && r.podId != null && inhouse.has(r.podId));
   const scores = podScores(
     podRows.map((r) => ({ ...r, decided: r.hits + r.misses })),

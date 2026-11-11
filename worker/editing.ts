@@ -339,11 +339,13 @@ editing.post("/pods", requireAccess, async (c) => {
 });
 
 /**
- * Changes a pod: { inhouse } (Kojeva's own team or a partner) and/or { members } (its strategists,
- * each named in its ad sets, for a per-strategist hit rate; [] for none).
+ * Changes a pod: { inhouse } (Kojeva's own team or a partner), { members } (its strategists, each
+ * named in its ad sets: they credit the pod and split its hit rate; [] for none) and/or { active }
+ * (false: a former pod, from today; its data stays). Members and in-house change who gets credited,
+ * so ads are re-credited at once (manual pods untouched).
  */
 editing.patch("/pods/:id", requireAccess, async (c) => {
-  const body = await c.req.json<{ inhouse?: unknown; members?: unknown }>().catch(() => null);
+  const body = await c.req.json<{ inhouse?: unknown; members?: unknown; active?: unknown }>().catch(() => null);
   const db = c.env.DB;
   const id = c.req.param("id");
   if (!(await db.prepare("SELECT 1 AS x FROM pods WHERE id = ?1 AND kind = 'pod'").bind(id).first())) return c.json({ error: "Not found" }, 404);
@@ -357,6 +359,18 @@ editing.patch("/pods/:id", requireAccess, async (c) => {
       return c.json({ error: "Strategists are up to 12 names of 2–30 letters, separated by commas." }, 400);
     const unique = list.filter((m, i) => list.findIndex((x) => x.toLowerCase() === m.toLowerCase()) === i); // first spelling wins
     await db.prepare("UPDATE pods SET members = ?2 WHERE id = ?1").bind(id, unique.length ? JSON.stringify(unique) : null).run();
+  }
+  if (body?.active !== undefined) {
+    if (typeof body.active !== "boolean") return c.json({ error: "Active is true or false." }, 400);
+    await db
+      .prepare("UPDATE pods SET active = ?2, left_on = ?3 WHERE id = ?1")
+      .bind(id, body.active ? 1 : 0, body.active ? null : new Date().toISOString().slice(0, 10))
+      .run();
+  }
+  if (body?.members !== undefined || body?.inhouse !== undefined) {
+    await bumpVersion(db);
+    await loadAddedPods(db);
+    await attribute(db);
   }
   return c.json({ ok: true });
 });
