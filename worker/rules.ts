@@ -32,7 +32,7 @@ function hash(s: string): string {
 export function ensureAttributed(db: D1Database): Promise<void> {
   return memoize(db, "rules-check", async () => {
     const pods = await loadAddedPods(db);
-    const fingerprint = hash(`${CODE}\n${CONSTANTS}\n${JSON.stringify(pods.map((p) => [p.id, p.code, p.prefix, p.inhouse]))}`);
+    const fingerprint = hash(`${CODE}\n${CONSTANTS}\n${JSON.stringify(pods.map((p) => [p.id, p.code, p.prefix, p.inhouse, p.members ?? []]))}`);
     const stored = await db.prepare("SELECT value FROM settings WHERE key = 'rules_fingerprint'").first<{ value: string }>();
     if (stored?.value === fingerprint) return;
     await attribute(db);

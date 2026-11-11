@@ -6,7 +6,7 @@ import { POD_SLOTS, setAddedPods } from "../shared/taxonomy.ts";
 
 export function applyAddedPods(pods: MetaResponse["pods"]) {
   const added = pods.filter((p) => p.prefix && p.slot != null && POD_SLOTS[p.slot]);
-  setAddedPods(added.map(({ id, code, name, color, prefix, slot }) => ({ id, code, name, color, prefix, slot })));
+  setAddedPods(added.map(({ id, code, name, color, prefix, slot, inhouse, members }) => ({ id, code, name, color, prefix, slot, inhouse, members })));
   const vars = (mode: "light" | "dark") => added.map((p) => `--pod-${p.id}: ${POD_SLOTS[p.slot!]![mode]};`).join(" ");
   const css = `:root { ${vars("light")} }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ${vars("dark")} } }

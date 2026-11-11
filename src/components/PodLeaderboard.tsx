@@ -2,8 +2,10 @@ import { Info } from "../glossary.tsx";
 import type { MetaResponse, PodRow, PodsResponse } from "../../shared/api.ts";
 import { cpa, podScores, roas, TIER_LABELS, type PodScore, type Targets, type WinnerTier } from "../../shared/metrics.ts";
 import { shiftDay } from "./HeaderControls.tsx";
+import { podActiveOn } from "../../shared/taxonomy.ts";
 import { Sparkline } from "./Sparkline.tsx";
-import { CpaValue, Icon, LoadError, RoasValue, SectionTitle } from "./ui.tsx";
+import { useState } from "react";
+import { CpaValue, Icon, LoadError, RoasValue, SectionTitle, Segmented } from "./ui.tsx";
 import { money, pct, shortDate } from "../format.ts";
 import { openDrill } from "../drill.ts";
 
@@ -27,7 +29,13 @@ export function PodLeaderboard({
 }) {
   const tg = meta.targets;
   const sparkDays = meta.latestDate ? Array.from({ length: 7 }, (_, i) => shiftDay(meta.latestDate!, i - 6)) : [];
-  const inhouse = new Set(meta.pods.filter((p) => p.inhouse).map((p) => p.id));
+  // Active pods (former pods only for ranges that end before they left), or all in-house pods with
+  // the former ones too, to keep tracking their last ads (owner, Nov 11). The score is among those shown.
+  const [show, setShow] = useState<"active" | "all">("active");
+  const end = data?.to ?? meta.latestDate;
+  const inhouse = new Set(meta.pods.filter((p) => p.inhouse && (show === "all" || podActiveOn(p, end))).map((p) => p.id));
+  const former = new Set(meta.pods.filter((p) => !p.active).map((p) => p.id));
+  const anyFormer = meta.pods.some((p) => p.inhouse && !p.active);
   const podRows = (data?.rows ?? []).filter((r) => r.kind === "pod" && r.podId != null && inhouse.has(r.podId));
   const scores = podScores(
     podRows.map((r) => ({ ...r, decided: r.hits + r.misses })),
@@ -45,8 +53,22 @@ export function PodLeaderboard({
           `Ranked by pod score (winners ${tg.scoreWeightHitRate} · spend ${tg.scoreWeightSpend} · ROAS ${tg.scoreWeightRoas}) · ${data.from === "2000-01-01" ? "All time" : `${shortDate(data.from)} – ${shortDate(data.to)}`} · Meta`
         }
       />
+      {anyFormer && (
+        <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
+          <span className="text-ink-2">Show</span>
+          <Segmented
+            label="Pods on the leaderboard"
+            value={show}
+            onChange={setShow}
+            options={[
+              { value: "active", label: "Active pods" },
+              { value: "all", label: "All pods, with former" },
+            ]}
+          />
+        </div>
+      )}
       <LoadError error={error} retry={retry} what="the pods" loading={!data} rows={6} />
-      <Leaderboard rows={ranked} targets={tg} sparkDays={sparkDays} range={range} />
+      <Leaderboard rows={ranked} targets={tg} sparkDays={sparkDays} range={range} former={former} />
     </section>
   );
 }
@@ -60,11 +82,14 @@ function Leaderboard({
   targets,
   sparkDays,
   range,
+  former,
 }: {
   rows: (PodRow & { score: PodScore })[];
   targets: Targets;
   sparkDays: string[];
   range: string;
+  /** Pods that left Kojeva, labelled on their row. */
+  former: Set<string>;
 }) {
   // Scaled winners first (bold, with their icon), then KPI winners. Each opens those concepts.
   const winners = (r: PodRow & { score: PodScore }, inline = false) =>
@@ -113,6 +138,7 @@ function Leaderboard({
             <span className="size-2.5 shrink-0" style={{ background: `var(--pod-${r.podId})` }} aria-hidden />
             {r.name}
           </a>
+          {r.podId != null && former.has(r.podId) && <span className="kicker ml-2 text-ink-3">Former</span>}
           {r.live > 0 && <div className="pl-5 text-xs whitespace-nowrap text-ink-3">{r.live} testing now</div>}
           <div className="mt-1 pl-5 sm:hidden">{winners(r, true)}</div>
         </td>

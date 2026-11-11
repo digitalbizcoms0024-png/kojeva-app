@@ -12,6 +12,11 @@ export interface Group {
   slot?: number | null;
   /** Added pods only: false for partners (Trybe), who can share an ad set with an in-house pod. Built-in pods are in-house. */
   inhouse?: boolean;
+  /**
+   * Added pods only: the strategists who make its ads. An ad set naming one as a word is the pod's, and
+   * that wins over another pod's prefix ("Pod 0 | Reika | …" → POD 1 when Reika is POD 1's; owner, Nov 11).
+   */
+  members?: string[];
 }
 
 /** The four in-house pods, matched by strategist name in ad set names. */
@@ -31,6 +36,10 @@ export const POD_SLOTS = [
   { light: "#6250d6", dark: "#9085e9" }, // violet
   { light: "#1baf7a", dark: "#199e70" }, // aqua
   { light: "#eb6834", dark: "#d95926" }, // orange
+  // Nov 11 (POD 1, POD 2): checked against the active pods' colors in both modes. No two new colors pass
+  // every pair against the existing seven, so like the rest they always appear with the pod's name.
+  { light: "#0f5c8c", dark: "#3f8fd0" }, // deep blue
+  { light: "#7d6a00", dark: "#a8901f" }, // dark gold
 ] as const;
 
 /** The agency that produced ads before the in-house pods started. Not a pod, but ranked beside them. */
@@ -176,3 +185,12 @@ export const MOTIVATIONS: Record<string, string> = {
   relaxation: "Self-care / relaxation",
   demo_led: "Demonstration-led discovery",
 };
+
+/**
+ * Whether a pod counts as active for a range ending on `day` (owner, Nov 11): active pods always; a
+ * former pod only for ranges that end before it left, so October still shows who ran it.
+ */
+export function podActiveOn(p: { active?: boolean; leftOn?: string | null }, day: string | null | undefined): boolean {
+  if (p.active !== false) return true;
+  return p.leftOn != null && day != null && day < p.leftOn;
+}

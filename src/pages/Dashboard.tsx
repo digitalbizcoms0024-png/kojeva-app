@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { podActiveOn } from "../../shared/taxonomy.ts";
 import { Info, type TermId } from "../glossary.tsx";
 import type { CoverageResponse, MetaResponse, PodsResponse, RankingsResponse, TrendGrain, TrendsResponse } from "../../shared/api.ts";
 import { cpa, roas } from "../../shared/metrics.ts";
@@ -87,7 +88,7 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
           />
         </div>
 
-        <PodSpend range={range} latest={meta.latestDate} targets={tg} inhouseIds={meta.pods.filter((p) => p.inhouse).map((p) => p.id)} compact />
+        <PodSpend range={range} latest={meta.latestDate} targets={tg} inhouseIds={meta.pods.filter((p) => p.inhouse && podActiveOn(p, meta.latestDate)).map((p) => p.id)} compact />
 
         <PodLeaderboard data={pods.data} error={pods.error} retry={pods.retry} meta={meta} range={range} />
 

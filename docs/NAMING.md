@@ -24,8 +24,12 @@ re-credits every ad except hand-set ones.
   totals (`PodRow.sharedCents`). The partner part is left out of the concept's name. Two in-house pods (or
   two partners) in one name stay ambiguous: no pod, for a human. In To review, "+ partner" sets or clears
   the partner by hand (marks the pod hand-set). Shown as "Shameer + Trybe".
-- **Strategists** (per pod, migration 0028): a pod run by several strategists lists them (Pod 0: Andrei,
-  Reika, Adrian) and names one in each ad set ("POD0 | Andrei | Depuff Static"). Each gets their own hit
+- **POD 0 split by person** (owner, Nov 11; migration 0033): POD 0 is Andrei's, POD 1 Reika's (`POD1`),
+  POD 2 Adrian's (`POD2`). A member named in an ad set credits their pod, over another in-house pod's
+  prefix, so "Pod 0 | Reika | …" (old) and "Pod 1 | Reika | …" or "Reika | Statics | …" (new) are all
+  POD 1's. Ad sets that name only "Pod 0" stay POD 0's. Hand-set pods never move.
+- **Strategists** (per pod, migration 0028): a pod run by several strategists lists them and names one
+  in each ad set ("POD0 | Andrei | Depuff Static"). Each gets their own hit
   rate on the Pods page and in the CS report (`shared/strategists.ts`); the pod's own numbers don't change.
 
 First match wins:
@@ -53,7 +57,7 @@ HAR-V612-i2 | Depuff | UGC | Story | PDP
 
 | Part | Values | Required |
 |---|---|---|
-| POD | `HAR` Harris · `DHI` Dhia · `SHA` Shameer · `ALI` Ali | yes |
+| POD | `SHA` Shameer · `ALI` Ali · added pods by code (former: `HAR` Harris · `DHI` Dhia) | yes |
 | CREATIVEID | `V612` or `612` (letter optional) | yes |
 | `-iN` | iteration of the same concept | no |
 | Angle / Format / Hook / LandingPage | from `shared/taxonomy.ts`; `-` when unknown | positions fixed |

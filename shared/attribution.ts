@@ -1,7 +1,7 @@
 // Decides which pod (or the agency) a post belongs to.
 // See docs/NAMING.md → "How a post gets its pod".
 import { parseAdName, suggestPodCode } from "./naming.ts";
-import { AGENCY, allPods, type PodCode } from "./taxonomy.ts";
+import { AGENCY, allPods, type Group, type PodCode } from "./taxonomy.ts";
 
 export type PodSource = "manual" | "name" | "adset" | "era";
 
@@ -50,7 +50,16 @@ export function podsFromAdSetName(adsetName: string | null): { main: PodCode; pa
       })
       .filter(Boolean),
   );
-  const found = allPods().filter((p) => (p.prefix ? parts.has(p.prefix.toUpperCase()) : words.has(p.name.toUpperCase())));
+  // A pod's strategist named in the ad set credits that pod, over another in-house added pod matched only
+  // by its prefix ("Pod 0 | Reika | …" → POD 1, Reika's, after Pod 0 was split by person; owner, Nov 11).
+  // Partners (Trybe) still count beside it, and built-in pods by name as before.
+  const named = (p: Group) => (p.members ?? []).some((m) => m.toUpperCase().split(/[^A-Z]+/).filter(Boolean).every((w) => words.has(w)));
+  const byMember = allPods().filter(named);
+  const found = allPods().filter(
+    (p) =>
+      byMember.includes(p) ||
+      ((p.prefix ? parts.has(p.prefix.toUpperCase()) : words.has(p.name.toUpperCase())) && !(byMember.length > 0 && p.prefix && p.inhouse !== false)),
+  );
   if (found.length === 1) return { main: found[0]!.code, partner: null };
   const inhouse = found.filter((p) => p.inhouse !== false);
   const partners = found.filter((p) => p.inhouse === false);

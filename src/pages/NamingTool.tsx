@@ -50,7 +50,8 @@ function when(iso: string): string {
 }
 
 export function NamingToolPage({ meta }: { meta: MetaResponse }) {
-  const [f, setF] = useState<NameFields>({ podCode: "HAR", creativeId: "", iteration: null, angle: "", format: "", hook: "", landingPage: "PDP" });
+  const isFormer = (id: string) => meta.pods.find((x) => x.id === id)?.active === false;
+  const [f, setF] = useState<NameFields>({ podCode: allPods().find((p) => meta.pods.find((x) => x.id === p.id)?.active !== false)?.code ?? "SHA", creativeId: "", iteration: null, angle: "", format: "", hook: "", landingPage: "PDP" });
   const [copied, setCopied] = useState<string | null>(null);
   const [check, setCheck] = useState("HxM 7.1 Funeral_MatureFace_UGC_Story");
   const [recent, setRecent] = useState<Recent[]>(loadRecent);
@@ -108,9 +109,12 @@ export function NamingToolPage({ meta }: { meta: MetaResponse }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Pod">
               <select value={f.podCode} onChange={(e) => set("podCode", e.target.value as PodCode)} className="field">
-                {allPods().map((p) => (
+                {[...allPods()]
+                  .sort((a, b) => Number(isFormer(a.id)) - Number(isFormer(b.id)))
+                  .map((p) => (
                   <option key={p.code} value={p.code}>
-                    {p.name} → {p.code}
+                    {p.name}
+                    {isFormer(p.id) ? " (former)" : ""} → {p.code}
                   </option>
                 ))}
               </select>

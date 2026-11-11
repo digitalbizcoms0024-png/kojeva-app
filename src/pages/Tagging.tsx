@@ -109,7 +109,8 @@ export function TaggingPage({ meta, onChanged, range }: { meta: MetaResponse; on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, view === "suggestions" ? sugg.data : null]);
 
-  const pods = meta.pods;
+  // Former pods still take their last ads (owner, Nov 11): listed after the active ones, labelled.
+  const pods = [...meta.pods.filter((p) => p.active), ...meta.pods.filter((p) => !p.active)].map((p) => (p.active ? p : { ...p, name: `${p.name} (former)` }));
   const podOptions = [{ value: "", label: "No pod" }, ...pods.map((p) => ({ value: p.id, label: p.name }))];
   // Partners (pods that aren't in-house) can be credited beside a pod (owner, Oct 29).
   const partners = meta.pods.filter((p) => p.kind === "pod" && !p.inhouse);
