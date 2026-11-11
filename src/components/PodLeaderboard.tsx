@@ -146,7 +146,8 @@ function Leaderboard({
           <div className="mt-1 pl-5 sm:hidden">{winners(r, true)}</div>
         </td>
         <td className="py-3.5 pr-4 sm:pr-6">
-          <div className="flex items-center gap-3.5">
+          {/* The parts in a plain tooltip, on the number and the bar (owner, Nov 11). */}
+          <div className="flex w-fit items-center gap-3.5" title={scoreTip(s, targets)}>
             <span className="num w-8 text-right text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</span>
             <ScoreBar score={s} targets={targets} />
           </div>
@@ -235,10 +236,15 @@ const SCORE_PARTS = [
 ] as const;
 
 /** A 100-point bar beside the score: each part's points as a segment (2px apart), the rest left empty. */
+/** "Winners 17 of 50 · Spend 2 of 20 · ROAS 21 of 30". */
+function scoreTip(score: PodScore, targets: Targets): string {
+  return SCORE_PARTS.map((p) => `${p.label} ${Math.round(score[p.key])} of ${targets[p.weight]}`).join(" · ");
+}
+
 function ScoreBar({ score, targets }: { score: PodScore; targets: Targets }) {
-  const tip = SCORE_PARTS.map((p) => `${p.label} ${Math.round(score[p.key])} of ${targets[p.weight]}`).join(" · ");
+  const tip = scoreTip(score, targets);
   return (
-    <div className="hidden h-2 w-36 gap-0.5 bg-surface-2 sm:flex" title={tip} role="img" aria-label={tip}>
+    <div className="hidden h-2 w-36 gap-0.5 bg-surface-2 sm:flex" role="img" aria-label={tip}>
       {SCORE_PARTS.map((p) =>
         score[p.key] > 0.5 ? <span key={p.key} className="h-full" style={{ width: `${score[p.key]}%`, background: p.color }} /> : null,
       )}
