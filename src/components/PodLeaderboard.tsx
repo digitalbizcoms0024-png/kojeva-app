@@ -4,9 +4,10 @@ import { cpa, podScores, roas, TIER_LABELS, type PodScore, type Targets, type Wi
 import { shiftDay } from "./HeaderControls.tsx";
 import { podActiveOn } from "../../shared/taxonomy.ts";
 import { Sparkline } from "./Sparkline.tsx";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { CpaValue, Icon, LoadError, RoasValue, SectionTitle, Segmented } from "./ui.tsx";
-import { money, pct, shortDate } from "../format.ts";
+import { money, pct, ratio, shortDate } from "../format.ts";
 import { openDrill } from "../drill.ts";
 
 /**
@@ -118,6 +119,7 @@ function Leaderboard({
       <span className="text-ink-3">—</span>
     );
 
+  const maxSpendCents = Math.max(0, ...rows.map((r) => r.totals.spendCents));
   // Text left, numbers right (tabular figures) so every column lines up row to row (owner, Nov 10).
   const line = (r: PodRow & { score: PodScore }, rank: number) => {
     const decided = r.hits + r.misses;
@@ -146,10 +148,10 @@ function Leaderboard({
           <div className="mt-1 pl-5 sm:hidden">{winners(r, true)}</div>
         </td>
         <td className="py-3.5 pr-4 sm:pr-6">
-          <div className="flex items-center gap-3.5">
+          <ScoreTip row={r} targets={targets} maxSpendCents={maxSpendCents}>
             <span className="num w-8 text-right text-xl leading-none font-extrabold text-ink">{Math.round(s.score)}</span>
-            <ScoreBar score={s} targets={targets} />
-          </div>
+            <ScoreBar score={s} />
+          </ScoreTip>
         </td>
         <td className="hidden py-3.5 pr-6 sm:table-cell">{winners(r)}</td>
         <td className="py-3.5 pr-4 text-right">
@@ -235,13 +237,83 @@ const SCORE_PARTS = [
 ] as const;
 
 /** A 100-point bar beside the score: each part's points as a segment (2px apart), the rest left empty. */
-function ScoreBar({ score, targets }: { score: PodScore; targets: Targets }) {
-  const tip = SCORE_PARTS.map((p) => `${p.label} ${Math.round(score[p.key])} of ${targets[p.weight]}`).join(" · ");
+function ScoreBar({ score }: { score: PodScore }) {
   return (
-    <div className="hidden h-2 w-36 gap-0.5 bg-surface-2 sm:flex" title={tip} role="img" aria-label={tip}>
+    <div className="hidden h-2 w-36 gap-0.5 bg-surface-2 sm:flex" aria-hidden>
       {SCORE_PARTS.map((p) =>
         score[p.key] > 0.5 ? <span key={p.key} className="h-full" style={{ width: `${score[p.key]}%`, background: p.color }} /> : null,
       )}
+    </div>
+  );
+}
+
+/**
+ * How the score came about (owner, Nov 11): on hover or focus, each part's points out of its weight
+ * and the numbers behind it. A portal, so the table's scroll box never clips it.
+ */
+function ScoreTip({ row, targets, maxSpendCents, children }: { row: PodRow & { score: PodScore }; targets: Targets; maxSpendCents: number; children: ReactNode }) {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  const s = row.score;
+  const decided = row.hits + row.misses;
+  const tiers = TIER_ORDER.filter((x) => row.tiers[x] > 0)
+    .map((x) => `${row.tiers[x]} ${TIER_LABELS[x]}${row.tiers[x] === 1 ? "" : "s"}`)
+    .join(", ");
+  const r = roas(row.totals);
+  const why: Record<(typeof SCORE_PARTS)[number]["key"], string> = {
+    hitRate: decided
+      ? `${tiers || "No winners"} in ${decided} decided${decided < targets.scoreMinDecided ? ` (fewer than ${targets.scoreMinDecided}: scaled down)` : ""}`
+      : "No decided concepts yet",
+    spend:
+      row.totals.spendCents >= maxSpendCents && maxSpendCents > 0
+        ? `${money(row.totals.spendCents, { compact: true })}, the top spender`
+        : `${money(row.totals.spendCents, { compact: true })} vs ${money(maxSpendCents, { compact: true })} for the top spender`,
+    roas: `ROAS ${ratio(r)} vs the ${targets.targetRoas} target${row.totals.spendCents / 100 < targets.scoreRoasMinSpend ? ` (under $${targets.scoreRoasMinSpend} spent: scaled down)` : ""}`,
+  };
+  const show = (el: HTMLElement) => {
+    const b = el.getBoundingClientRect();
+    setAt({ x: Math.min(b.left, window.innerWidth - 336), y: b.bottom + 6 });
+  };
+  return (
+    <div
+      className="flex w-fit cursor-default items-center gap-3.5 outline-none focus-visible:ring-2 focus-visible:ring-ink"
+      tabIndex={0}
+      aria-label={`Score ${Math.round(s.score)}: ${SCORE_PARTS.map((p) => `${p.label} ${Math.round(s[p.key])} of ${targets[p.weight]}`).join(", ")}`}
+      onMouseEnter={(e) => show(e.currentTarget)}
+      onMouseLeave={() => setAt(null)}
+      onFocus={(e) => show(e.currentTarget)}
+      onBlur={() => setAt(null)}
+    >
+      {children}
+      {at &&
+        createPortal(
+          <div
+            role="tooltip"
+            style={{ left: at.x, top: at.y }}
+            className="pointer-events-none fixed z-[70] w-80 border border-divider bg-page p-3 text-xs text-ink-2 shadow-lg"
+          >
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <b className="text-ink">{row.name}</b>
+              <span className="num text-ink">
+                <b className="text-sm">{Math.round(s.score)}</b> of 100
+              </span>
+            </div>
+            <ul className="flex flex-col gap-1.5">
+              {SCORE_PARTS.map((p) => (
+                <li key={p.key} className="grid grid-cols-[auto_1fr_auto] items-start gap-x-2">
+                  <span className="mt-1 h-2 w-3" style={{ background: p.color }} aria-hidden />
+                  <span>
+                    <span className="text-ink">{p.label}</span>
+                    <span className="block text-ink-3">{why[p.key]}</span>
+                  </span>
+                  <span className="num text-ink">
+                    {Math.round(s[p.key])} / {targets[p.weight]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
