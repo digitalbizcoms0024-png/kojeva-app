@@ -208,7 +208,7 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
           />
         </div>
         {/* Leaderboard, spend by pod, hit rate by pod, strategists, launches (owner, Oct 28). */}
-        <PodLeaderboard data={pods.data} error={pods.error} retry={pods.retry} meta={meta} range={range} />
+        <PodLeaderboard data={pods.data} error={pods.error} retry={pods.retry} meta={meta} range={range} formerFilter />
         <Graduating concepts={concepts.data?.rows ?? []} targets={t} podIds={shown.map((r) => r.podId!)} />
         <PodSpend range={range} latest={meta.latestDate} targets={t} inhouseIds={inhouseIds} view={view} />
         <PodReach rows={pods.data?.rows} error={pods.error} retry={pods.retry} targets={t} shown={shown.map((r) => r.podId!)} />

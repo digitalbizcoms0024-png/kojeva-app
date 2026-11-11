@@ -20,12 +20,15 @@ export function PodLeaderboard({
   retry,
   meta,
   range,
+  formerFilter = false,
 }: {
   data: PodsResponse | null;
   error: Error | null;
   retry: () => void;
   meta: MetaResponse;
   range: string;
+  /** The Active / All pods filter: on the Pods page only; the Dashboard shows active pods (owner, Nov 11). */
+  formerFilter?: boolean;
 }) {
   const tg = meta.targets;
   const sparkDays = meta.latestDate ? Array.from({ length: 7 }, (_, i) => shiftDay(meta.latestDate!, i - 6)) : [];
@@ -53,7 +56,7 @@ export function PodLeaderboard({
           `Ranked by pod score (winners ${tg.scoreWeightHitRate} · spend ${tg.scoreWeightSpend} · ROAS ${tg.scoreWeightRoas}) · ${data.from === "2000-01-01" ? "All time" : `${shortDate(data.from)} – ${shortDate(data.to)}`} · Meta`
         }
       />
-      {anyFormer && (
+      {formerFilter && anyFormer && (
         <div className="mb-2 flex flex-wrap items-center gap-3 text-sm">
           <span className="text-ink-2">Show</span>
           <Segmented

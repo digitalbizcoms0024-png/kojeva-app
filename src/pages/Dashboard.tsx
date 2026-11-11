@@ -197,7 +197,7 @@ function TrendsSection({ meta, range }: { meta: MetaResponse; range: Range }) {
 
 
 /**
- * Ads (posts) whose first spend was in the last two weeks (Monday of last week to the latest synced
+ * Ads (posts) in the Internal Pod Testing campaign whose first spend was in the last two weeks (Monday of last week to the latest synced
  * day, the same Mon–Sun weeks as the launch grid), biggest spend first, with CPA and ROAS. Two weeks,
  * not one: a new ad spends little in its first days, so early in a week this week's alone are near $0.
  * A row opens the ad on Ad Rankings.
@@ -207,7 +207,9 @@ function NewLaunches({ meta }: { meta: MetaResponse }) {
   // Monday of the week before the latest synced day's week (getUTCDay: Sunday 0 … Saturday 6).
   const monday = latest ? shiftDay(latest, -((new Date(`${latest}T00:00:00Z`).getUTCDay() + 6) % 7) - 7) : null;
   const week = monday && latest ? (`custom:${monday}:${latest}` as Range) : null;
-  const { data, error, retry } = useApi<RankingsResponse>(week ? `/api/rankings?${qs({ range: week, sort: "spend" })}` : null);
+  // Only the pods' new tests: ads in the "CBO | Internal Pod | Testing" campaign (owner, Nov 11), not
+  // scaling copies, promo, agency or unassigned ads.
+  const { data, error, retry } = useApi<RankingsResponse>(week ? `/api/rankings?${qs({ range: week, sort: "spend", campaigns: "internal pod" })}` : null);
   const tg = meta.targets;
   const rows = data ? data.items.filter((p) => p.firstSpend != null && p.firstSpend >= data.from) : [];
   return (
@@ -217,13 +219,13 @@ function NewLaunches({ meta }: { meta: MetaResponse }) {
         right={
           data && (
             <span className="text-sm text-ink-3">
-              {rows.length} ad{rows.length === 1 ? "" : "s"} launched Mon {shortDate(data.from)} – {shortDate(data.to)}
+              {rows.length} ad{rows.length === 1 ? "" : "s"} launched in Internal Pod Testing · Mon {shortDate(data.from)} – {shortDate(data.to)}
             </span>
           )
         }
       />
       <LoadError error={error} retry={retry} what="new ads" loading={!data} rows={5} />
-      {data && rows.length === 0 && <Empty small>No ads launched in the last 2 weeks.</Empty>}
+      {data && rows.length === 0 && <Empty small>No ads launched in Internal Pod Testing in the last 2 weeks.</Empty>}
       {rows.length > 0 && (
         <table className="w-full table-fixed text-sm">
           <thead className="kicker text-left">
