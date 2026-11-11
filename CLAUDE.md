@@ -1,8 +1,8 @@
 # Kojeva Hub
 
 Internal performance and creative-intelligence tool for Kojeva's Meta ads. It ranks
-ads, attributes them to the creative pods (active since Nov 11: Shameer, Ali, POD 0 Andrei, POD 1 Reika,
-POD 2 Adrian, Caicos; Harris and Dhia are former pods) and
+ads, attributes them to the creative pods (active since Nov 11: Shameer, Ali, Pod 0 - Andrei, Pod 1 - Reika,
+Pod 2 - Adrian, Caicos; Harris and Dhia are former pods) and
 measures each pod's hit rate. Read `docs/PRD.md` for scope and `docs/ROADMAP.md`
 for which phase we're in.
 
