@@ -143,3 +143,49 @@ describe("ad sets with one concept per static", () => {
     expect(staticTitle("ST _ Comparison _ Gua Sha vs Kojeva _ V1_ Listicle")).toBe("Gua Sha vs Kojeva V1 Listicle");
   });
 });
+
+describe("re-tests in a new testing campaign (owner, Nov 12)", () => {
+  // A concept duplicated into "CBO | TOF Ads | Test" with the same ad set name and creatives.
+  const ad = (id: string, adsetId: string, adsetName: string, assetId: string, createdTime: string, campaignName = "CBO | Internal Pod | Testing") => ({
+    id,
+    name: id,
+    adsetId,
+    adsetName,
+    campaignName,
+    assetId,
+    createdTime,
+  });
+
+  it("judges the re-test and drops the original", () => {
+    const concepts = buildConcepts([
+      ad("a1", "s1", "Shameer | Video | Morning Puff", "v:1", "2026-10-20T00:00:00Z"),
+      ad("a2", "s1", "Shameer | Video | Morning Puff", "v:2", "2026-10-20T00:00:00Z"),
+      ad("b1", "s2", "Shameer | Video | Morning Puff", "v:1", "2026-11-12T05:00:00Z", "CBO | TOF Ads | Test"),
+    ]);
+    expect(concepts.map((c) => [c.adsetId, c.adIds])).toEqual([["s2", ["b1"]]]);
+  });
+
+  it("keeps two concepts that only share a name, or have no creatives recorded", () => {
+    expect(
+      buildConcepts([
+        ad("a1", "s1", "Shameer | Statics", "i:aaa", "2026-10-01T00:00:00Z"),
+        ad("b1", "s2", "Shameer | Statics", "i:bbb", "2026-11-01T00:00:00Z"),
+      ]).map((c) => c.adsetId),
+    ).toEqual(["s1", "s2"]);
+    expect(
+      buildConcepts([
+        { id: "a1", name: "a1", adsetId: "s1", adsetName: "Shameer | Video | Morning Puff" },
+        { id: "b1", name: "b1", adsetId: "s2", adsetName: "Shameer | Video | Morning Puff" },
+      ]).map((c) => c.adsetId),
+    ).toEqual(["s1", "s2"]);
+  });
+
+  it("never merges different pods", () => {
+    expect(
+      buildConcepts([
+        ad("a1", "s1", "Shameer | Video | Morning Puff", "v:1", "2026-10-20T00:00:00Z"),
+        ad("b1", "s2", "Ali | Video | Morning Puff", "v:1", "2026-11-12T00:00:00Z"),
+      ]).map((c) => c.adsetId),
+    ).toEqual(["s1", "s2"]);
+  });
+});

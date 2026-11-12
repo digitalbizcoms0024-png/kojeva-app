@@ -4,7 +4,7 @@
 // attribute() writes only rows whose pod, tags or concept changed.
 import { attributePod, DEFAULT_ATTRIBUTION, podFromAdSetName, podsFromAdSetName } from "../shared/attribution.ts";
 import { classify } from "../shared/classify.ts";
-import { buildConcepts, isPromoCampaign, ONE_CONCEPT_PER_AD, staticTitle } from "../shared/concepts.ts";
+import { buildConcepts, dropRetested, isPromoCampaign, ONE_CONCEPT_PER_AD, staticTitle } from "../shared/concepts.ts";
 import { hitStatus, judgeTurnedOff, judgingWindowEnd, OFF_STATUSES } from "../shared/metrics.ts";
 import { parseAdName } from "../shared/naming.ts";
 import { PODS } from "../shared/taxonomy.ts";
@@ -14,7 +14,7 @@ import { loadAddedPods } from "./pods.ts";
 
 // The judging rules too (hitStatus, judgeTurnedOff): their results are cached per sync, so a deploy
 // that changes them must recompute (bumpStats below) without waiting for a sync.
-const CODE = [attributePod, podFromAdSetName, podsFromAdSetName, buildConcepts, isPromoCampaign, staticTitle, classify, parseAdName, hitStatus, judgeTurnedOff, judgingWindowEnd]
+const CODE = [attributePod, podFromAdSetName, podsFromAdSetName, buildConcepts, dropRetested, isPromoCampaign, staticTitle, classify, parseAdName, hitStatus, judgeTurnedOff, judgingWindowEnd]
   .map((f) => f.toString())
   .join("\n");
 const CONSTANTS = JSON.stringify([PODS, DEFAULT_ATTRIBUTION, [...ONE_CONCEPT_PER_AD], OFF_STATUSES]);

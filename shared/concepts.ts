@@ -10,6 +10,9 @@ export interface ConceptAd {
   adsetId: string | null;
   adsetName: string | null;
   campaignName?: string | null;
+  /** The ad's video or image (`ads.asset_id`), to spot a concept re-tested in a new ad set. */
+  assetId?: string | null;
+  createdTime?: string | null;
 }
 
 /**
@@ -177,5 +180,31 @@ export function buildConcepts(ads: ConceptAd[], settings: AttributionSettings = 
     });
     if (unmatched.length) out.push({ id: `${adsetId}#rest`, adsetId, adsetName, label: `${label} (unsplit)`, podCode, partnerCode, adIds: unmatched });
   }
-  return out;
+  return dropRetested(out, ads);
+}
+
+/**
+ * A concept re-tested in a new testing ad set (same pod, same name, a creative in common) is judged on
+ * the newer ad set; the older one stops counting (owner, Nov 12: 8 Caicos videos duplicated into
+ * "CBO | TOF Ads | Test"). The shared creative keeps two different concepts that happen to share a
+ * name ("Statics") apart. Its old ads stay in the pod's spend, and every copy still counts toward the
+ * winner tiers (copy totals go by creative).
+ */
+export function dropRetested(concepts: Concept[], ads: ConceptAd[]): Concept[] {
+  const byId = new Map(ads.map((a) => [a.id, a]));
+  const info = concepts.map((c) => {
+    const list = c.adIds.map((id) => byId.get(id)).filter((a): a is ConceptAd => !!a);
+    const times = list.map((a) => a.createdTime).filter((t): t is string => !!t).sort();
+    return { c, key: `${c.podCode}|${c.label.toLowerCase().replace(/\s+/g, " ").trim()}`, launched: times[0] ?? null, assets: new Set(list.map((a) => a.assetId).filter((x): x is string => !!x)) };
+  });
+  const dropped = new Set<string>();
+  for (const a of info) {
+    const launched = a.launched;
+    if (!launched || a.assets.size === 0) continue;
+    const newer = info.some(
+      (b) => b !== a && b.key === a.key && b.launched != null && b.launched > launched && [...b.assets].some((x) => a.assets.has(x)),
+    );
+    if (newer) dropped.add(a.c.id);
+  }
+  return dropped.size ? concepts.filter((c) => !dropped.has(c.id)) : concepts;
 }

@@ -348,9 +348,10 @@ async function setSetting(db: D1Database, key: string, value: unknown) {
 export async function attribute(db: D1Database) {
   await loadAddedPods(db);
   const [{ results: ads }, { results: stored }, prefix, attr] = await Promise.all([
-    db.prepare("SELECT id, post_id, name, adset_id, adset_name, campaign_name, created_time, concept_id FROM ads").all<{
+    db.prepare("SELECT id, post_id, name, adset_id, adset_name, campaign_name, created_time, concept_id, asset_id FROM ads").all<{
       id: string;
       post_id: string;
+      asset_id: string | null;
       name: string;
       adset_id: string | null;
       adset_name: string | null;
@@ -424,11 +425,28 @@ export async function attribute(db: D1Database) {
 /** Brings the concepts table and each ad's concept_id in line with buildConcepts. */
 async function saveConcepts(
   db: D1Database,
-  ads: { id: string; name: string; adset_id: string | null; adset_name: string | null; campaign_name: string | null; concept_id: string | null }[],
+  ads: {
+    id: string;
+    name: string;
+    adset_id: string | null;
+    adset_name: string | null;
+    campaign_name: string | null;
+    concept_id: string | null;
+    asset_id: string | null;
+    created_time: string | null;
+  }[],
   settings: AttributionSettings,
 ) {
   const concepts = buildConcepts(
-    ads.map((a) => ({ id: a.id, name: a.name, adsetId: a.adset_id, adsetName: a.adset_name, campaignName: a.campaign_name })),
+    ads.map((a) => ({
+      id: a.id,
+      name: a.name,
+      adsetId: a.adset_id,
+      adsetName: a.adset_name,
+      campaignName: a.campaign_name,
+      assetId: a.asset_id,
+      createdTime: a.created_time,
+    })),
     settings,
   );
   const { results: stored } = await db

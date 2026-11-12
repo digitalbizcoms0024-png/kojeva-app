@@ -178,8 +178,9 @@ export function SwipePage({ meta, range, setRange }: { meta: MetaResponse; range
  * Cost Cap scaling one, not the graveyards. Matched as part of the campaign name, any case.
  */
 const CAMPAIGNS = {
-  pods: { label: "Internal Pod Testing + Cost Cap Scale", match: "Internal Pod | Testing,Cost Cap | Scale" },
-  testing: { label: "Internal Pod Testing only", match: "Internal Pod | Testing" },
+  // Pod testing is "CBO | Internal Pod | Testing" and, since Nov 12, "CBO | TOF Ads | Test".
+  pods: { label: "Pod testing + Cost Cap Scale", match: "Internal Pod | Testing,TOF Ads | Test,Cost Cap | Scale" },
+  testing: { label: "Pod testing only (Internal Pod, TOF Ads)", match: "Internal Pod | Testing,TOF Ads | Test" },
   bfcm: { label: "BFCM promo", match: "Promo | BFCM" },
   all: { label: "All campaigns", match: undefined },
 } as const;
