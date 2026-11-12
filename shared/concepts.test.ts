@@ -145,7 +145,7 @@ describe("ad sets with one concept per static", () => {
 });
 
 describe("re-tests in a new testing campaign (owner, Nov 12)", () => {
-  // A concept duplicated into "CBO | TOF Ads | Test" with the same ad set name and creatives.
+  // A concept duplicated into "CBO | TOF Ads | Test" with the same ad set name and creatives, originals turned off.
   const ad = (id: string, adsetId: string, adsetName: string, assetId: string, createdTime: string, campaignName = "CBO | Internal Pod | Testing") => ({
     id,
     name: id,
@@ -156,13 +156,22 @@ describe("re-tests in a new testing campaign (owner, Nov 12)", () => {
     createdTime,
   });
 
-  it("judges the re-test and drops the original", () => {
+  it("merges the re-test into the original concept, which keeps its id and ad set", () => {
     const concepts = buildConcepts([
       ad("a1", "s1", "Shameer | Video | Morning Puff", "v:1", "2026-10-20T00:00:00Z"),
       ad("a2", "s1", "Shameer | Video | Morning Puff", "v:2", "2026-10-20T00:00:00Z"),
       ad("b1", "s2", "Shameer | Video | Morning Puff", "v:1", "2026-11-12T05:00:00Z", "CBO | TOF Ads | Test"),
     ]);
-    expect(concepts.map((c) => [c.adsetId, c.adIds])).toEqual([["s2", ["b1"]]]);
+    expect(concepts.map((c) => [c.id, c.adsetId, c.adIds])).toEqual([["s1", "s1", ["a1", "a2", "b1"]]]);
+  });
+
+  it("chains a second re-test into the same original, in any pod", () => {
+    const concepts = buildConcepts([
+      ad("a1", "s1", "Ali | Static | Gift", "i:1", "2026-10-01T00:00:00Z"),
+      ad("b1", "s2", "Ali | Static | Gift", "i:1", "2026-11-12T00:00:00Z", "CBO | TOF Ads | Test"),
+      ad("c1", "s3", "Ali | Static | Gift", "i:1", "2026-11-20T00:00:00Z", "CBO | TOF Ads | Test"),
+    ]);
+    expect(concepts.map((c) => [c.id, c.adIds])).toEqual([["s1", ["a1", "b1", "c1"]]]);
   });
 
   it("keeps two concepts that only share a name, or have no creatives recorded", () => {

@@ -231,6 +231,8 @@ export interface ConceptResult {
   coPodId: string | null;
   label: string;
   adsetName: string;
+  /** Campaigns it was re-tested in (a duplicate ad set merged into it; see mergeRetests). */
+  retestedIn: string[];
   ads: number;
   firstSpend: string;
   /** First day any single ad in the concept had spent the minimum; null if none has. */

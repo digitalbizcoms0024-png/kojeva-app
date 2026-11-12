@@ -180,31 +180,47 @@ export function buildConcepts(ads: ConceptAd[], settings: AttributionSettings = 
     });
     if (unmatched.length) out.push({ id: `${adsetId}#rest`, adsetId, adsetName, label: `${label} (unsplit)`, podCode, partnerCode, adIds: unmatched });
   }
-  return dropRetested(out, ads);
+  return mergeRetests(out, ads);
 }
 
 /**
- * A concept re-tested in a new testing ad set (same pod, same name, a creative in common) is judged on
- * the newer ad set; the older one stops counting (owner, Nov 12: 8 Caicos videos duplicated into
- * "CBO | TOF Ads | Test"). The shared creative keeps two different concepts that happen to share a
- * name ("Statics") apart. Its old ads stay in the pod's spend, and every copy still counts toward the
- * winner tiers (copy totals go by creative).
+ * A concept re-tested in a new testing ad set (same pod, same name, a creative in common) is one concept
+ * with its original (owner, Nov 12: 8 Caicos videos duplicated into "CBO | TOF Ads | Test", originals
+ * turned off): the re-test's ads join the original's, which keeps its id, ad set and launch period, and
+ * it's judged as usual on everything they spent together. A verdict already reached stays, and the
+ * re-test can still make it a late hit. The shared creative keeps two concepts that only share a name
+ * ("Statics") apart; any pod, any testing campaign.
  */
-export function dropRetested(concepts: Concept[], ads: ConceptAd[]): Concept[] {
+export function mergeRetests(concepts: Concept[], ads: ConceptAd[]): Concept[] {
   const byId = new Map(ads.map((a) => [a.id, a]));
-  const info = concepts.map((c) => {
-    const list = c.adIds.map((id) => byId.get(id)).filter((a): a is ConceptAd => !!a);
-    const times = list.map((a) => a.createdTime).filter((t): t is string => !!t).sort();
-    return { c, key: `${c.podCode}|${c.label.toLowerCase().replace(/\s+/g, " ").trim()}`, launched: times[0] ?? null, assets: new Set(list.map((a) => a.assetId).filter((x): x is string => !!x)) };
-  });
-  const dropped = new Set<string>();
-  for (const a of info) {
-    const launched = a.launched;
-    if (!launched || a.assets.size === 0) continue;
-    const newer = info.some(
-      (b) => b !== a && b.key === a.key && b.launched != null && b.launched > launched && [...b.assets].some((x) => a.assets.has(x)),
-    );
-    if (newer) dropped.add(a.c.id);
+  const info = concepts
+    .map((c) => {
+      const list = c.adIds.map((id) => byId.get(id)).filter((a): a is ConceptAd => !!a);
+      const times = list.map((a) => a.createdTime).filter((t): t is string => !!t).sort();
+      return {
+        c,
+        key: `${c.podCode}|${c.label.toLowerCase().replace(/\s+/g, " ").trim()}`,
+        launched: times[0] ?? null,
+        assets: new Set(list.map((a) => a.assetId).filter((x): x is string => !!x)),
+      };
+    })
+    // Oldest first, so each re-test finds the concept it repeats; unknown launch dates stay as they are.
+    .sort((x, y) => (x.launched ?? "9999").localeCompare(y.launched ?? "9999"));
+  const kept: typeof info = [];
+  const merged = new Map<string, string[]>(); // original id → re-test ad ids
+  for (const x of info) {
+    const original =
+      x.launched && x.assets.size
+        ? kept.find((k) => k.key === x.key && k.launched != null && k.launched < x.launched! && [...x.assets].some((id) => k.assets.has(id)))
+        : undefined;
+    if (!original) {
+      kept.push(x);
+      continue;
+    }
+    merged.set(original.c.id, [...(merged.get(original.c.id) ?? []), ...x.c.adIds]);
+    for (const id of x.assets) original.assets.add(id);
   }
-  return dropped.size ? concepts.filter((c) => !dropped.has(c.id)) : concepts;
+  if (!merged.size) return concepts;
+  const keptIds = new Set(kept.map((k) => k.c.id));
+  return concepts.filter((c) => keptIds.has(c.id)).map((c) => (merged.has(c.id) ? { ...c, adIds: [...c.adIds, ...merged.get(c.id)!] } : c));
 }

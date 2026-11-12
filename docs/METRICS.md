@@ -32,10 +32,13 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   the day it qualified, whichever is later. A slow CBO concept that qualifies on day 6 is judged on
   days 1–6.
 - The concept is judged as a whole; single ads inside it are not judged on their own.
-- **Re-tests** (owner, Nov 12; `dropRetested` in `shared/concepts.ts`): a concept duplicated into a new
+- **Re-tests** (owner, Nov 12; `mergeRetests` in `shared/concepts.ts`): a concept duplicated into a new
   testing ad set with the same pod, the same name and at least one of the same creatives (8 Caicos videos
-  into "CBO | TOF Ads | Test") is judged on the newer ad set; the older one stops counting, so each video
-  counts once. Its old ads stay in the pod's spend, and all copies count toward the winner tiers.
+  into "CBO | TOF Ads | Test", originals turned off; works for any pod) is **one concept** with its
+  original: the re-test's ads join it, it keeps the original's id, ad set and launch period, and it's
+  judged as usual on everything both spent (no ad at $100 yet → judged when any ad of either reaches it).
+  A verdict already reached stays; the re-test can still make it a late hit. The concept card says
+  "Re-tested in <campaign>". Renaming the duplicate breaks the link (it becomes its own concept).
 - Status:
   - **testing**: the judging window hasn't passed yet
   - **No ad at $100** (`ineligible`): window passed and no ad has reached $100; not counted

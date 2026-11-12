@@ -289,10 +289,10 @@ async function computeConceptNumbers(db: D1Database): Promise<Record<string, Con
  */
 async function conceptLabels(db: D1Database): Promise<Row[]> {
   const [concepts, ads] = await Promise.all([
-    db.prepare("SELECT id, pod_id, co_pod_id, label, adset_name FROM concepts").all<Row>(),
+    db.prepare("SELECT id, pod_id, co_pod_id, label, adset_name, adset_id FROM concepts").all<Row>(),
     db
       .prepare(
-        `SELECT x.concept_id, x.name, t.status AS t_status, t.tags, t.awareness, t.belief_group, t.belief, t.persona_id,
+        `SELECT x.concept_id, x.name, x.adset_id AS x_adset_id, x.campaign_name AS x_campaign, t.status AS t_status, t.tags, t.awareness, t.belief_group, t.belief, t.persona_id,
            t.motivations AS t_motivations, s.motivations AS s_motivations,
            s.tags_source, s.angle, s.format, s.awareness AS s_awareness, s.belief_group AS s_belief, s.persona_id AS s_persona
          FROM ads x
@@ -314,8 +314,11 @@ async function conceptLabels(db: D1Database): Promise<Row[]> {
     const list = byConcept.get(String(c.id)) ?? [];
     const values = (key: string) => list.filter((ad) => ad[key] != null).map((ad) => ad[key]);
     const manual = (ad: Row) => ad.tags_source === "manual";
+    // A re-test merged into this concept (mergeRetests): its ads sit in another ad set.
+    const retested = [...new Set(list.filter((ad) => String(ad.x_adset_id) !== String(c.adset_id) && ad.x_campaign != null).map((ad) => String(ad.x_campaign)))];
     return {
       ...c,
+      retested_in: retested.length ? retested.join("\n") : null,
       ads: list.length,
       ad_names: joined(list.map((ad) => ad.name), "\n"),
       atria_tags: joined(list.filter((ad) => ad.t_status === "tagged").map((ad) => ad.tags), "\u001e"),
@@ -384,6 +387,7 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
       coPodId: r.co_pod_id == null ? null : String(r.co_pod_id),
       label: String(r.label),
       adsetName: String(r.adset_name),
+      retestedIn: r.retested_in == null ? [] : String(r.retested_in).split("\n"),
       ads: Number(r.ads),
       firstSpend,
       qualifiedOn,
