@@ -95,6 +95,12 @@ export function ConceptDrawer({
                 <PodChip podId={k.podId} coPodId={k.coPodId} />
                 <HitBadge status={k.status} stillRunning={k.stillRunning} tier={k.tier} />
                 <span className="text-xs text-ink-3">{k.adsetName}</span>
+                {k.retestedIn.length > 0 && (
+                  // A duplicate ad set merged into this concept (mergeRetests): its numbers count here.
+                  <span className="text-xs text-ink-2" title="A duplicate of this concept's ad set; its ads count in this concept">
+                    · Re-tested in {k.retestedIn.join(", ")}
+                  </span>
+                )}
               </div>
             )}
           </div>
