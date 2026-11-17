@@ -33,7 +33,8 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   days 1–6.
 - The concept is judged as a whole; single ads inside it are not judged on their own.
 - **Re-tests** (owner, Nov 12; `mergeRetests` in `shared/concepts.ts`): a concept duplicated into a new
-  testing ad set with the same pod, the same name and at least one of the same creatives (8 Caicos videos
+  testing ad set with the same pod, the same name (ignoring the " – Copy" Meta adds to a duplicate's name,
+  `retestKey`) and at least one of the same creatives (8 Caicos videos
   into "CBO | TOF Ads | Test", originals turned off; works for any pod) is **one concept** with its
   original: the re-test's ads join it, it keeps the original's id, ad set and launch period, and it's
   judged as usual on everything both spent (no ad at $100 yet → judged when any ad of either reaches it).
@@ -46,8 +47,10 @@ Totals for a post = sum over **all its copies** (every ad sharing the post ID).
   - **miss**: otherwise (including zero purchases)
 - **Turned off** (owner, Oct 28): once every ad in a concept is off (paused itself, by its ad set or
   campaign, archived or deleted; `OFF_STATUSES`), a concept still testing or with no ad at $100 is
-  judged at once on everything it spent, whatever it spent, from first spend to its last day of
-  spend (`judgeTurnedOff`, `turnedOff` in the API). Results already decided stay as they were. The
+  judged at once on everything it spent, from first spend to its last day of spend (`judgeTurnedOff`,
+  `turnedOff` in the API). **Under $100 in total it's a miss, never a hit** (owner, Nov 17:
+  "Caicos_016_UGC_MOF_GP – Copy" spent $6.76 on one ad with 1 purchase, was paused, and showed as a
+  hit); copies merged in count toward the $100. The CS report states this in its hit-rate line. Results already decided stay as they were. The
   on/off status is Meta's at the last sync. Deleting an ad set ends its test too (owner, Nov 7: ad sets are
   deleted from CBO | Internal Pod | Testing to stay under Meta's 200 ad set limit): Meta leaves deleted ads out
   of the ad list, so each sync marks a stored ad it no longer lists as DELETED (once; never when Meta lists

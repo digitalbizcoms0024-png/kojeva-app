@@ -285,12 +285,14 @@ export function hitStatus(windowTotals: Totals, state: { qualified: boolean; com
 export const OFF_STATUSES: readonly string[] = ["PAUSED", "ADSET_PAUSED", "CAMPAIGN_PAUSED", "ARCHIVED", "DELETED"];
 
 /**
- * Turning a concept off ends its test (owner, Oct 28): once every ad in it is off, a concept still
- * testing, or with no ad at `minTestSpend`, is judged at once on everything it spent, whatever it
- * spent. A result already decided (hit, miss) stays as it is.
+ * Turning a concept off ends its test (owner, Oct 28): once every ad in it (copies merged in
+ * included) is off, a concept still testing, or with no ad at `minTestSpend`, is judged at once. Under
+ * `minTestSpend` ($100) spent in total it's a miss, never a hit (owner, Nov 17: a $6.76 ad with 1
+ * purchase was a "hit"); from $100 it's judged on everything it spent. A result already decided stays.
  */
 export function judgeTurnedOff(status: HitStatus, allTime: Totals, t: Targets): HitStatus {
   if (status !== "testing" && status !== "ineligible") return status;
+  if (allTime.spendCents < t.minTestSpend * 100) return "miss";
   return meetsTargets(allTime, t) ? "hit" : "miss";
 }
 
