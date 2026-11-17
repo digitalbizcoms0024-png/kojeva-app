@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildConcepts, conceptLabel, partFor, splitParts, staticTitle } from "./concepts.ts";
+import { buildConcepts, conceptLabel, partFor, retestKey, splitParts, staticTitle } from "./concepts.ts";
 
 // Real ad sets and ads from the Kojeva account, Oct 2026.
 const ad = (id: string, name: string, adsetId: string, adsetName: string) => ({ id, name, adsetId, adsetName });
@@ -196,5 +196,31 @@ describe("re-tests in a new testing campaign (owner, Nov 12)", () => {
         ad("b1", "s2", "Ali | Video | Morning Puff", "v:1", "2026-11-12T00:00:00Z"),
       ]).map((c) => c.adsetId),
     ).toEqual(["s1", "s2"]);
+  });
+});
+
+describe("Meta's \" – Copy\" suffix on duplicated ad sets (owner, Nov 17)", () => {
+  const ad = (id: string, adsetId: string, adsetName: string, createdTime: string) => ({
+    id,
+    name: id,
+    adsetId,
+    adsetName,
+    campaignName: "CBO | Internal Pod | Testing",
+    assetId: "v:016",
+    createdTime,
+  });
+
+  it("merges a duplicate named \"… – Copy\" with its original", () => {
+    const concepts = buildConcepts([
+      ad("a1", "s1", "Shameer | UGC Iteration | Caicos_016_UGC_MOF_GP", "2026-11-04T00:00:00Z"),
+      ad("b1", "s2", "Shameer | UGC Iteration | Caicos_016_UGC_MOF_GP – Copy", "2026-11-13T00:00:00Z"),
+      ad("c1", "s3", "Shameer | UGC Iteration | Caicos_016_UGC_MOF_GP - Copy 2", "2026-11-15T00:00:00Z"),
+    ]);
+    expect(concepts.map((c) => [c.id, c.adIds])).toEqual([["s1", ["a1", "b1", "c1"]]]);
+  });
+
+  it("reads the name without the suffix", () => {
+    expect(retestKey("UGC Iteration | Caicos_016_UGC_MOF_GP – Copy")).toBe("ugc iteration | caicos_016_ugc_mof_gp");
+    expect(retestKey("Copywriting Test")).toBe("copywriting test");
   });
 });

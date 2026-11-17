@@ -322,4 +322,11 @@ describe("judgeTurnedOff", () => {
     expect(judgeTurnedOff("miss", t(110, 10), DEFAULT_TARGETS)).toBe("miss");
     expect(judgeTurnedOff("hit", t(500, 1), DEFAULT_TARGETS)).toBe("hit");
   });
+
+  it("makes a concept turned off under $100 in total a miss, however it did (owner, Nov 17)", () => {
+    // Caicos_016_UGC_MOF_GP – Copy: one ad, $6.76, 1 purchase, paused.
+    expect(judgeTurnedOff("ineligible", { ...ZERO_TOTALS, spendCents: 676, purchases: 1, revenueCents: 3594 }, DEFAULT_TARGETS)).toBe("miss");
+    expect(judgeTurnedOff("testing", t(90, 10), DEFAULT_TARGETS)).toBe("miss");
+    expect(judgeTurnedOff("testing", t(100, 10), DEFAULT_TARGETS)).toBe("hit");
+  });
 });

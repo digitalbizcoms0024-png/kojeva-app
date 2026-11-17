@@ -88,7 +88,7 @@ export function reportBlocks(d: ReportData, text: ReportText | null, podNames: M
       kind: "p",
       parts: [
         { b: "Hit rate" },
-        ` = share of eligible concepts that reach target in their test window: CPA ≤ $${t.targetCpa} ${t.hitRule === "both" ? "and" : "or"} ROAS ≥ ${t.targetRoas}. A concept becomes eligible once one of its ads has spent $${t.minTestSpend}, and counts in the period it launched. Late hits and hits by call count.`,
+        ` = share of eligible concepts that reach target in their test window: CPA ≤ $${t.targetCpa} ${t.hitRule === "both" ? "and" : "or"} ROAS ≥ ${t.targetRoas}. A concept becomes eligible once one of its ads has spent $${t.minTestSpend}, and counts in the period it launched; one turned off before spending $${t.minTestSpend} in total (its copies included) is a miss, never a hit. Late hits and hits by call count.`,
       ],
     },
   ];

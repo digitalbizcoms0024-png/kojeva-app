@@ -191,6 +191,19 @@ export function buildConcepts(ads: ConceptAd[], settings: AttributionSettings = 
  * re-test can still make it a late hit. The shared creative keeps two concepts that only share a name
  * ("Statics") apart; any pod, any testing campaign.
  */
+/**
+ * A concept's name for matching re-tests: any case and spacing, without the " – Copy" (or "- Copy",
+ * "Copy 2") Meta adds to a duplicated ad set's name (owner, Nov 17: "Caicos_016_UGC_MOF_GP – Copy").
+ */
+export function retestKey(label: string): string {
+  let s = label.toLowerCase().replace(/\s+/g, " ").trim();
+  for (let prev = ""; prev !== s; ) {
+    prev = s;
+    s = s.replace(/\s*[–—-]?\s*copy(?:\s*\d+)?$/, "").trim();
+  }
+  return s;
+}
+
 export function mergeRetests(concepts: Concept[], ads: ConceptAd[]): Concept[] {
   const byId = new Map(ads.map((a) => [a.id, a]));
   const info = concepts
@@ -199,7 +212,7 @@ export function mergeRetests(concepts: Concept[], ads: ConceptAd[]): Concept[] {
       const times = list.map((a) => a.createdTime).filter((t): t is string => !!t).sort();
       return {
         c,
-        key: `${c.podCode}|${c.label.toLowerCase().replace(/\s+/g, " ").trim()}`,
+        key: `${c.podCode}|${retestKey(c.label)}`,
         launched: times[0] ?? null,
         assets: new Set(list.map((a) => a.assetId).filter((x): x is string => !!x)),
       };
