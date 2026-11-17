@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { POD_TEST_CAMPAIGNS_PARAM } from "../../shared/campaigns.ts";
 import type { MetaResponse, PostDetail, PostSummary, RankingsResponse } from "../../shared/api.ts";
 import { cpa, ctr, dailyFrequency, funnelBand, roas, type Targets } from "../../shared/metrics.ts";
 import { qs, useApi } from "../api.ts";
@@ -178,9 +179,9 @@ export function SwipePage({ meta, range, setRange }: { meta: MetaResponse; range
  * Cost Cap scaling one, not the graveyards. Matched as part of the campaign name, any case.
  */
 const CAMPAIGNS = {
-  // Pod testing is "CBO | Internal Pod | Testing" and, since Nov 12, "CBO | TOF Ads | Test".
-  pods: { label: "Pod testing + Cost Cap Scale", match: "Internal Pod | Testing,TOF Ads | Test,Cost Cap | Scale" },
-  testing: { label: "Pod testing only (Internal Pod, TOF Ads)", match: "Internal Pod | Testing,TOF Ads | Test" },
+  // Pod testing: Internal Pod Testing #1 and #2, TOF Ads (shared/campaigns.ts).
+  pods: { label: "Pod testing + Cost Cap Scale", match: `${POD_TEST_CAMPAIGNS_PARAM},Cost Cap | Scale` },
+  testing: { label: "Pod testing only (Internal Pod #1, #2, TOF Ads)", match: POD_TEST_CAMPAIGNS_PARAM },
   bfcm: { label: "BFCM promo", match: "Promo | BFCM" },
   all: { label: "All campaigns", match: undefined },
 } as const;
