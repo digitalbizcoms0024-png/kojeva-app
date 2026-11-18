@@ -31,6 +31,8 @@ re-credits every ad except hand-set ones.
 - **Strategists** (per pod, migration 0028): a pod run by several strategists lists them and names one
   in each ad set ("POD0 | Andrei | Depuff Static"). Each gets their own hit
   rate on the Pods page and in the CS report (`shared/strategists.ts`); the pod's own numbers don't change.
+  The Pods page shows this split only for a pod with two or more strategists (owner, Nov 18): one-person
+  pods (Pod 0 - Andrei, Pod 1 - Reika, Pod 2 - Adrian) keep their member for crediting but show no split.
 
 First match wins:
 1. **Set by hand** in the app. Never overwritten by a sync.

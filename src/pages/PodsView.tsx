@@ -238,8 +238,10 @@ export function PodsPage({ meta, range, setRange }: { meta: MetaResponse; range:
             onOpenHits={(podId) => openDrill({ title: `${podById(podId)?.name ?? "Agency"} · hits`, range, filter: { pod: podId, result: "hits" } })}
           />
         )}
+        {/* Only for a pod several strategists share: a one-person pod's split just repeats its own numbers
+            (owner, Nov 18, after POD 0 was split into one pod per person). */}
         {meta.pods
-          .filter((p) => p.members.length > 0)
+          .filter((p) => p.members.length > 1)
           .map((p) => (
             <StrategistSplit key={p.id} podId={p.id} members={p.members} concepts={(concepts.data?.rows ?? []).filter((k) => k.podId === p.id)} targets={t} />
           ))}
