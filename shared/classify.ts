@@ -39,9 +39,9 @@ const FORMAT_RULES: [Format, RegExp][] = [
   ["MixedMedia", /mixed media/],
   ["UGC", /\bugc\b/],
   ["VSL", /\bvsl\b/],
-  // A listicle-style image named as a static is a static ("Adrian | Static | Listicle Statics", owner Nov 18).
-  ["Static", /\bstatics?\b.*\blisticle|\blisticle.*\bstatics?\b/],
-  ["Native", /native ad|advertorial|listicle/],
+  // Native only when the ad set (or concept) name says "Native" (owner, Nov 18): "listicle" or
+  // "advertorial" alone don't make it one ("Adrian | Static | Listicle Statics" is a static).
+  ["Native", /\bnative\b/],
   ["Podcast", /podcast/],
   ["Interview", /interview/],
   ["Animation", /\banim|pixar/],
@@ -69,6 +69,7 @@ export function classify(texts: { label?: string | null; adset?: string | null; 
   const ordered = [texts.label, texts.adset, ...(texts.ads ?? [])];
   return {
     angle: first(ANGLE_RULES, ordered) as string | null,
-    format: (first(FORMAT_RULES, [texts.label, texts.adset]) ?? first(FORMAT_RULES, texts.ads ?? [])) as string | null,
+    // Ad names never make a concept Native: only its ad set name can (owner, Nov 18).
+    format: (first(FORMAT_RULES, [texts.label, texts.adset]) ?? first(FORMAT_RULES.filter(([v]) => v !== "Native"), texts.ads ?? [])) as string | null,
   };
 }
