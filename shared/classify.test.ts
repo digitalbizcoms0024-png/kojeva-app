@@ -10,7 +10,10 @@ describe("classify", () => {
     ["KOJEVA 3 | STATIC | Social Proof", "SocialProof", "Static"],
     ["KOJEVA 3 | STATIC | Problem Aware", "ProblemAware", "Static"],
     ["KOJEVA 3 | STATIC | Simple Routine", "Routine", "Static"],
-    ["KOJEVA 3 | STATIC | Advertorial", null, "Native"],
+    ["KOJEVA 3 | STATIC | Advertorial", null, "Static"],
+    // Native only when the name says "Native" (owner, Nov 18): Pod 2 - Adrian's listicle statics are statics.
+    ["Static | Listicle Statics", null, "Static"],
+    ["Native Ad | Where did my face go?", null, "Native"],
     ["KOJEVA 7 | UGC Funeral Story", null, "UGC"],
     ["KOJEVA 2 | Yapper Founder Led", "Founder", null],
     ["KOJEVA 6 | AUTHORITY VSL", "Authority", "VSL"],
