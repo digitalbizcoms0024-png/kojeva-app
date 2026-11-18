@@ -39,6 +39,8 @@ const FORMAT_RULES: [Format, RegExp][] = [
   ["MixedMedia", /mixed media/],
   ["UGC", /\bugc\b/],
   ["VSL", /\bvsl\b/],
+  // A listicle-style image named as a static is a static ("Adrian | Static | Listicle Statics", owner Nov 18).
+  ["Static", /\bstatics?\b.*\blisticle|\blisticle.*\bstatics?\b/],
   ["Native", /native ad|advertorial|listicle/],
   ["Podcast", /podcast/],
   ["Interview", /interview/],

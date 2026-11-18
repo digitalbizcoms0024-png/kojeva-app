@@ -11,6 +11,9 @@ describe("classify", () => {
     ["KOJEVA 3 | STATIC | Problem Aware", "ProblemAware", "Static"],
     ["KOJEVA 3 | STATIC | Simple Routine", "Routine", "Static"],
     ["KOJEVA 3 | STATIC | Advertorial", null, "Native"],
+    // A listicle-style image named as a static (Pod 2 - Adrian's hit, Nov 2026); a listicle alone stays Native.
+    ["Static | Listicle Statics", null, "Static"],
+    ["Native Ad | Where did my face go?", null, "Native"],
     ["KOJEVA 7 | UGC Funeral Story", null, "UGC"],
     ["KOJEVA 2 | Yapper Founder Led", "Founder", null],
     ["KOJEVA 6 | AUTHORITY VSL", "Authority", "VSL"],
