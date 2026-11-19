@@ -2,6 +2,7 @@
 import { bumpStats } from "../cache.ts";
 import { loadAddedPods } from "../pods.ts";
 import { attributePod, DEFAULT_ATTRIBUTION, detectPodsStart, type AttributionSettings } from "../../shared/attribution.ts";
+import { isNativeTestCampaign } from "../../shared/campaigns.ts";
 import { classify } from "../../shared/classify.ts";
 import { buildConcepts } from "../../shared/concepts.ts";
 import { parseAdName } from "../../shared/naming.ts";
@@ -388,7 +389,9 @@ export async function attribute(db: D1Database) {
     const origin = [...list].sort((a, b) => (a.created_time ?? "").localeCompare(b.created_time ?? ""))[0]!;
     const parsed = parseAdName(origin.name);
     // Ad names rarely carry tags; the testing ad set's name usually does ("… | STATIC | Scarcity").
-    const guess = classify({ adset: origin.adset_name, ads: [origin.name] });
+    // A copy of the post in the natives-only testing campaign makes it Native (Testing #3, Nov 19).
+    const campaign = list.find((a) => isNativeTestCampaign(a.campaign_name))?.campaign_name ?? origin.campaign_name;
+    const guess = classify({ adset: origin.adset_name, ads: [origin.name], campaign });
     const tags = { ...parsed, angle: parsed.angle ?? guess.angle, format: parsed.format ?? guess.format };
     const old = oldAssign.get(postId);
     const keepPod = old?.pod_source === "manual";

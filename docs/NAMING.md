@@ -31,6 +31,8 @@ re-credits every ad except hand-set ones.
 - **Strategists** (per pod, migration 0028): a pod run by several strategists lists them and names one
   in each ad set ("POD0 | Andrei | Depuff Static"). Each gets their own hit
   rate on the Pods page and in the CS report (`shared/strategists.ts`); the pod's own numbers don't change.
+  The Pods page shows this split only for a pod with two or more strategists (owner, Nov 18): one-person
+  pods (Pod 0 - Andrei, Pod 1 - Reika, Pod 2 - Adrian) keep their member for crediting but show no split.
 
 First match wins:
 1. **Set by hand** in the app. Never overwritten by a sync.
@@ -92,7 +94,7 @@ using the real name) as naming evolves. Hand-set tags always win.
 
 Format words the rules know: Static, UGC static, UGC, AI UGC, AI voiceover / B-roll, UGC montage, AI drama,
 Song, Pixar song ("ANIMSONG", or Pixar / animation together with "song"), Product demo, Mixed media, VSL,
-Video, Native (only when the ad set name says "Native"; "listicle" or "advertorial" alone don't count, owner Nov 18), Podcast, Interview, Animation (or "Pixar", without a song), Carousel. What each means is in `FORMAT_DEFINITIONS` (`shared/taxonomy.ts`), the media buyer's
+Video, Native (only when the ad set name says "Native"; "listicle" or "advertorial" alone don't count, owner Nov 18; and everything in the natives-only "CBO | Internal Pod | Testing #3", whatever its names, owner Nov 19), Podcast, Interview, Animation (or "Pixar", without a song), Carousel. What each means is in `FORMAT_DEFINITIONS` (`shared/taxonomy.ts`), the media buyer's
 definitions; the nightly Atria task suggests a format from the ad's frames and Atria's tags (a suggestion
 only, accepted in Needs Tagging). Put one in the ad set name
 ("Dhia | AI UGC | Problem Vs Solution 2") and the concept is tagged without anyone doing it by hand.

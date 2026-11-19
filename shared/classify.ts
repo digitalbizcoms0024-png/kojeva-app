@@ -1,5 +1,6 @@
 // Reads angle and format from free-text names (concept labels, ad set and ad names).
 // A best guess: hand-set tags always win. Add keywords here as naming evolves.
+import { isNativeTestCampaign } from "./campaigns.ts";
 import type { ANGLES, FORMATS } from "./taxonomy.ts";
 
 type Angle = keyof typeof ANGLES;
@@ -63,13 +64,14 @@ function first<T>(rules: [T, RegExp][], texts: (string | null | undefined)[]): T
 
 /**
  * Angle and format from the most specific text first: the concept label, then the ad set
- * name, then ad names. Static ads named "ST _ <angle> _ …" put their angle up front.
+ * name, then ad names. Static ads named "ST _ <angle> _ …" put their angle up front. Everything in the
+ * natives-only testing campaign ("CBO | Internal Pod | Testing #3") is Native.
  */
-export function classify(texts: { label?: string | null; adset?: string | null; ads?: (string | null)[] }) {
+export function classify(texts: { label?: string | null; adset?: string | null; ads?: (string | null)[]; campaign?: string | null }) {
   const ordered = [texts.label, texts.adset, ...(texts.ads ?? [])];
   return {
     angle: first(ANGLE_RULES, ordered) as string | null,
     // Ad names never make a concept Native: only its ad set name can (owner, Nov 18).
-    format: (first(FORMAT_RULES, [texts.label, texts.adset]) ?? first(FORMAT_RULES.filter(([v]) => v !== "Native"), texts.ads ?? [])) as string | null,
+    format: (isNativeTestCampaign(texts.campaign) ? "Native" : null) ?? (first(FORMAT_RULES, [texts.label, texts.adset]) ?? first(FORMAT_RULES.filter(([v]) => v !== "Native"), texts.ads ?? [])) as string | null,
   };
 }

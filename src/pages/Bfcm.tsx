@@ -205,6 +205,8 @@ function Rankings({ rows, sort, setSort, t, viewLabel }: { rows: Row[]; sort: So
       if (vb == null) return -1;
       return vb - va || b.totals.spendCents - a.totals.spendCents;
     });
+  // Every row's ROAS bars on the same promo days, so a day sits in the same place in each row.
+  const dates = [...new Set(list.flatMap((r) => r.daily.map((d) => d.date)))].sort();
   const head = (label: string, key: Sort | null, cls = "") =>
     key ? (
       <th className={`py-2 pr-3 text-right font-normal ${cls}`}>
@@ -236,8 +238,12 @@ function Rankings({ rows, sort, setSort, t, viewLabel }: { rows: Row[]; sort: So
                 {head("CPM", null)}
                 {head("Outbound CPC", null)}
                 {head("Cost / ATC", null)}
-                {head("Daily freq.", null)}
-                <th className="py-2 font-normal">ROAS by day</th>
+                <th className="w-px whitespace-nowrap py-2 pr-3 font-normal">
+                  <span className="inline-grid grid-cols-[2.5rem_3.75rem] gap-x-2">
+                    <span className="col-span-2 text-left">Daily freq.</span>
+                  </span>
+                </th>
+                <th className="py-2 pl-2 font-normal">ROAS by day</th>
               </tr>
             </thead>
             <tbody>
@@ -275,11 +281,11 @@ function Rankings({ rows, sort, setSort, t, viewLabel }: { rows: Row[]; sort: So
                     <td className="num py-2 pr-3 text-right text-ink">{dollars(s.impressions > 0 ? s.spendCents / 100 / (s.impressions / 1000) : null)}</td>
                     <td className="num py-2 pr-3 text-right text-ink">{dollars(per(s.outboundClicks))}</td>
                     <td className="num py-2 pr-3 text-right text-ink">{dollars(per(s.addToCart))}</td>
-                    <td className="py-2 pr-3 text-right text-ink">
-                      <FrequencyValue totals={s} targets={t} short />
+                    <td className="py-2 pr-3 text-ink">
+                      <FrequencyValue totals={s} targets={t} short column />
                     </td>
-                    <td className="py-2">
-                      <RoasBars days={r.daily} target={t.targetRoas} />
+                    <td className="py-2 pl-2 align-middle">
+                      <RoasBars days={r.daily} dates={dates} target={t.targetRoas} />
                     </td>
                   </tr>
                 );
@@ -292,15 +298,20 @@ function Rankings({ rows, sort, setSort, t, viewLabel }: { rows: Row[]; sort: So
   );
 }
 
-/** Each promo day's ROAS as a thin bar, with the target as a line (hover a bar for the day). */
-function RoasBars({ days, target }: { days: BfcmDay[]; target: number }) {
-  const vals = days.map((d) => ({ date: d.date, r: roas(d) }));
-  if (vals.length === 0) return <span className="text-ink-3">—</span>;
+/**
+ * Each promo day's ROAS as a thin bar, with the target as a line (hover a bar for the day). `dates` are the
+ * days of the whole table, so every row has the same width and each day the same place; a day the ad
+ * didn't spend is left empty.
+ */
+function RoasBars({ days, dates, target }: { days: BfcmDay[]; dates: string[]; target: number }) {
+  const byDate = new Map(days.map((d) => [d.date, roas(d)]));
+  const vals = dates.map((date) => ({ date, r: byDate.get(date) ?? null }));
+  if (days.length === 0) return <span className="text-ink-3">—</span>;
   const max = Math.max(target * 1.5, ...vals.map((v) => v.r ?? 0));
   const H = 28;
   const W = Math.max(40, vals.length * 6);
   return (
-    <svg width={W} height={H} role="img" aria-label="ROAS by day">
+    <svg width={W} height={H} role="img" aria-label="ROAS by day" className="block">
       <line x1={0} x2={W} y1={H - (target / max) * H} y2={H - (target / max) * H} stroke="var(--ink-3)" strokeDasharray="2 2" strokeWidth={1} />
       {vals.map((v, i) => {
         const h = v.r == null ? 0 : Math.max(1, (v.r / max) * H);

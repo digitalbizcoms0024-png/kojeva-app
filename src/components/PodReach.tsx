@@ -21,9 +21,18 @@ export function freqText(f: number | null): string {
 }
 
 /** An ad's or pod's average daily frequency and the funnel band it falls in (Settings → Targets). */
-export function FrequencyValue({ totals, targets, short = false }: { totals: Totals; targets: Targets; short?: boolean }) {
+export function FrequencyValue({ totals, targets, short = false, column = false }: { totals: Totals; targets: Targets; short?: boolean; column?: boolean }) {
   const f = dailyFrequency(totals);
   const band = funnelBand(f, targets);
+  // In a table column: the number right-aligned in its own slot and the tag in a fixed slot after it,
+  // so numbers and squares line up from row to row whatever the band's word.
+  if (column)
+    return (
+      <span className="inline-grid grid-cols-[2.5rem_3.75rem] items-center gap-x-2 text-left">
+        <span className="num text-right">{freqText(f)}</span>
+        <span>{band && <FunnelTag band={band} short={short} />}</span>
+      </span>
+    );
   return (
     <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
       <span className="num">{freqText(f)}</span>
