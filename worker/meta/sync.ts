@@ -388,7 +388,7 @@ export async function attribute(db: D1Database) {
     const origin = [...list].sort((a, b) => (a.created_time ?? "").localeCompare(b.created_time ?? ""))[0]!;
     const parsed = parseAdName(origin.name);
     // Ad names rarely carry tags; the testing ad set's name usually does ("… | STATIC | Scarcity").
-    const guess = classify({ adset: origin.adset_name, ads: [origin.name] });
+    const guess = classify({ adset: origin.adset_name, ads: [origin.name], campaign: origin.campaign_name });
     const tags = { ...parsed, angle: parsed.angle ?? guess.angle, format: parsed.format ?? guess.format };
     const old = oldAssign.get(postId);
     const keepPod = old?.pod_source === "manual";

@@ -3,6 +3,7 @@
 // source, so any edit to it counts), its constants and the pods table; it's stored in settings.
 // attribute() writes only rows whose pod, tags or concept changed.
 import { attributePod, DEFAULT_ATTRIBUTION, podFromAdSetName, podsFromAdSetName } from "../shared/attribution.ts";
+import { NATIVE_TEST_CAMPAIGNS, isNativeTestCampaign } from "../shared/campaigns.ts";
 import { classify } from "../shared/classify.ts";
 import { buildConcepts, mergeRetests, retestKey, isPromoCampaign, ONE_CONCEPT_PER_AD, staticTitle } from "../shared/concepts.ts";
 import { hitStatus, judgeTurnedOff, judgingWindowEnd, OFF_STATUSES } from "../shared/metrics.ts";
@@ -14,10 +15,10 @@ import { loadAddedPods } from "./pods.ts";
 
 // The judging rules too (hitStatus, judgeTurnedOff): their results are cached per sync, so a deploy
 // that changes them must recompute (bumpStats below) without waiting for a sync.
-const CODE = [attributePod, podFromAdSetName, podsFromAdSetName, buildConcepts, mergeRetests, retestKey, isPromoCampaign, staticTitle, classify, parseAdName, hitStatus, judgeTurnedOff, judgingWindowEnd]
+const CODE = [attributePod, podFromAdSetName, podsFromAdSetName, buildConcepts, mergeRetests, retestKey, isPromoCampaign, staticTitle, classify, isNativeTestCampaign, parseAdName, hitStatus, judgeTurnedOff, judgingWindowEnd]
   .map((f) => f.toString())
   .join("\n");
-const CONSTANTS = JSON.stringify([PODS, DEFAULT_ATTRIBUTION, [...ONE_CONCEPT_PER_AD], OFF_STATUSES]);
+const CONSTANTS = JSON.stringify([PODS, DEFAULT_ATTRIBUTION, [...ONE_CONCEPT_PER_AD], OFF_STATUSES, NATIVE_TEST_CAMPAIGNS]);
 
 /** FNV-1a, enough to tell two rule sets apart. */
 function hash(s: string): string {

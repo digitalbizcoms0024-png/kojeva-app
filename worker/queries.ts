@@ -319,6 +319,8 @@ async function conceptLabels(db: D1Database): Promise<Row[]> {
     return {
       ...c,
       retested_in: retested.length ? retested.join("\n") : null,
+      // The campaign of the concept's own ad set (not a re-test's).
+      campaign_name: list.find((ad) => String(ad.x_adset_id) === String(c.adset_id) && ad.x_campaign != null)?.x_campaign ?? null,
       ads: list.length,
       ad_names: joined(list.map((ad) => ad.name), "\n"),
       atria_tags: joined(list.filter((ad) => ad.t_status === "tagged").map((ad) => ad.tags), "\u001e"),
@@ -368,6 +370,7 @@ async function computeConcepts(db: D1Database): Promise<ConceptResult[]> {
       label: String(r.label),
       adset: String(r.adset_name),
       ads: r.ad_names == null ? [] : String(r.ad_names).split("\n"),
+      campaign: r.campaign_name == null ? null : String(r.campaign_name),
     });
     const manualAngle = r.manual_angle == null ? null : String(r.manual_angle);
     const manualFormat = r.manual_format == null ? null : String(r.manual_format);

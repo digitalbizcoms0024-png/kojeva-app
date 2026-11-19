@@ -60,3 +60,14 @@ describe("classify", () => {
     expect(classify({ label: "R2-S12 | Statics", ads: ["V457 | CBO"] })).toEqual({ angle: null, format: "Static" });
   });
 });
+
+describe("the natives-only testing campaign (owner, Nov 19)", () => {
+  it("makes everything in CBO | Internal Pod | Testing #3 Native, whatever the names say", () => {
+    expect(classify({ adset: "Adrian | Static | Listicle Statics", ads: ["ugc video 1"], campaign: "CBO | Internal Pod | Testing #3" }).format).toBe("Native");
+    expect(classify({ label: "Morning Puff", adset: "Shameer | Morning Puff", campaign: "CBO | Internal Pod | Testing #3" }).format).toBe("Native");
+  });
+
+  it("leaves the other testing campaigns to the names", () => {
+    expect(classify({ adset: "Adrian | Static | Listicle Statics", campaign: "CBO | Internal Pod | Testing #2" }).format).toBe("Static");
+  });
+});
