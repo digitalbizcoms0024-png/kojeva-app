@@ -19,6 +19,8 @@ describe("the natives-only testing campaign (owner, Nov 19)", () => {
   it("is Testing #3 only, any case", () => {
     expect(isNativeTestCampaign("CBO | Internal Pod | Testing #3")).toBe(true);
     expect(isNativeTestCampaign("cbo | internal pod | testing #3")).toBe(true);
+    expect(isNativeTestCampaign("CBO | Internal Pod | Testing #3 (Native Ads)")).toBe(true); // the real name
+
     for (const name of ["CBO | Internal Pod | Testing", "CBO | Internal Pod | Testing #2", "CBO | Internal Pod | Testing #30", "CBO | TOF Ads | Test", null])
       expect(isNativeTestCampaign(name)).toBe(false);
   });
