@@ -4,6 +4,7 @@ import { cpa, roas, type Totals } from "../../shared/metrics.ts";
 import { ANGLES, AWARENESS, FORMATS, MOTIVATIONS } from "../../shared/taxonomy.ts";
 import { useApi } from "../api.ts";
 import { dollars, int, money, ratio, shortDate } from "../format.ts";
+import { PostDetailPanel } from "../pages/Rankings.tsx";
 import { PlayableThumb } from "./AdPreview.tsx";
 import { WinnerCall } from "./WinnerCall.tsx";
 import { DailyCharts } from "./DailyCharts.tsx";
@@ -61,13 +62,19 @@ export function ConceptDrawer({
   const [reload, setReload] = useState(0);
   const { data, error } = useApi<ConceptDetail>(`/api/concepts/${encodeURIComponent(conceptId)}${reload ? `?r=${reload}` : ""}`);
   const panel = useRef<HTMLDivElement>(null);
+  // An ad's full card (every copy, performance, Gemini analysis) opens over the concept (owner, Nov 20).
+  const [adPost, setAdPost] = useState<string | null>(null);
+  const openAd = (postId: string) => {
+    setAdPost(postId);
+    panel.current?.scrollTo({ top: 0 });
+  };
   useLockBodyScroll();
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && (back ? back.onBack() : onClose());
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && (adPost ? setAdPost(null) : back ? back.onBack() : onClose());
     window.addEventListener("keydown", onKey);
     panel.current?.focus();
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, back]);
+  }, [onClose, back, adPost]);
 
   const k = data?.concept;
   const t = meta.targets;
@@ -80,6 +87,15 @@ export function ConceptDrawer({
       <button className="absolute inset-0 bg-black/40" aria-label="Close" onClick={onClose} />
       <div ref={panel} tabIndex={-1} className="slide-in drawer-scroll relative flex h-full w-full max-w-[640px] flex-col overflow-y-auto bg-page shadow-xl outline-none">
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b-2 border-divider bg-page px-5 py-4">
+          {adPost ? (
+            <div className="min-w-0">
+              <button type="button" onClick={() => setAdPost(null)} className="link mb-1 block max-w-full truncate text-left text-sm" title={k?.label}>
+                ← Back to {k?.label ?? "concept"}
+              </button>
+              <div className="kicker">Ad</div>
+              <h2 className="text-xl font-extrabold text-ink">Ad details</h2>
+            </div>
+          ) : (
           <div className="min-w-0">
             {back && (
               <button type="button" onClick={back.onBack} className="link mb-1 block max-w-full truncate text-left text-sm" title={back.label}>
@@ -104,13 +120,19 @@ export function ConceptDrawer({
               </div>
             )}
           </div>
+          )}
           <button onClick={onClose} className="btn btn-secondary shrink-0" aria-label="Close concept">
             ✕
           </button>
         </div>
 
-        {error && <p className="px-5 py-6 text-sm text-ink-3">Couldn't load this concept: {error.message}</p>}
-        {k && data && (
+        {adPost && (
+          <div className="px-5 py-5">
+            <PostDetailPanel postId={adPost} range="all" targets={t} canEdit={meta.canEdit} />
+          </div>
+        )}
+        {!adPost && error && <p className="px-5 py-6 text-sm text-ink-3">Couldn't load this concept: {error.message}</p>}
+        {!adPost && k && data && (
           <div className="flex flex-col gap-6 px-5 py-5">
             {top && (
               <div className="flex gap-4">
@@ -122,14 +144,15 @@ export function ConceptDrawer({
                   url={top.thumbnailUrl}
                   className="h-48 w-36 shrink-0"
                 />
-                <a href={`#/rankings?post=${encodeURIComponent(top.postId)}`} className="min-w-0 text-sm text-ink-2 hover:underline" title="Open the ad">
+                <button type="button" onClick={() => openAd(top.postId)} className="min-w-0 self-start text-left text-sm text-ink-2 hover:underline" title="Open the ad">
                   <div className="font-bold text-ink">{top.name}</div>
                   <div className="mt-1">
                     {k.ads} {k.ads === 1 ? "ad" : "ads"} · first spend {shortDate(k.firstSpend)}
                     {k.lastSpend && ` · last spend ${shortDate(k.lastSpend)}`}
                   </div>
                   <div className="mt-1">{money(k.allTime.spendCents)} spent since launch</div>
-                </a>
+                  <div className="link mt-2">Open the ad card →</div>
+                </button>
               </div>
             )}
 
@@ -195,7 +218,7 @@ export function ConceptDrawer({
               <ul className="flex flex-col">
                 {data.ads.map((a) => (
                   <li key={a.adId} className="border-b border-divider py-2.5">
-                    <a href={`#/rankings?post=${encodeURIComponent(a.postId)}`} className="flex items-center gap-3 hover:underline">
+                    <button type="button" onClick={() => openAd(a.postId)} className="flex w-full items-center gap-3 text-left hover:underline">
                       <Thumb mediaType={a.mediaType} label="" url={a.thumbnailUrl} className="h-14 w-11 shrink-0" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-semibold text-ink" title={a.name}>
@@ -207,7 +230,7 @@ export function ConceptDrawer({
                           {ratio(roas(a.allTime))}
                         </span>
                       </span>
-                    </a>
+                    </button>
                   </li>
                 ))}
               </ul>
