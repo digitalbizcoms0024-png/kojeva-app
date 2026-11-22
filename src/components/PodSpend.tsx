@@ -10,15 +10,21 @@ import { CpaValue, CsvButton, PodChip, RoasValue, SectionTitle, Segmented } from
 /** A row's spend not also counted in another row: a partner's share of a pod's ad set is the pod's in bars and totals. */
 const ownSpend = (r: PodRow) => r.totals.spendCents - (r.sharedCents ?? 0);
 
-// Built-in pods, added pods, the agency, then unassigned.
-const order = (r: PodRow) => {
-  const i = r.podId ? GROUPS.findIndex((g) => g.id === r.podId) : -1;
-  return i < 0 ? GROUPS.length : i;
-};
+// Pods first, then the agency, then unassigned spend.
+const KIND_ORDER: Record<PodRow["kind"], number> = { pod: 0, agency: 1, unassigned: 2 };
 
-/** Pods, the agency and unassigned spend for the selected range, in a fixed order. */
+/**
+ * Pods ranked by spend, highest first (owner, Nov 20), then the agency and unassigned spend. Ties keep
+ * the usual pod order.
+ */
 function rowsOf(data: PodsResponse | null): PodRow[] {
-  return (data?.rows ?? []).filter((r) => r.kind !== "unassigned" || r.totals.spendCents > 0).sort((a, b) => order(a) - order(b));
+  const at = (r: PodRow) => {
+    const i = r.podId ? GROUPS.findIndex((g) => g.id === r.podId) : -1;
+    return i < 0 ? GROUPS.length : i;
+  };
+  return (data?.rows ?? [])
+    .filter((r) => r.kind !== "unassigned" || r.totals.spendCents > 0)
+    .sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || ownSpend(b) - ownSpend(a) || at(a) - at(b));
 }
 
 function Change({ now, before }: { now: number; before: number | undefined }) {

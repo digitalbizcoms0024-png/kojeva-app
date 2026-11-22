@@ -675,7 +675,7 @@ const ATRIA_FIELDS = [
   ["key_message", "Key message"],
 ] as const;
 
-function PostDetailPanel({ postId, range, targets, canEdit }: { postId: string; range: Range; targets: Targets; canEdit: boolean }) {
+export function PostDetailPanel({ postId, range, targets, canEdit }: { postId: string; range: Range; targets: Targets; canEdit: boolean }) {
   const { data, error } = useApi<PostDetail>(`/api/posts/${encodeURIComponent(postId)}?${qs({ range })}`);
   // Analyze with Gemini sits at the top; Performance and the Gemini analysis are tabs (owner, Nov 9).
   const ga = useCreativeAnalysis(postId);
