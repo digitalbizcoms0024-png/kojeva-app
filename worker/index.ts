@@ -34,7 +34,7 @@ import { adPreview, PREVIEW_FORMATS, type PreviewFormat } from "./meta/preview.t
 import { runSync, utcDay } from "./meta/sync.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
 import { baseline, INSIGHT_DIMENSIONS, insightRows, MATRIX_DIMENSIONS, matrix, overview, valuesOf } from "./insights.ts";
-import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPostPromoTotals, loadPosts, loadPromoAds, loadPromoPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
+import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPostRangeTotals, loadPosts, loadPromoAds, loadPromoPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
 import { loadBfcm } from "./bfcm.ts";
 import { analysis, analyzeNew } from "./analysis.ts";
@@ -228,7 +228,12 @@ app.get("/rankings", async (c) => {
     const day = new Date(`${range.to}T00:00:00Z`).getUTCDay();
     range.from = shiftDay(range.to, -((day + 6) % 7) - 7);
   } else if (launched === "1w") range.from = shiftDay(range.to, -6);
-  let items = await loadPosts(c.env.DB, range.from, range.to);
+  // Ad Swipe's campaigns (?campaigns=a,b), read below.
+  const campaigns = (c.req.query("campaigns") ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  // BFCM ads show only on the BFCM page and Ad Swipe's BFCM deck (owner, Nov 25): everywhere else the list
+  // leaves out copies in promo campaigns, and posts that ran only there.
+  const withPromo = campaigns.some((k) => k.includes("promo"));
+  let items = await loadPosts(c.env.DB, range.from, range.to, { noPromo: !withPromo });
   if (launched === "1w" || launched === "2w") items = items.filter((p) => p.firstSpend != null && p.firstSpend >= range.from);
   // All time starts at the first day anything spent, not 2000-01-01.
   const firstDay = items.reduce((min, p) => (p.firstSpend && p.firstSpend < min ? p.firstSpend : min), range.to);
@@ -261,7 +266,6 @@ app.get("/rankings", async (c) => {
   if (angle) items = items.filter((p) => p.assignment.angle === angle);
   // Ad Swipe's campaigns (?campaigns=a,b): posts with a copy in a campaign whose name contains one of
   // them (any case); with status=active, an active copy there (owner, Nov 4).
-  const campaigns = (c.req.query("campaigns") ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   if (campaigns.length) {
     const { results } = await c.env.DB.prepare("SELECT post_id, campaign_name, status FROM ads WHERE campaign_name IS NOT NULL").all<{
       post_id: string;
@@ -302,9 +306,12 @@ app.get("/rankings", async (c) => {
     return vb - va || b.totals.spendCents - a.totals.spendCents;
   });
 
+  // The whole account in the range, BFCM included: the Dashboard's Spend / Purchases / CPA / ROAS tiles.
+  const accountTotals = [...(await loadPostRangeTotals(c.env.DB, range.from, range.to)).values()].reduce(addTotals, ZERO_TOTALS);
   const body: RankingsResponse = {
     ...range,
     totals: items.reduce((acc, p) => addTotals(acc, p.totals), ZERO_TOTALS),
+    accountTotals,
     count: items.length,
     items: items.slice(0, limit),
     minSpendCents,
@@ -331,33 +338,40 @@ app.get("/posts/:id", async (c) => {
   const range = await resolveRange(db, (k) => c.req.query(k));
   if (!range) return c.json({ error: "Invalid custom date range" }, 400);
 
-  const [summary] = await loadPosts(db, range.from, range.to, { postId });
+  // BFCM copies are left out of the ad card (owner, Nov 25), unless the post ran only in promo campaigns
+  // (opened from the BFCM page): then it shows them all.
+  const [kept] = await loadPosts(db, range.from, range.to, { postId, noPromo: true });
+  const [summary] = kept ? [kept] : await loadPosts(db, range.from, range.to, { postId });
   if (!summary) return c.json({ error: "Not found" }, 404);
+  const promoNames = kept ? (await loadPromoAds(db)).campaigns.slice(0, 90) : [];
+  // Bound after the post (and the range's two dates where a query has them).
+  const noPromo = (at: number) =>
+    promoNames.length ? `AND (a.campaign_name IS NULL OR a.campaign_name NOT IN (${promoNames.map((_, j) => `?${j + at}`).join(",")}))` : "";
 
   const [copies, daily, allTime, extra] = await Promise.all([
     db
       .prepare(
         `SELECT a.id, a.name, a.campaign_name, a.adset_name, a.status, ${TOTALS_SQL}
          FROM ads a LEFT JOIN ad_daily d ON d.ad_id = a.id AND d.date BETWEEN ?2 AND ?3
-         WHERE a.post_id = ?1 GROUP BY a.id ORDER BY spend_cents DESC`,
+         WHERE a.post_id = ?1 ${noPromo(4)} GROUP BY a.id ORDER BY spend_cents DESC`,
       )
-      .bind(postId, range.from, range.to)
+      .bind(postId, range.from, range.to, ...promoNames)
       .all<Record<string, unknown>>(),
     db
       .prepare(
         `SELECT d.date, ${TOTALS_SQL}
          FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
-         WHERE a.post_id = ?1 AND d.date BETWEEN ?2 AND ?3
+         WHERE a.post_id = ?1 AND d.date BETWEEN ?2 AND ?3 ${noPromo(4)}
          GROUP BY d.date ORDER BY d.date`,
       )
-      .bind(postId, range.from, range.to)
+      .bind(postId, range.from, range.to, ...promoNames)
       .all<Record<string, unknown>>(),
     db
       .prepare(
         `SELECT ${TOTALS_SQL}, MAX(CASE WHEN d.spend_cents > 0 THEN d.date END) AS last_spend
-         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id WHERE a.post_id = ?1`,
+         FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id WHERE a.post_id = ?1 ${noPromo(2)}`,
       )
-      .bind(postId)
+      .bind(postId, ...promoNames)
       .first<Record<string, unknown>>(),
     // Missing is not zero: a day with spend but no stored count makes the range's count unknown.
     db
@@ -366,9 +380,9 @@ app.get("/posts/:id", async (c) => {
            SUM(d.add_to_cart) AS atc, SUM(CASE WHEN d.add_to_cart IS NULL AND d.spend_cents > 0 THEN 1 ELSE 0 END) AS atc_gaps,
            SUM(d.reach) AS reach, SUM(CASE WHEN d.reach IS NULL AND d.spend_cents > 0 THEN 1 ELSE 0 END) AS reach_gaps
          FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
-         WHERE a.post_id = ?1 AND d.date BETWEEN ?2 AND ?3`,
+         WHERE a.post_id = ?1 AND d.date BETWEEN ?2 AND ?3 ${noPromo(4)}`,
       )
-      .bind(postId, range.from, range.to)
+      .bind(postId, range.from, range.to, ...promoNames)
       .first<Record<string, number | null>>(),
   ]);
   const known = (sum: number | null | undefined, gaps: number | null | undefined) => (gaps ? null : Number(sum ?? 0));
@@ -397,19 +411,6 @@ app.get("/posts/:id", async (c) => {
   return c.json(body);
 });
 
-/** `a` without `b` (sums only, so this is exact). */
-function subtractTotals(a: Totals, b: Totals): Totals {
-  return {
-    spendCents: a.spendCents - b.spendCents,
-    impressions: a.impressions - b.impressions,
-    linkClicks: a.linkClicks - b.linkClicks,
-    purchases: a.purchases - b.purchases,
-    revenueCents: a.revenueCents - b.revenueCents,
-    reach: (a.reach ?? 0) - (b.reach ?? 0),
-    reachImpressions: (a.reachImpressions ?? 0) - (b.reachImpressions ?? 0),
-  };
-}
-
 app.get("/pods", async (c) => {
   const db = c.env.DB;
   const range = await resolveRange(db, (k) => c.req.query(k));
@@ -419,9 +420,8 @@ app.get("/pods", async (c) => {
   // Promo campaigns (CBO | Promo | BFCM) stay out of every pod number here (owner, Nov 25).
   const promoAds = await loadPromoAds(db);
   const promoCampaigns = promoAds.campaigns.slice(0, 90);
-  const [allPosts, promoTotals, concepts, pods, daily, targets] = await Promise.all([
-    loadPosts(db, range.from, range.to),
-    loadPostPromoTotals(db, range.from, range.to),
+  const [posts, concepts, pods, daily, targets] = await Promise.all([
+    loadPosts(db, range.from, range.to, { noPromo: true }),
     loadConcepts(db),
     db.prepare("SELECT id, name, color, kind FROM pods ORDER BY kind DESC, name").all<{ id: string; name: string; color: string; kind: "pod" | "agency" }>(),
     // Each post's spend per day (once per sync), grouped by the current pods below.
@@ -444,13 +444,6 @@ app.get("/pods", async (c) => {
     ),
     getTargets(db),
   ]);
-  // Each post without its promo copies; posts that ran only in promo campaigns leave altogether.
-  const posts = allPosts.flatMap((p) => {
-    const promo = promoTotals.get(p.postId);
-    if (!promo) return [p];
-    const totals = subtractTotals(p.totals, promo);
-    return totals.spendCents > 0 || totals.purchases > 0 ? [{ ...p, totals }] : [];
-  });
   // A post shared with a partner counts in both lines.
   const podsOf = new Map(posts.map((p) => [p.postId, [p.assignment.podId ?? "", ...(p.assignment.coPodId ? [p.assignment.coPodId] : [])]]));
   const spendOn = new Map<string, number>();

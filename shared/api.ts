@@ -158,7 +158,10 @@ export interface PostSummary {
 export interface RankingsResponse {
   from: string;
   to: string;
+  /** The listed posts' totals (BFCM copies left out unless the list asks for promo campaigns). */
   totals: Totals;
+  /** The whole account in the range, BFCM included (the Dashboard's KPI tiles). */
+  accountTotals: Totals;
   count: number;
   items: PostSummary[];
   /** Ranking by a ratio or purchases: posts under this spend in the range are left out (rankMinSpendPerDay × days); null when none is applied. */
