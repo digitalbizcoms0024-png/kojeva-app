@@ -166,7 +166,12 @@ order (spend default, ROAS, newest launch). Each card is `/api/posts/:id` for th
 - **Promo ads stay out of pod numbers** (owner, Nov 25; `loadPromoAds`, `loadPostPromoTotals`): every ad in a promo
   campaign, whether its ad set names a pod or it is a copy of a pod's test, is left out of the pod leaderboard's spend,
   ROAS and score, Spend by pod (Pods page and Dashboard) and the spend sparklines. Copies in a promo campaign don't
-  count toward a winner's tier either (`computeCopyTotals`). Ad Rankings and the BFCM page still show them.
+  count toward a winner's tier either (`computeCopyTotals`).
+- **BFCM ads show only on the BFCM page** (owner, Nov 25; `loadPosts(…, { noPromo })`): Ad Rankings, the Dashboard's
+  top ads, Ad Swipe's decks, quick search and the ad card leave out copies in promo campaigns (numbers, copies,
+  Active/Scaling) and posts that ran only there. Exceptions: Ad Swipe's "BFCM promo" deck (`campaigns` naming a promo
+  campaign), an ad card opened for a BFCM-only post (from the BFCM page), and the Dashboard's Spend / Purchases / CPA /
+  ROAS tiles, which stay the whole account (`accountTotals`).
 - **Promo-only posts stay off To review** (`loadPromoPosts`: every copy in a promo campaign): they aren't listed under
   Needs a pod, counted in its badge or alert, or given suggestions, and their spend is left out of the "credited" share.
   A post with any copy outside a promo campaign is listed as usual.

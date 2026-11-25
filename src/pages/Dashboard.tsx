@@ -45,8 +45,9 @@ export function DashboardPage({ meta, range, setRange }: { meta: MetaResponse; r
   const pods = useApi<PodsResponse>(`/api/pods?${qs({ range })}`);
   const prev = previousPeriod(range, meta.latestDate);
   const before = useApi<RankingsResponse>(prev ? `/api/rankings?${qs({ range: "custom", from: prev.from, to: prev.to, limit: 1 })}` : null);
-  const t = top.data?.totals;
-  const b = prev ? before.data?.totals : undefined;
+  // The KPI tiles are the whole account, BFCM included; the top ads leave BFCM out (owner, Nov 25).
+  const t = top.data?.accountTotals;
+  const b = prev ? before.data?.accountTotals : undefined;
   const tg = meta.targets;
   const pctFmt = (d: number) => pct(Math.abs(d), 1);
   // While the totals load the cards show a grey bar; "—" is kept for numbers that really are missing.

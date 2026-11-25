@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { PodsResponse } from "../shared/api.ts";
+import type { PodsResponse, PostDetail, RankingsResponse } from "../shared/api.ts";
 import type { Env } from "./env.ts";
 import app from "./index.ts";
 import { bumpStats } from "./cache.ts";
@@ -57,5 +57,31 @@ describe("promo campaigns in pod numbers", () => {
     const k = (await loadConcepts(env.DB)).find((c) => c.label === "Morning Puff")!;
     expect(k).toMatchObject({ status: "hit", tier: "kpi" });
     expect(k.copies!.spendCents).toBe(300 * 100);
+  });
+});
+
+describe("BFCM only on the BFCM page (owner, Nov 25)", () => {
+  const get = async <T,>(path: string) => (await (await app.fetch(new Request("https://hub.test" + path), env, {} as ExecutionContext)).json()) as T;
+
+  it("leaves BFCM out of Ad Rankings, keeping the account totals for the Dashboard", async () => {
+    const body = await get<RankingsResponse>("/api/rankings?range=all");
+    // The BFCM-only post is gone; the test post keeps only its testing copy's numbers.
+    expect(body.items.map((p) => [p.postId, p.totals.spendCents, p.copies])).toEqual([["p1", 300 * 100, 1]]);
+    expect(body.totals.spendCents).toBe(300 * 100);
+    expect(body.accountTotals.spendCents).toBe((300 + 6000 + 1000) * 100);
+  });
+
+  it("keeps them in Ad Swipe's BFCM deck", async () => {
+    const body = await get<RankingsResponse>("/api/rankings?range=all&campaigns=Promo%20%7C%20BFCM");
+    expect(body.items.map((p) => p.postId).sort()).toEqual(["p1", "p2"]);
+  });
+
+  it("leaves BFCM copies out of the ad card, unless the ad ran only in BFCM", async () => {
+    const card = await get<PostDetail>("/api/posts/p1?range=all");
+    expect(card.copyRows.map((r) => r.adId)).toEqual(["test"]);
+    expect(card.allTime.spendCents).toBe(300 * 100);
+    expect(card.daily.reduce((n, d) => n + d.spendCents, 0)).toBe(300 * 100);
+    const bfcmOnly = await get<PostDetail>("/api/posts/p2?range=all");
+    expect(bfcmOnly.copyRows.map((r) => r.adId)).toEqual(["bfcm-own"]);
   });
 });

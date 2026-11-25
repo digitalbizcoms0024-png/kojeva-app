@@ -94,7 +94,7 @@ async function loadPostBase(db: D1Database, postId?: string): Promise<Row[]> {
       .all<Row>(),
     db
       .prepare(
-        `SELECT x.id, x.post_id, x.name, x.status, x.created_time, x.concept_id, x.adset_name,
+        `SELECT x.id, x.post_id, x.name, x.status, x.created_time, x.concept_id, x.adset_name, x.campaign_name,
            t.status AS t_status, t.tags, t.labeled_at, t.awareness AS t_awareness, t.offer AS t_offer, t.persona_id AS t_persona,
            t.motivations AS t_motivations, t.motivations_at, t.format_label AS t_format, t.format_at
          FROM ads x LEFT JOIN atria_assets t ON t.asset_id = x.asset_id ${postId ? "WHERE x.post_id = ?1" : ""}`,
@@ -113,6 +113,8 @@ async function loadPostBase(db: D1Database, postId?: string): Promise<Row[]> {
     const list = (byPost.get(String(p.post_id)) ?? []).sort(order);
     const first = list[0];
     const find = (ok: (ad: Row) => boolean) => list.find(ok);
+    // The same without copies in promo campaigns (BFCM), for every view but the BFCM page (owner, Nov 25).
+    const np = list.filter((ad) => !isPromoCampaign(ad.campaign_name == null ? null : String(ad.campaign_name)));
     return {
       ...p,
       name: first?.name ?? null,
@@ -120,6 +122,10 @@ async function loadPostBase(db: D1Database, postId?: string): Promise<Row[]> {
       active: list.some((ad) => ad.status === "ACTIVE") ? 1 : 0,
       // Running outside testing ad sets (scaling and other campaigns).
       scaling: list.some((ad) => ad.status === "ACTIVE" && ad.concept_id == null) ? 1 : 0,
+      promo_only: list.length > 0 && np.length === 0 ? 1 : 0,
+      copies_np: np.length,
+      active_np: np.some((ad) => ad.status === "ACTIVE") ? 1 : 0,
+      scaling_np: np.some((ad) => ad.status === "ACTIVE" && ad.concept_id == null) ? 1 : 0,
       launched: list.find((ad) => ad.created_time != null)?.created_time ?? null,
       concept_id: first?.concept_id ?? null,
       adset_name: first?.adset_name ?? null,
@@ -612,24 +618,50 @@ export async function untaggedSpend(db: D1Database, from: string, to: string): P
   return { posts, spendCents, promoCents };
 }
 
-/** Every post with its totals in [from, to] and its initial-test verdict. */
-export async function loadPosts(db: D1Database, from: string, to: string, opts: { postId?: string; concepts?: ConceptResult[] } = {}): Promise<PostSummary[]> {
+/** `a` without `b` (sums only, so this is exact). */
+export function subtractTotals(a: Totals, b: Totals): Totals {
+  return {
+    spendCents: a.spendCents - b.spendCents,
+    impressions: a.impressions - b.impressions,
+    linkClicks: a.linkClicks - b.linkClicks,
+    purchases: a.purchases - b.purchases,
+    revenueCents: a.revenueCents - b.revenueCents,
+    reach: (a.reach ?? 0) - (b.reach ?? 0),
+    reachImpressions: (a.reachImpressions ?? 0) - (b.reachImpressions ?? 0),
+  };
+}
+
+/**
+ * Every post with its totals in [from, to] and its initial-test verdict. With `noPromo`, copies in promo
+ * campaigns (CBO | Promo | BFCM) are left out of the numbers, copies and status, and posts that ran only
+ * there are left out altogether: BFCM ads show only on the BFCM page (owner, Nov 25).
+ */
+export async function loadPosts(
+  db: D1Database,
+  from: string,
+  to: string,
+  opts: { postId?: string; concepts?: ConceptResult[]; noPromo?: boolean } = {},
+): Promise<PostSummary[]> {
   const [targets, latest, concepts] = await Promise.all([getTargets(db), getLatestDate(db), opts.concepts ?? loadConcepts(db)]);
   const conceptStatus = new Map(concepts.map((c) => [c.conceptId, c.status]));
   const conceptTier = new Map(concepts.map((c) => [c.conceptId, c.tier]));
   const [base, ranged, windows, fatigueByPost] = await Promise.all([
     // Labels and tags: once per edit. The numbers: once per sync (stats version, see cache.ts).
-    opts.postId ? loadPostBase(db, opts.postId) : memoize(db, "post-base", () => loadPostBase(db), { durable: true }),
+    opts.postId ? loadPostBase(db, opts.postId) : memoize(db, "post-base-np", () => loadPostBase(db), { durable: true }),
     opts.postId ? postRangeTotals(db, from, to, opts.postId) : loadPostRangeTotals(db, from, to),
     opts.postId
       ? testWindows(db, targets.testWindowDays, opts.postId)
       : memoizeMap(db, `post-windows-${targets.testWindowDays}`, () => testWindows(db, targets.testWindowDays), { durable: true, scope: "stats" }),
     loadFatigue(db, targets, latest),
   ]);
+  const promo = opts.noPromo ? await loadPostPromoTotals(db, from, to) : null;
   const totalsByPost = ranged;
+  const np = !!opts.noPromo;
 
-  return base.map((r) => {
+  return base.flatMap((r) => (np && Number(r.promo_only) === 1 ? [] : [r])).map((r) => {
     const postId = String(r.post_id);
+    const rangeTotals = totalsByPost.get(postId) ?? toTotals(undefined);
+    const promoTotals = promo?.get(postId);
     const w = windows.get(postId);
     // A post's badge shows how the concept it was tested in did.
     const hit: HitStatus | null = r.concept_id == null ? null : (conceptStatus.get(String(r.concept_id)) ?? null);
@@ -650,11 +682,11 @@ export async function loadPosts(db: D1Database, from: string, to: string, opts: 
         const from = [launched, w?.firstDate].filter((d): d is string => d != null).sort()[0];
         return from && latest ? daysBetween(from, latest) + 1 : null;
       })(),
-      copies: Number(r.copies),
-      active: Number(r.active) === 1,
-      scaling: Number(r.scaling) === 1,
+      copies: Number(np ? r.copies_np : r.copies),
+      active: Number(np ? r.active_np : r.active) === 1,
+      scaling: Number(np ? r.scaling_np : r.scaling) === 1,
       assignment: toAssignment(r),
-      totals: totalsByPost.get(postId) ?? toTotals(undefined),
+      totals: promoTotals ? subtractTotals(rangeTotals, promoTotals) : rangeTotals,
       hit,
       conceptId: r.concept_id == null ? null : String(r.concept_id),
       atria: r.atria_tags == null ? null : (JSON.parse(String(r.atria_tags)) as Record<string, string[]>),
