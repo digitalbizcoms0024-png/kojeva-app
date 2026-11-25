@@ -163,6 +163,10 @@ order (spend default, ROAS, newest launch). Each card is `/api/posts/:id` for th
   before, the latest synced day (no automatic refresh: Sync now).
 - **Promo ad sets are not concepts** (`isPromoCampaign`: a campaign name part "Promo"), so they never count in a pod's
   hit rate, testing count or score, even when named after a pod ("Shameer | Black Friday | …").
+- **Promo ads stay out of pod numbers** (owner, Nov 25; `loadPromoAds`, `loadPostPromoTotals`): every ad in a promo
+  campaign, whether its ad set names a pod or it is a copy of a pod's test, is left out of the pod leaderboard's spend,
+  ROAS and score, Spend by pod (Pods page and Dashboard) and the spend sparklines. Copies in a promo campaign don't
+  count toward a winner's tier either (`computeCopyTotals`). Ad Rankings and the BFCM page still show them.
 - **Promo-only posts stay off To review** (`loadPromoPosts`: every copy in a promo campaign): they aren't listed under
   Needs a pod, counted in its badge or alert, or given suggestions, and their spend is left out of the "credited" share.
   A post with any copy outside a promo campaign is listed as usual.

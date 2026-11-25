@@ -435,8 +435,8 @@ async function computeCopyTotals(db: D1Database): Promise<Record<string, Totals>
   );
   if (wanted.size === 0) return {};
   const { results: ads } = await db
-    .prepare("SELECT id, post_id, asset_id, concept_id FROM ads")
-    .all<{ id: string; post_id: string; asset_id: string | null; concept_id: string | null }>();
+    .prepare("SELECT id, post_id, asset_id, concept_id, campaign_name FROM ads")
+    .all<{ id: string; post_id: string; asset_id: string | null; concept_id: string | null; campaign_name: string | null }>();
   const creative = (a: { asset_id: string | null; post_id: string }) => a.asset_id ?? `post:${a.post_id}`;
   const conceptsOf = new Map<string, Set<string>>(); // creative → concepts it was tested in
   for (const a of ads) {
@@ -444,8 +444,10 @@ async function computeCopyTotals(db: D1Database): Promise<Record<string, Totals>
     conceptsOf.set(creative(a), (conceptsOf.get(creative(a)) ?? new Set()).add(a.concept_id));
   }
   const adsOf = new Map<string, string[]>(); // concept → every copy's ad id
+  // Copies in a promo campaign (BFCM) don't count toward a winner's tier (owner, Nov 25).
   for (const a of ads)
-    for (const k of conceptsOf.get(creative(a)) ?? []) adsOf.set(k, [...(adsOf.get(k) ?? []), a.id]);
+    if (!isPromoCampaign(a.campaign_name))
+      for (const k of conceptsOf.get(creative(a)) ?? []) adsOf.set(k, [...(adsOf.get(k) ?? []), a.id]);
   const ids = [...new Set([...adsOf.values()].flat())];
   const perAd = new Map<string, Totals>();
   for (let i = 0; i < ids.length; i += 90) {
@@ -519,6 +521,49 @@ async function postRangeTotals(db: D1Database, from: string, to: string, postId?
 /** Every post's totals in [from, to], once per sync for each range (edits don't change them). */
 export function loadPostRangeTotals(db: D1Database, from: string, to: string): Promise<Map<string, Totals>> {
   return memoizeMap(db, `post-range-${from}-${to}`, () => postRangeTotals(db, from, to), { durable: true, scope: "stats" });
+}
+
+/**
+ * Ads in promo campaigns ("CBO | Promo | BFCM") and those campaigns' names, once per sync. Their spend and
+ * results stay out of pod numbers: the pod leaderboard, spend by pod and winner tiers (owner, Nov 25).
+ */
+export function loadPromoAds(db: D1Database): Promise<{ ids: string[]; campaigns: string[] }> {
+  return memoize(
+    db,
+    "promo-ads",
+    async () => {
+      const { results } = await db.prepare("SELECT id, campaign_name FROM ads").all<{ id: string; campaign_name: string | null }>();
+      const promo = results.filter((r) => isPromoCampaign(r.campaign_name));
+      return { ids: promo.map((r) => r.id), campaigns: [...new Set(promo.map((r) => r.campaign_name!))] };
+    },
+    { durable: true, scope: "stats" },
+  );
+}
+
+/** Each post's totals in [from, to] from its ads in promo campaigns only (none for most posts). */
+export function loadPostPromoTotals(db: D1Database, from: string, to: string): Promise<Map<string, Totals>> {
+  return memoizeMap(
+    db,
+    `post-promo-${from}-${to}`,
+    async () => {
+      const { ids } = await loadPromoAds(db);
+      const out = new Map<string, Totals>();
+      // 90 ids + the two dates: under D1's 100 bound values.
+      for (let i = 0; i < ids.length; i += 90) {
+        const chunk = ids.slice(i, i + 90);
+        const { results } = await db
+          .prepare(
+            `SELECT a.post_id, ${TOTALS_SQL} FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
+             WHERE a.id IN (${chunk.map((_, j) => `?${j + 3}`).join(",")}) AND d.date BETWEEN ?1 AND ?2 GROUP BY a.post_id`,
+          )
+          .bind(from, to, ...chunk)
+          .all<Row>();
+        for (const r of results) out.set(String(r.post_id), addTotals(out.get(String(r.post_id)) ?? ZERO_TOTALS, toTotals(r)));
+      }
+      return out;
+    },
+    { durable: true, scope: "stats" },
+  );
 }
 
 /**

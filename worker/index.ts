@@ -34,7 +34,7 @@ import { adPreview, PREVIEW_FORMATS, type PreviewFormat } from "./meta/preview.t
 import { runSync, utcDay } from "./meta/sync.ts";
 import { loadHitCreatives } from "./hitsoff.ts";
 import { baseline, INSIGHT_DIMENSIONS, insightRows, MATRIX_DIMENSIONS, matrix, overview, valuesOf } from "./insights.ts";
-import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPosts, loadPromoPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
+import { daysBetween, getLatestDate, getTargets, loadConcepts, loadPostPromoTotals, loadPosts, loadPromoAds, loadPromoPosts, untaggedSpend, shiftDay, toTotals, TOTALS_SQL } from "./queries.ts";
 import { loadCoverage } from "./coverage.ts";
 import { loadBfcm } from "./bfcm.ts";
 import { analysis, analyzeNew } from "./analysis.ts";
@@ -397,35 +397,60 @@ app.get("/posts/:id", async (c) => {
   return c.json(body);
 });
 
+/** `a` without `b` (sums only, so this is exact). */
+function subtractTotals(a: Totals, b: Totals): Totals {
+  return {
+    spendCents: a.spendCents - b.spendCents,
+    impressions: a.impressions - b.impressions,
+    linkClicks: a.linkClicks - b.linkClicks,
+    purchases: a.purchases - b.purchases,
+    revenueCents: a.revenueCents - b.revenueCents,
+    reach: (a.reach ?? 0) - (b.reach ?? 0),
+    reachImpressions: (a.reachImpressions ?? 0) - (b.reachImpressions ?? 0),
+  };
+}
+
 app.get("/pods", async (c) => {
   const db = c.env.DB;
   const range = await resolveRange(db, (k) => c.req.query(k));
   if (!range) return c.json({ error: "Invalid custom date range" }, 400);
   const latest = await getLatestDate(db);
   const sparkDays = latest ? Array.from({ length: 7 }, (_, i) => shiftDay(latest, i - 6)) : [];
-  const [posts, concepts, pods, daily, targets] = await Promise.all([
+  // Promo campaigns (CBO | Promo | BFCM) stay out of every pod number here (owner, Nov 25).
+  const promoAds = await loadPromoAds(db);
+  const promoCampaigns = promoAds.campaigns.slice(0, 90);
+  const [allPosts, promoTotals, concepts, pods, daily, targets] = await Promise.all([
     loadPosts(db, range.from, range.to),
+    loadPostPromoTotals(db, range.from, range.to),
     loadConcepts(db),
     db.prepare("SELECT id, name, color, kind FROM pods ORDER BY kind DESC, name").all<{ id: string; name: string; color: string; kind: "pod" | "agency" }>(),
     // Each post's spend per day (once per sync), grouped by the current pods below.
     memoize(
       db,
-      `post-spark-${sparkDays[0] ?? ""}`,
+      `post-spark-nopromo-${sparkDays[0] ?? ""}`,
       async () =>
         (
           await db
             .prepare(
               `SELECT a.post_id, d.date, SUM(d.spend_cents) AS spend_cents
                FROM ads a CROSS JOIN ad_daily d ON d.ad_id = a.id
-               WHERE d.date >= ?1 GROUP BY a.post_id, d.date`,
+               WHERE d.date >= ?1 ${promoCampaigns.length ? `AND (a.campaign_name IS NULL OR a.campaign_name NOT IN (${promoCampaigns.map((_, j) => `?${j + 2}`).join(",")}))` : ""}
+               GROUP BY a.post_id, d.date`,
             )
-            .bind(sparkDays[0] ?? "9999-12-31")
+            .bind(sparkDays[0] ?? "9999-12-31", ...promoCampaigns)
             .all<{ post_id: string; date: string; spend_cents: number }>()
         ).results,
       { durable: true, scope: "stats" },
     ),
     getTargets(db),
   ]);
+  // Each post without its promo copies; posts that ran only in promo campaigns leave altogether.
+  const posts = allPosts.flatMap((p) => {
+    const promo = promoTotals.get(p.postId);
+    if (!promo) return [p];
+    const totals = subtractTotals(p.totals, promo);
+    return totals.spendCents > 0 || totals.purchases > 0 ? [{ ...p, totals }] : [];
+  });
   // A post shared with a partner counts in both lines.
   const podsOf = new Map(posts.map((p) => [p.postId, [p.assignment.podId ?? "", ...(p.assignment.coPodId ? [p.assignment.coPodId] : [])]]));
   const spendOn = new Map<string, number>();
