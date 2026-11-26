@@ -27,6 +27,15 @@ export const BFCM_SLIP = 0.8;
 
 export type BfcmAction = "scale" | "watch" | "cut" | "early";
 
+/**
+ * "BFCM by pod" (owner, Nov 26): agency ad sets on this page start with one of these. "Agency | …" counts
+ * here only; the rest of the hub keeps its own agency prefixes (shared/attribution.ts).
+ */
+export const BFCM_AGENCY_PREFIXES = ["AGENCY", "ME", "QW", "TV", "YD"];
+
+/** Ad sets that name no pod and aren't the agency's. */
+export const BFCM_GENERAL = { id: "general", name: "General In-house" } as const;
+
 const usd = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
 const r2 = (v: number | null) => (v == null ? "—" : v.toFixed(2));
 
