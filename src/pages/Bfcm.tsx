@@ -1,13 +1,14 @@
 import { useMemo, useState, type ReactNode } from "react";
-import type { BfcmAd, BfcmDay, BfcmResponse, MetaResponse } from "../../shared/api.ts";
-import { BFCM, bfcmCall, BFCM_EARLY_DOLLARS, BFCM_JUDGE_DOLLARS, bfcmSum, bfcmWindow, type BfcmAction, type BfcmTotals, type BfcmView } from "../../shared/bfcm.ts";
+import type { BfcmAd, BfcmAdset, BfcmDay, BfcmResponse, MetaResponse } from "../../shared/api.ts";
+import { podById } from "../../shared/taxonomy.ts";
+import { BFCM, BFCM_GENERAL, bfcmCall, BFCM_EARLY_DOLLARS, BFCM_JUDGE_DOLLARS, bfcmSum, bfcmWindow, type BfcmAction, type BfcmTotals, type BfcmView } from "../../shared/bfcm.ts";
 import { addTotals, cpa, ctr, roas, ZERO_TOTALS, type Targets, type Totals } from "../../shared/metrics.ts";
 import { useApi } from "../api.ts";
 import { FrequencyValue } from "../components/PodReach.tsx";
 import { HeaderControls } from "../components/HeaderControls.tsx";
 import { TrendCharts } from "../components/TrendCharts.tsx";
-import { CpaValue, Empty, LoadError, PageHeader, PodChip, RoasValue, SectionTitle, Segmented, Stat, Tag, Thumb } from "../components/ui.tsx";
-import { dollars, int, money, pct, shortDate } from "../format.ts";
+import { CpaValue, CsvButton, Empty, LoadError, PageHeader, PodChip, PodSwatch, RoasValue, SectionTitle, Segmented, Stat, Tag, Thumb } from "../components/ui.tsx";
+import { dollars, downloadCsv, int, money, pct, shortDate } from "../format.ts";
 
 type View = BfcmView;
 type Sort = "spend" | "roas" | "cpa" | "purchases" | "ctr";
@@ -122,6 +123,7 @@ export function BfcmPage({ meta }: { meta: MetaResponse }) {
               <TrendCharts points={days} targetCpa={t.targetCpa} targetRoas={t.targetRoas} />
             </section>
 
+            <PodBoard adsets={data?.adsets ?? []} win={win!} t={t} viewLabel={viewLabel} />
             <ActionBoard rows={rows} t={t} />
             <Rankings rows={rows} sort={sort} setSort={setSort} t={t} viewLabel={viewLabel} />
             <Batches rows={rows} t={t} viewLabel={viewLabel} />
@@ -144,6 +146,177 @@ function Tile({ label, sub, children }: { label: string; sub?: string; children:
 }
 
 const postHref = (postId: string) => `#/rankings?post=${encodeURIComponent(postId)}`;
+
+type Group = { id: string; name: string; liveAds: number; totals: Totals; adsets: { name: string; liveAds: number; totals: Totals }[] };
+
+const groupName = (id: string) => (id === BFCM_GENERAL.id ? BFCM_GENERAL.name : (podById(id)?.name ?? id));
+
+function GroupChip({ id }: { id: string }) {
+  if (id !== BFCM_GENERAL.id) return <PodChip podId={id} />;
+  return (
+    <span className="inline-flex items-center gap-1.5 border border-divider px-1.5 py-px text-xs whitespace-nowrap text-ink">
+      <span className="inline-block size-2.5 shrink-0" style={{ background: "repeating-linear-gradient(135deg, var(--ink-3) 0 2px, transparent 2px 4px)" }} aria-hidden />
+      {BFCM_GENERAL.name}
+    </span>
+  );
+}
+
+/**
+ * BFCM by pod (owner, Nov 26): the promo's spend and results by who made each ad set, like the pod
+ * leaderboard but for BFCM only. A pod counts the ad sets naming its strategist; Agency the ones starting
+ * with Agency / ME / QW / TV / YD (this page only); General In-house the rest. Ranked by spend.
+ */
+function PodBoard({ adsets, win, t, viewLabel }: { adsets: BfcmAdset[]; win: [string, string]; t: Targets; viewLabel: string }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const groups = useMemo(() => {
+    const by = new Map<string, Group>();
+    for (const s of adsets) {
+      const g = by.get(s.group) ?? { id: s.group, name: groupName(s.group), liveAds: 0, totals: ZERO_TOTALS, adsets: [] };
+      const totals = s.daily.filter((d) => d.date >= win[0] && d.date <= win[1]).reduce<Totals>((acc, d) => addTotals(acc, d), ZERO_TOTALS);
+      g.liveAds += s.liveAds;
+      g.totals = addTotals(g.totals, totals);
+      if (totals.spendCents > 0 || totals.purchases > 0 || s.liveAds > 0) g.adsets.push({ name: s.name, liveAds: s.liveAds, totals });
+      by.set(s.group, g);
+    }
+    return [...by.values()]
+      .filter((g) => g.totals.spendCents > 0 || g.liveAds > 0)
+      .map((g) => ({ ...g, adsets: g.adsets.sort((a, b) => b.totals.spendCents - a.totals.spendCents) }))
+      .sort((a, b) => b.totals.spendCents - a.totals.spendCents || a.name.localeCompare(b.name));
+  }, [adsets, win]);
+  if (groups.length === 0) return null;
+  const total = groups.reduce<Totals>((acc, g) => addTotals(acc, g.totals), ZERO_TOTALS);
+  const live = groups.reduce((n, g) => n + g.liveAds, 0);
+  const share = (g: Group) => (total.spendCents > 0 ? g.totals.spendCents / total.spendCents : null);
+  const csv = () =>
+    downloadCsv(
+      `bfcm-by-pod-${win[0]}-${win[1]}.csv`,
+      ["Group", "Live ads", "Spend", "Share", "Purchases", "CPA", "ROAS"],
+      groups.map((g) => [g.name, g.liveAds, (g.totals.spendCents / 100).toFixed(2), share(g)?.toFixed(3), g.totals.purchases, cpa(g.totals)?.toFixed(2), roas(g.totals)?.toFixed(2)]),
+    );
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionTitle title={`BFCM by pod · ${viewLabel}`} right={<CsvButton onClick={csv} />} className="mb-0" />
+      <p className="text-sm text-ink-3">
+        This campaign only, not in the main pod leaderboard. A pod counts the ad sets naming its strategist; Agency the ones starting with
+        Agency / ME / QW / TV / YD; {BFCM_GENERAL.name} the rest. Click a row for its ad sets.
+      </p>
+      {total.spendCents > 0 && (
+        <div>
+          <div className="flex h-4 w-full gap-0.5 overflow-hidden" role="img" aria-label="BFCM spend share by group">
+            {groups
+              .filter((g) => g.totals.spendCents > 0)
+              .map((g) => (
+                <div
+                  key={g.id}
+                  title={`${g.name}: ${money(g.totals.spendCents)} (${pct(share(g), 0)})`}
+                  style={{
+                    width: `${share(g)! * 100}%`,
+                    background: g.id === BFCM_GENERAL.id ? "repeating-linear-gradient(135deg, var(--ink-3) 0 3px, var(--surface-2) 3px 6px)" : `var(--pod-${g.id})`,
+                  }}
+                />
+              ))}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
+            {groups
+              .filter((g) => g.totals.spendCents > 0)
+              .map((g) => (
+                <span key={g.id} className="num inline-flex items-center gap-1.5">
+                  {g.id === BFCM_GENERAL.id ? (
+                    <span className="inline-block size-2.5 shrink-0" style={{ background: "repeating-linear-gradient(135deg, var(--ink-3) 0 2px, transparent 2px 4px)" }} aria-hidden />
+                  ) : (
+                    <PodSwatch podId={g.id} />
+                  )}
+                  <b className="font-semibold text-ink">{g.name}</b> {pct(share(g), 0)} · {money(g.totals.spendCents, { compact: true })}
+                </span>
+              ))}
+          </div>
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead className="kicker text-left">
+            <tr className="border-b-2 border-divider">
+              <th className="w-8 py-2 font-normal">#</th>
+              <th className="py-2 pr-3 font-normal">Group</th>
+              <th className="py-2 pr-3 text-right font-normal">Live ads</th>
+              <th className="py-2 pr-3 text-right font-normal">Spend · Meta</th>
+              <th className="py-2 pr-3 text-right font-normal">Share</th>
+              <th className="py-2 pr-3 text-right font-normal">Purchases</th>
+              <th className="py-2 pr-3 text-right font-normal">CPA · Meta</th>
+              <th className="py-2 text-right font-normal">ROAS · Meta</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g, i) => (
+              <GroupRows key={g.id} g={g} rank={i + 1} share={share(g)} t={t} open={open === g.id} onToggle={() => setOpen(open === g.id ? null : g.id)} />
+            ))}
+            <tr className="border-t-2 border-divider font-bold text-ink">
+              <td />
+              <td className="py-2 pr-3">Total</td>
+              <td className="num py-2 pr-3 text-right">{int(live)}</td>
+              <td className="num py-2 pr-3 text-right">{money(total.spendCents)}</td>
+              <td className="num py-2 pr-3 text-right">100%</td>
+              <td className="num py-2 pr-3 text-right">{int(total.purchases)}</td>
+              <td className="py-2 pr-3 text-right">
+                <CpaValue value={cpa(total)} target={t.targetCpa} warnMax={t.targetCpa * 1.25} />
+              </td>
+              <td className="py-2 text-right">
+                <RoasValue value={roas(total)} target={t.targetRoas} />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function GroupRows({ g, rank, share, t, open, onToggle }: { g: Group; rank: number; share: number | null; t: Targets; open: boolean; onToggle: () => void }) {
+  return (
+    <>
+      <tr className="cursor-pointer border-b border-divider hover:bg-surface" onClick={onToggle} aria-expanded={open}>
+        <td className="num py-2.5 font-bold text-ink-3">{rank}</td>
+        <td className="py-2.5 pr-3">
+          <span className="inline-flex items-center gap-2">
+            <GroupChip id={g.id} />
+            <span className="text-xs text-ink-3" aria-hidden>
+              {open ? "▾" : "▸"} {g.adsets.length} ad sets
+            </span>
+          </span>
+        </td>
+        <td className="num py-2.5 pr-3 text-right text-ink">{int(g.liveAds)}</td>
+        <td className="num py-2.5 pr-3 text-right font-bold text-ink">{money(g.totals.spendCents)}</td>
+        <td className="num py-2.5 pr-3 text-right text-ink-2">{pct(share, 0)}</td>
+        <td className="num py-2.5 pr-3 text-right text-ink">{int(g.totals.purchases)}</td>
+        <td className="py-2.5 pr-3 text-right">
+          <CpaValue value={cpa(g.totals)} target={t.targetCpa} warnMax={t.targetCpa * 1.25} />
+        </td>
+        <td className="py-2.5 text-right">
+          <RoasValue value={roas(g.totals)} target={t.targetRoas} />
+        </td>
+      </tr>
+      {open &&
+        g.adsets.map((s) => (
+          <tr key={s.name} className="border-b border-divider bg-surface text-xs">
+            <td />
+            <td className="max-w-[360px] truncate py-1.5 pr-3 pl-4 text-ink-2" title={s.name}>
+              {s.name}
+            </td>
+            <td className="num py-1.5 pr-3 text-right text-ink-2">{int(s.liveAds)}</td>
+            <td className="num py-1.5 pr-3 text-right text-ink-2">{money(s.totals.spendCents)}</td>
+            <td />
+            <td className="num py-1.5 pr-3 text-right text-ink-2">{int(s.totals.purchases)}</td>
+            <td className="py-1.5 pr-3 text-right">
+              <CpaValue value={cpa(s.totals)} target={t.targetCpa} warnMax={t.targetCpa * 1.25} />
+            </td>
+            <td className="py-1.5 text-right">
+              <RoasValue value={roas(s.totals)} target={t.targetRoas} />
+            </td>
+          </tr>
+        ))}
+    </>
+  );
+}
 
 function ActionBoard({ rows, t }: { rows: Row[]; t: Targets }) {
   const groups: BfcmAction[] = ["scale", "watch", "cut"];

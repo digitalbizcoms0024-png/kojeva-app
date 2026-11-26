@@ -679,11 +679,24 @@ export interface BfcmAd {
 }
 
 /** The BFCM page (/api/bfcm): the promo window and its ads; the page works out views and calls. */
+/** One promo ad set, for "BFCM by pod" (owner, Nov 26). */
+export interface BfcmAdset {
+  name: string;
+  /** A pod's id when the name credits one (a strategist's name or a pod's prefix), "agency" when it starts with
+   * Agency / ME / QW / TV / YD (this page only), else "general" (General In-house). */
+  group: string;
+  /** Ads in it switched on in Meta. */
+  liveAds: number;
+  /** Days with delivery or results, oldest first. */
+  daily: ({ date: string } & Totals)[];
+}
+
 export interface BfcmResponse {
   from: string;
   to: string;
   /** Latest synced day (the last day of the views), or null before any sync. */
   latest: string | null;
   ads: BfcmAd[];
+  adsets: BfcmAdset[];
 }
 

@@ -167,6 +167,11 @@ order (spend default, ROAS, newest launch). Each card is `/api/posts/:id` for th
   campaign, whether its ad set names a pod or it is a copy of a pod's test, is left out of the pod leaderboard's spend,
   ROAS and score, Spend by pod (Pods page and Dashboard) and the spend sparklines. Copies in a promo campaign don't
   count toward a winner's tier either (`computeCopyTotals`).
+- **BFCM by pod** (owner, Nov 26; `bfcmGroup` in `worker/bfcm.ts`, BFCM page): the promo's spend, purchases, CPA and
+  ROAS by group for the page's period, ranked by spend, with live ads (ads switched on in Meta). Grouped by ad set name
+  only: a pod when the name credits it (a strategist's name or a pod's prefix, as everywhere); **Agency** when it
+  starts with Agency / ME / QW / TV / YD (the "Agency" prefix counts on this page only, `BFCM_AGENCY_PREFIXES`); else
+  **General In-house**, including ad sets of copies of a pod's ads that don't name the pod. A row opens its ad sets.
 - **BFCM ads show only on the BFCM page** (owner, Nov 25; `loadPosts(…, { noPromo })`): Ad Rankings, the Dashboard's
   top ads, Ad Swipe's decks, quick search and the ad card leave out copies in promo campaigns (numbers, copies,
   Active/Scaling) and posts that ran only there. Exceptions: Ad Swipe's "BFCM promo" deck (`campaigns` naming a promo
